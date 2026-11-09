@@ -6,4 +6,5 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 . bin/lib/plugin.sh
 docker buildx build --platform linux/arm64 --provenance=false --sbom=false "${plugin_context[@]}" --build-arg REDMINE_BRANCH="${REDMINE_BRANCH:-}" \
+  ${GITHUB_SHA:+--label "org.opencontainers.image.revision=$GITHUB_SHA"} \
   --load -t "${1:-serverless:test}" -f image/Dockerfile .

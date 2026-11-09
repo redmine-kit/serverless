@@ -48,11 +48,11 @@ The following packages were confirmed to be installable from the standard Amazon
 | Purpose | Package | Version |
 | --- | --- | --- |
 | Thumbnails, Gantt PNG | `ImageMagick` | 6.9.13 (installed in the image on 2026-11-09). Includes `convert`, which Redmine calls |
-| PDF thumbnails | `ghostscript`, `urw-base35-fonts` | 9.56.1 |
+| PDF thumbnails | `ghostscript`<br>`urw-base35-fonts` | 9.56.1 |
 | PostgreSQL connections | `libpq` (runtime), `libpq-devel` (building the `pg` gem) | 15.0 |
 | Japanese text in Gantt PNG | `ipa-gothic-fonts` | 003.03. Set with Redmine's `minimagick_font_path` |
-| Building gems | `gcc`, `make`, `libyaml-devel` | — |
-| Unpacking files | `tar`, `gzip` | — |
+| Building gems | `gcc`<br>`make`<br>`libyaml-devel` | — |
+| Unpacking files | `tar`<br>`gzip` | — |
 
 - **Pandoc:** Not in the Amazon Linux 2023 repositories (searched with `microdnf repoquery`). The official Pandoc Linux arm64 executable (`pandoc-3.13-linux-arm64.tar.gz`, 2026-10-26) is installed after checking its SHA256. Redmine 7.0 needs 3.8.3 or later to preview xlsx and pptx.
 - **ImageMagick 6:** Redmine creates thumbnails with the `convert` command (`lib/redmine/thumbnail.rb`). ImageMagick 6 has `convert`, so it works as is.
@@ -198,7 +198,7 @@ Whether a Rails setting takes effect depends on where it is written.
 | `RAILS_ENV` | `production` | Environment variable | — |
 | `RAILS_LOG_TO_STDOUT` | `1` | Environment variable | When this variable exists, `production.rb` sends logs to standard output |
 | `SECRET_KEY_BASE` | Read from SSM Parameter Store at start-up (see "Settings and secrets" above) | Environment variable | Rails 8.1 reads it from an environment variable or credentials. `config/secrets.yml` is not read |
-| `REDMINE_DB_HOST`, `REDMINE_DB_PASSWORD` | Same as above | Environment variable | `config/database.yml` reads the host and the password from them |
+| `REDMINE_DB_HOST`<br>`REDMINE_DB_PASSWORD` | Same as above | Environment variable | `config/database.yml` reads the host and the password from them |
 | `RUBY_YJIT_ENABLE` | `1` | Environment variable | The Lambda Ruby documentation recommends YJIT for Rails |
 | `attachments_storage_path` | `/tmp/redmine/files` | `configuration.yml` | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache) |
 | `email_delivery` | `:ses_v2` (the SES API) | `configuration.yml` | [mail.md](mail.md) |

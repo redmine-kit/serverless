@@ -56,11 +56,11 @@ Amazon Linux 2023 の標準のリポジトリで、次のパッケージが入�
 | 用途 | パッケージ | バージョン |
 | --- | --- | --- |
 | サムネイル、ガントの PNG | `ImageMagick` | 6.9.13(2026-11-09 にイメージに入ったもの)。Redmine が呼ぶ `convert` がある |
-| PDF のサムネイル | `ghostscript`、`urw-base35-fonts` | 9.56.1 |
+| PDF のサムネイル | `ghostscript`<br>`urw-base35-fonts` | 9.56.1 |
 | PostgreSQL の接続 | `libpq`(実行)、`libpq-devel`(`pg` の gem のビルド) | 15.0 |
 | ガントの PNG の日本語 | `ipa-gothic-fonts` | 003.03。Redmine の `minimagick_font_path` で指定する |
-| gem のビルド | `gcc`、`make`、`libyaml-devel` | — |
-| ファイルの展開 | `tar`、`gzip` | — |
+| gem のビルド | `gcc`<br>`make`<br>`libyaml-devel` | — |
+| ファイルの展開 | `tar`<br>`gzip` | — |
 
 - **Pandoc:** Amazon Linux 2023 のリポジトリにはありません(探したのは `microdnf repoquery`)。Pandoc の公式の Linux の arm64 の実行ファイル(`pandoc-3.13-linux-arm64.tar.gz`、2026-10-26)を、SHA256 を確認して入れます。Redmine 7.0 で xlsx と pptx をプレビューするには、3.8.3 以上が要ります。
 - **ImageMagick 6:** Redmine は、サムネイルを `convert` のコマンドで作ります(`lib/redmine/thumbnail.rb`)。ImageMagick 6 には `convert` があるので、そのまま使えます。
@@ -226,7 +226,7 @@ Rails の設定は、どこに書くかで効くかどうかが変わります�
 | `RAILS_ENV` | `production` | 環境変数 | — |
 | `RAILS_LOG_TO_STDOUT` | `1` | 環境変数 | `production.rb` が、この変数があればログを標準出力に出す |
 | `SECRET_KEY_BASE` | 起動のときに SSM Parameter Store から読む(上の「設定と秘密の値」) | 環境変数 | Rails 8.1 は環境変数か credentials から読む。`config/secrets.yml` は読まれない |
-| `REDMINE_DB_HOST`、`REDMINE_DB_PASSWORD` | 同上 | 環境変数 | `config/database.yml` が接続先とパスワードを読む |
+| `REDMINE_DB_HOST`<br>`REDMINE_DB_PASSWORD` | 同上 | 環境変数 | `config/database.yml` が接続先とパスワードを読む |
 | `RUBY_YJIT_ENABLE` | `1` | 環境変数 | Lambda の Ruby の資料が、Rails には YJIT を勧めている |
 | `attachments_storage_path` | `/tmp/redmine/files` | `configuration.yml` | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache) |
 | `email_delivery` | `:ses_v2`(SES の API) | `configuration.yml` | [mail.md](mail.md) |

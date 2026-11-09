@@ -146,12 +146,17 @@ Lambda Web Adapter は、AWS が公開している拡張機能です。Lambda �
 
 使われていない環境は、Lambda が止めます。そのあとの最初の要求は、新しい環境の起動を待ちます。
 
-- **初期化の上限:** 初期化は 10 秒までです。超えると、Lambda は最初の呼び出しのときに、関数のタイムアウトの時間で初期化をやり直します。`AWS_LWA_ASYNC_INIT=true` にすると、Lambda Web Adapter が 9.8 秒で初期化を終えたことにし、最初の要求の中で Puma の起動を待ち続けます。
-- **起動にかかる時間:** まだ測っていません。Rails の読み込み、データベースへの接続、イメージの取得が入ります。最初に測る項目です。
-- **SnapStart は使えない:** SnapStart は Java、Python、.NET だけで、Ruby に対応していません。
-- **Provisioned Concurrency は使わない:** 2 GB の環境を 1 つ確保し続けると、東京の arm で月約 23 ドルです(2 GB × 1 GB 秒あたり 0.0000043068 ドル × 2,628,000 秒(730 時間))。予算に合いません。
-- **業務時間の温め:** 必要なら、EventBridge Scheduler から業務時間のあいだ 5 分ごとに `redmine-web` を呼びます。HTTP ではないイベントは、Lambda Web Adapter が `/events` への POST として渡します。プラグインの Rack のミドルウェアが、`/events` への要求に、データベースに触れずに 204 を返します。環境が残る時間は公式に書かれていないので、効き目は測って決めます。
-- **同時の要求:** 1 つの環境は 1 件ずつしか処理しないので、1 つの画面が同時に多くの要求を出すと、その数だけ環境が起動します。添付ファイルとサムネイルを S3 から直接読ませるのは、このためでもあります([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#thumbnails))。
+起動にかかる時間は、まだ測っていません。Rails の読み込み、データベースへの接続、イメージの取得が入り、最初に測る項目です。初期化は 10 秒までで、超えると、Lambda は最初の呼び出しのときに、関数のタイムアウトの時間で初期化をやり直します。`AWS_LWA_ASYNC_INIT=true` にすると、Lambda Web Adapter が 9.8 秒で初期化を終えたことにし、最初の要求の中で Puma の起動を待ち続けます。
+
+1 つの環境は 1 件ずつしか処理しないので、1 つの画面が同時に多くの要求を出すと、その数だけ環境が起動します。添付ファイルとサムネイルを S3 から直接読ませるのは、このためでもあります([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#thumbnails))。
+
+<a id="keeping-environments-warm"></a>
+
+### 環境を温めておく
+
+よく使われる方法は、この設計には合いません。SnapStart は Java、Python、.NET だけで、Ruby に対応していません。Provisioned Concurrency で 2 GB の環境を 1 つ確保し続けると、東京の arm で月約 23 ドルかかり(2 GB × 1 GB 秒あたり 0.0000043068 ドル × 2,628,000 秒(730 時間))、予算に合いません。
+
+代わりに、必要なら EventBridge Scheduler から、業務時間のあいだ 5 分ごとに `redmine-web` を呼びます。HTTP ではないこのイベントは、Lambda Web Adapter が `/events` への POST として渡し、プラグインの Rack のミドルウェアが、データベースに触れずに 204 を返します。環境が残る時間は公式に書かれていないので、効き目を測ってから決めます。
 
 <a id="read-only-file-system"></a>
 
@@ -310,10 +315,9 @@ sequenceDiagram
 
 ## データベースの接続
 
-- **接続の数:** 1 つの環境が 1 本の接続を持ちます(`pool: 1`)。同時実行数の予約(`redmine-web` で 10、`redmine-worker` で 3、`redmine-task` で 2)で、接続は合わせて 15 本ほどになります。小さな RDS のインスタンスの接続の上限はメモリで決まります。上限、パスワード、RDS Proxy の判断は [rds.md](rds.md) にあります。
-- **認証:** データベースのユーザーのパスワードを使います。起動のときに SSM Parameter Store から読みます(`REDMINE_DB_PASSWORD`)。3 つの関数は、1 つのデータベースのユーザーを使います([rds.md](rds.md#settings))。
-- **TLS:** 接続は `sslmode=verify-full` にし、サーバーの証明書を、イメージの中の RDS の CA の証明書の束で確認します。
-- **止まった環境の接続:** 止まった環境の接続は、環境が消えるまで残ります。合わせた数は、同時実行数の予約の範囲に収まります。
+1 つの環境が 1 本の接続を持ちます(`pool: 1`)。同時実行数の予約(`redmine-web` で 10、`redmine-worker` で 3、`redmine-task` で 2)で、接続は合わせて 15 本ほどです。止まった環境の接続は環境が消えるまで残りますが、合わせた数は同時実行数の予約の範囲に収まります。小さな RDS のインスタンスの接続の上限はメモリで決まります。上限と RDS Proxy の判断は [rds.md](rds.md) にあります。
+
+3 つの関数は 1 つのデータベースのユーザーを使い、そのパスワードは起動のときに SSM Parameter Store から読みます(`REDMINE_DB_PASSWORD`。[rds.md](rds.md#settings))。接続は `sslmode=verify-full` にし、サーバーの証明書を、イメージの中の RDS の CA の証明書の束で確認します。
 
 <a id="cloudfront-and-function-urls"></a>
 

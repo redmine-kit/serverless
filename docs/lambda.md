@@ -128,12 +128,15 @@ When `REDMINE_ROLE` is `worker` or `task`, it runs the handler instead of Puma a
 
 Lambda shuts down environments that are not in use. The next first request waits for a new environment to start.
 
-- **Initialization limit:** Initialization is limited to 10 seconds. If it takes longer, Lambda retries initialization at the first invocation, within the function timeout. With `AWS_LWA_ASYNC_INIT=true`, Lambda Web Adapter reports initialization as done at 9.8 seconds and keeps waiting for Puma to start within the first request.
-- **Start-up time:** Not measured yet. It includes loading Rails, connecting to the database and fetching the image. This is the first thing to measure.
-- **SnapStart cannot be used:** SnapStart supports only Java, Python and .NET, not Ruby.
-- **No Provisioned Concurrency:** Keeping one 2 GB environment provisioned costs about $23 per month on arm in Tokyo (2 GB × $0.0000043068 per GB-second × 2,628,000 seconds (730 hours)). This does not fit the budget.
-- **Warming during business hours:** If needed, EventBridge Scheduler invokes `redmine-web` every 5 minutes during business hours. Lambda Web Adapter passes non-HTTP events as a POST to `/events`. The plugin's Rack middleware returns 204 for requests to `/events` without touching the database. How long an environment stays alive is not documented officially, so the effect will be measured before deciding.
-- **Concurrent requests:** One environment handles one request at a time, so when a page makes many requests at once, that many environments start. This is another reason attachments and thumbnails are read directly from S3 ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#thumbnails)).
+How long the start takes has not been measured yet; it includes loading Rails, connecting to the database and fetching the image, and it is the first thing to measure. Initialization is limited to 10 seconds. If it takes longer, Lambda retries initialization at the first invocation, within the function timeout. With `AWS_LWA_ASYNC_INIT=true`, Lambda Web Adapter reports initialization as done at 9.8 seconds and keeps waiting for Puma to start within the first request.
+
+One environment handles one request at a time, so when a page makes many requests at once, that many environments start. This is another reason why attachments and thumbnails are read directly from S3 ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#thumbnails)).
+
+### Keeping environments warm
+
+The usual remedies do not fit. SnapStart supports only Java, Python and .NET, not Ruby. Provisioned Concurrency for one 2 GB environment costs about $23 per month on arm in Tokyo (2 GB × $0.0000043068 per GB-second × 2,628,000 seconds (730 hours)), which does not fit the budget.
+
+If needed, EventBridge Scheduler invokes `redmine-web` every 5 minutes during business hours instead. Lambda Web Adapter passes such non-HTTP events as a POST to `/events`, and the plugin's Rack middleware answers them with 204 without touching the database. How long an environment stays alive is not documented officially, so the effect will be measured before deciding.
 
 ## Read-only file system
 
@@ -274,10 +277,9 @@ sequenceDiagram
 
 ## Database connections
 
-- **Number of connections:** Each environment holds one connection (`pool: 1`). With the reserved concurrency (10 for `redmine-web`, 3 for `redmine-worker`, 2 for `redmine-task`), there are about 15 connections in total. The connection limit of a small RDS instance depends on its memory; the limit, the password and the decision on RDS Proxy are in [rds.md](rds.md).
-- **Authentication:** The password of the database user, read from SSM Parameter Store at start-up (`REDMINE_DB_PASSWORD`). One database user is used by the three functions ([rds.md](rds.md#settings)).
-- **TLS:** Connections use `sslmode=verify-full` and check the server certificate against the RDS CA bundle in the image.
-- **Connections of stopped environments:** The connection of a stopped environment remains until the environment is removed. The total stays within the reserved concurrency.
+Each environment holds one connection (`pool: 1`). With the reserved concurrency (10 for `redmine-web`, 3 for `redmine-worker`, 2 for `redmine-task`), there are about 15 connections in total. The connection of a stopped environment remains until the environment is removed, but the total stays within the reserved concurrency. The connection limit of a small RDS instance depends on its memory; the limit and the decision on RDS Proxy are in [rds.md](rds.md).
+
+The three functions use one database user, with its password read from SSM Parameter Store at start-up (`REDMINE_DB_PASSWORD`; [rds.md](rds.md#settings)). Connections use `sslmode=verify-full` and check the server certificate against the RDS CA bundle in the image.
 
 ## CloudFront and function URLs
 

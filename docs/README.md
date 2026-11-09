@@ -31,7 +31,7 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | --- | --- |
 | [architecture.md](architecture.md) | Overall architecture, decisions and their reasons, the project's own plugins, open questions |
 | [lambda.md](lambda.md) | Event Functions, the container image, Lambda Web Adapter, the read-only file system, SSM Parameter Store, Rails settings, jobs with SQS, CloudFront and assets |
-| [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html) | Design based on the S3 plugins, bucket layout, direct uploads to S3, downloads with presigned URLs, the `/tmp` cache |
+| [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html) | Design based on the S3 plugins, bucket layout, uploads and downloads through CloudFront with signed URLs, the sandbox CSP, the `/tmp` cache |
 | [rds.md](rds.md) | The database (RDS for PostgreSQL) and the VPC: settings, routes out of the VPC (VPC endpoints or a NAT instance), access through Systems Manager, cost |
 | [tasks.md](tasks.md) | How one image switches between three roles. Migrations, arbitrary rake tasks, `rails runner` and mail import in the task function |
 | [mail.md](mail.md) | Mail sent from Rails ActionMailer through the SES API, and mail received by SES and imported |

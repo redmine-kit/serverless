@@ -15,7 +15,7 @@ Redmine(Rails と Puma)を、Lambda Event Functions で動かすための設計�
 | アーキテクチャ | arm64 | x86 より実行時間の単価が安い(東京で 1 GB 秒あたり 0.0000133334 ドルと 0.0000166667 ドル) |
 | メモリ | 2,048 MB | CPU はメモリに比例して割り当てられる。Rails の起動とサムネイルの生成を速くする。実測で見直す |
 | タイムアウト | 60 秒(`redmine-web`)、900 秒(`redmine-worker`、`redmine-task`) | CloudFront のオリジンの応答の待ち時間に合わせる(下記) |
-| `/tmp` | 2,048 MB | 添付ファイルのキャッシュ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache))、PDF の出力、Rails のキャッシュ。512〜10,240 MB で選べる |
+| `/tmp` | 512 MB(既定。追加の料金なし) | 256 MB までの添付ファイルのキャッシュ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache))、PDF の出力。登録のときに Lambda がファイル全体を読まず(SHA256 は S3 が確認する)、ダウンロードも Lambda を通らないので、既定で足りる |
 | 同時実行数の予約 | 10(`redmine-web`) | 負荷と費用の上限にする |
 | VPC | VPC のプライベートのサブネット(2 つの AZ) | RDS には VPC の中からしか届かない。S3 にはゲートウェイのエンドポイントで、SES、SSM、SQS には VPC のエンドポイントか NAT インスタンスで届く([rds.md](rds.md#routes-out-of-the-vpc)) |
 
@@ -232,7 +232,7 @@ Rails の設定は、どこに書くかで効くかどうかが変わります�
 | `config.active_job.queue_adapter` | Lambda の上(`REDMINE_ROLE` があるとき)は `:sqs`、手元では `:inline` | `additional_environment.rb` | 既定の `:async` は、環境が止まるとジョブが失われる(下記)。`production.rb` は設定していない |
 | `config.active_record.dump_schema_after_migration` | `false` | `additional_environment.rb` | migration のあとの `db/schema.rb` の書き出しを止める。`production.rb` ではコメントアウトされている |
 | `config.hosts` | Redmine のドメイン | `additional_environment.rb` | — |
-| `config.filter_redirect` | S3 のホスト名 | `additional_environment.rb` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と書かせる([security.md](security.md#logs)) |
+| `config.filter_redirect` | パスの `/files/`、`/thumbnails/`、`/tmp/bulk/` | `additional_environment.rb` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と書かせる([security.md](security.md#logs)) |
 | `config.action_mailer.raise_delivery_errors` | `redmine-worker` だけ `true` | プラグイン `redmine_serverless_ses` の `init.rb` | `production.rb` が `false` にしている。送信のエラーでジョブを失敗させ、やり直せるようにする([mail.md](mail.md#when-sending-fails)) |
 | `config.assets.redmine_detect_update` | `false` | プラグイン `redmine_serverless` の `init.rb` | `production.rb` が `true` にしている。値は初期化のあと(`after_initialize`)で読まれるので、プラグインを読み込むときに上書きすれば間に合う(推測。作るときに確認する) |
 | `RAILS_ENV` | `production` | 環境変数 | — |
@@ -347,7 +347,7 @@ flowchart LR
 - **本文のハッシュ:** 関数 URL は、署名のない本文(`UNSIGNED-PAYLOAD`)を受けないので、PUT と POST には、本文の SHA256 を `x-amz-content-sha256` に入れて送る必要があります(CloudFront の資料)。ブラウザーの Redmine の画面のフォームは、これを付けません。そこで、オリジンへの要求のところで動く Lambda@Edge の関数 `redmine-body-hash` が、本文からハッシュを計算して入れます。そのあとで、OAC が要求に署名します。
 - **CloudFront Functions では作れない:** CloudFront Functions の要求のデータには、本文がありません(メソッド、URI、クエリー、ヘッダー、Cookie だけ)。本文を読めるのは Lambda@Edge だけです。
 - **`Host`:** 関数 URL には、ビューアーの `Host` を転送しません(オリジンリクエストポリシーは `AllViewerExceptHostHeader`)。OAC は関数 URL のホスト名で署名します。Redmine のドメインは、オリジンのカスタムヘッダーの `X-Forwarded-Host` で渡します。Rails は `X-Forwarded-Host` から URL を作ります。
-- **キャッシュ:** 既定のビヘイビア(関数 URL)はキャッシュしません(`CachingDisabled`)。`/assets/*` は S3 から配り、キャッシュします(下の「アセットの配信」)。
+- **キャッシュ:** 既定のビヘイビア(関数 URL)はキャッシュしません(`CachingDisabled`)。`/assets/*` は S3 から配り、キャッシュします(下の「アセットの配信」)。添付ファイルは、ビヘイビアの `/files/*`、`/thumbnails/*`、`/tmp/bulk/*`、`/incoming/*` を使い、OAC で添付ファイルのバケットに送り、署名付き URL を必須にします([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download))。本文のハッシュを入れる関数は付けません。
 - **オリジンの応答の待ち時間:** CloudFront の既定は 30 秒で、1〜120 秒にできます。60 秒にして、関数のタイムアウトと合わせます。
 
 <a id="function-that-adds-the-body-hash-lambdaedge"></a>
@@ -429,9 +429,9 @@ CloudFront は、定額プランの Free(月 0 ドル)を既定にします。�
 
 Event Functions の同期の呼び出しは、要求と応答がそれぞれ 6 MB までです。関数 URL は、画像などのバイナリの本文を base64 にしてイベントに入れるので、実際に送れるファイルは約 4.5 MB です(推測)。さらに、CloudFront を通る要求の本文は、本文のハッシュを入れる Lambda@Edge が読める 1 MB までになります(上の「本文のハッシュを入れる関数」)。
 
-- **添付ファイル:** アップロードもダウンロードも、ブラウザーと S3 が直接やり取りします([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html))。REST API の `POST /uploads.json` は Lambda を通るので、1 MB までです。大きなファイルは、署名付きの POST での S3 へのアップロード(`/s3_uploads/presign`、`/s3_uploads/complete`。API キーと OAuth でも使える)で送ります([ai.md](ai.md))。
+- **添付ファイル:** アップロードもダウンロードも、Lambda を通らず、CloudFront を通してブラウザーと S3 がやり取りします([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html))。REST API の `POST /uploads.json` は Lambda を通るので、1 MB までです。大きなファイルは、CloudFront を通したアップロード(`/s3_uploads/presign`、`/s3_uploads/complete`。API キーと OAuth でも使える)で送ります([ai.md](ai.md))。
 - **CSV のインポート:** インポートのファイルは、画面のフォームで Lambda に送るので、1 MB までです。大きな CSV は、分けてインポートします。
-- **添付の一括のダウンロード(zip):** S3 の仮のファイルにして、署名付き URL にリダイレクトします([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#downloading-all-attachments))。
+- **添付の一括のダウンロード(zip):** S3 の仮のファイルにして、CloudFront の署名付き URL にリダイレクトします([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#downloading-all-attachments))。
 - **出力(CSV、PDF、wiki の HTML など):** Redmine から、そのまま返します。チケットの CSV と PDF は、既定で 500 件まで(`issues_export_limit`)です。作業時間、ユーザー、プロジェクトなどの CSV には件数の上限がありませんが、この規模なら 6 MB に届かない見込みです。届いたときは、絞り込み(期間など)を狭めて出力します。
 - **画面と API:** ふつうの画面と API の応答は、6 MB を超えない見込みです。一覧の 1 ページの件数は、既定で 25、50、100 から選ぶ形で(`per_page_options`)、REST API は 1 回に返す件数を 100 までに抑えています(`ApplicationController`)。さらに、応答を圧縮します(上の `AWS_LWA_ENABLE_COMPRESSION`)。万一 6 MB を超えると失敗します。
 

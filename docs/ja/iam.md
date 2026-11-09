@@ -69,9 +69,8 @@ flowchart LR
 
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
-| `s3:GetObject`、`s3:PutObject`、`s3:DeleteObject` | 添付ファイルのバケットの `files/*`、`thumbnails/*`、`imports/*`、`incoming/*`、`tmp/*` | 添付ファイルの保存、署名付きの POST と GET、`/tmp` のキャッシュ、削除、一括のダウンロードの仮のファイル([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html)) |
+| `s3:GetObject`、`s3:PutObject`、`s3:DeleteObject` | 添付ファイルのバケットの `files/*`、`thumbnails/*`、`imports/*`、`incoming/*`、`tmp/*` | 添付ファイルの保存、登録のときのチェックサム付きの `HeadObject` と写し、`/tmp` のキャッシュ、削除、一括のダウンロードの仮のファイル([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html)) |
 | `s3:ListBucket` | 添付ファイルのバケット | ないオブジェクトへの `HeadObject` を、403 ではなく 404 として受け取る。サムネイルをプレフィックスで消す |
-| `s3:GetBucketCors` | 添付ファイルのバケット | 管理画面の「添付ファイルの S3」 |
 | `sqs:SendMessage` | ジョブのキュー | ジョブを積む([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | ジョブのキューとデッドレターキュー | 管理画面の「ジョブ」 |
 | `sqs:StartMessageMoveTask`、`sqs:ListMessageMoveTasks` | ジョブのデッドレターキュー | 管理画面の「ジョブ」から、デッドレターキューを元のキューに戻す |
@@ -80,8 +79,7 @@ flowchart LR
 | `ses:GetAccount`、`ses:ListSuppressedDestinations`、`ses:DeleteSuppressedDestination` | `*`(対象を絞れない) | 同上([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email)) |
 
 - **送信の権限は 2 つ:** メールは、SES v2 の `SendEmail` に全文(raw)を渡して送ります。AWS の SES の資料の例は、送信の権限として `ses:SendEmail` と `ses:SendRawEmail` の両方を許しているので、それに合わせます。v2 の全文の送信に `ses:SendRawEmail` が欠かせないかは、確認していません(未確認)。
-- **署名付き URL:** 署名付きの POST と GET は、このロールの認証情報で作ります。ブラウザーが S3 を使える範囲は、このロールに許した範囲と、署名に入れた条件(キー、サイズ、期限)の両方で決まります。
-- **経路で絞らない:** 署名付き URL はブラウザーがインターネットから使うので、`aws:SourceIp` などで、要求の送信元(IP アドレスや VPC)を絞りません。
+- **署名付き URL:** ブラウザーはこのロールを使いません。アップロードとダウンロードは、CloudFront の秘密鍵で署名した URL で CloudFront を通ります。関数は、この鍵をほかの秘密の値と一緒に SSM Parameter Store から読みます([setup.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/setup.html#iam-permissions))。CloudFront は OAC でバケットに届き、バケットポリシーがそれを許します(下の「リソースベースのポリシー」)。
 
 <a id="execution-role-of-redmine-worker"></a>
 
@@ -208,7 +206,7 @@ flowchart LR
 ## VPC の中
 
 - **セキュリティグループ:** 権限ではありませんが、RDS には関数のセキュリティグループからの 5432 番だけを、VPC のインターフェイスエンドポイントには関数のセキュリティグループからの 443 番だけを許します([rds.md](rds.md#security))。
-- **署名付き URL:** VPC のエンドポイントの形でも、署名付き URL はブラウザーがインターネットから使うので、`aws:SourceVpce` で絞りません。
+- **ブラウザーと S3:** ブラウザーは CloudFront だけを通して添付ファイルに触れるので、インターネットから関数のロールで S3 を使うものはありません。
 
 <a id="role-of-the-nat-instance-only-with-a-nat-instance"></a>
 

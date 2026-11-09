@@ -36,7 +36,7 @@ flowchart LR
   user --> cf
   cf -- "/assets/*" --> assets
   cf -- "everything else" --> url --> app
-  user -- "Attachment upload and download<br>(presigned)" --> files
+  user -- "Attachment upload and download<br>(through CloudFront, signed URLs)" --> files
   app --> rds
   app --> gw
   gw --> files

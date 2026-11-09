@@ -10,7 +10,7 @@ AI の機能(メールで来たチケットの振り分け、長いチケット�
 
 - **AI の機能は分ける:** AI のサービスの呼び出し、プロンプト、費用、AI の機能の画面は、別のプロジェクトに置きます。このプロジェクトのイメージ、プラグイン、IAM には入れません。
 - **公開のインターフェイスだけでつなぐ:** AI の側は、Redmine の REST API と、Redmine の標準の webhook(下記)だけを使います。データベースや S3 には直接触れません。Redmine の権限が、AI の側にもそのまま効くようにするためです。
-- **自前の仕組みを足さない:** どのインターフェイスも、Redmine 7.0 の標準の機能(REST API、OAuth、webhook)です。このプロジェクトが足すのは、大きな添付ファイルを API で送る仕組み(署名付きの POST での S3 へのアップロード)だけです。
+- **自前の仕組みを足さない:** どのインターフェイスも、Redmine 7.0 の標準の機能(REST API、OAuth、webhook)です。このプロジェクトが足すのは、大きな添付ファイルを API で送る仕組み(署名付き URL で CloudFront を通した S3 へのアップロード)だけです。
 
 ```mermaid
 flowchart LR
@@ -42,7 +42,7 @@ flowchart LR
 | REST API | Redmine の標準の REST API(チケット、注記、wiki、プロジェクト、添付ファイルなど) | AI の側が、中身を読み、結果を書き込む |
 | API キー | Redmine の標準。ユーザーごとのキー | ボットのユーザー(下記)で使う |
 | OAuth 2 | Redmine 7.0 は、doorkeeper の gem で OAuth 2 のプロバイダーになれる(`Gemfile`、`config/initializers/doorkeeper.rb`、`oauth2_applications` の画面) | MCP のサーバーなど、使う人の権限で Redmine を操作するとき |
-| 大きな添付ファイル | 署名付きの POST でのアップロード(`/s3_uploads/presign`、`/s3_uploads/complete`)を、API キーと OAuth でも使えるようにする | AI の側が、要約などのファイルを添付するとき。REST API の `POST /uploads.json` は 1 MB まで([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#uploads-through-lambda)) |
+| 大きな添付ファイル | CloudFront を通したアップロード(`/s3_uploads/presign`、`/s3_uploads/complete`)を、API キーと OAuth でも使えるようにする | AI の側が、要約などのファイルを添付するとき。REST API の `POST /uploads.json` は 1 MB まで([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#uploads-through-lambda)) |
 
 - **ボットのユーザー:** AI の処理が書き込むときは、専用の Redmine のユーザーを使います。AI が書いたものは、このユーザーの注記や更新として残ります。権限はロールで、使うプロジェクトと操作(読む、注記を足すなど)に絞ります。管理者にはしません。API キーは、AI の側の秘密の値として、AI のプロジェクトで管理します。
 - **使う人の権限:** AI のエージェントが、使う人の代わりに Redmine を操作するときは、OAuth で、その人の権限の範囲だけを許します。
@@ -100,5 +100,5 @@ Redmine の側で守ることと、AI の側で守ることを分けます。
 ## 確認すること
 
 - Redmine 7.0 の OAuth で使えるスコープと、REST API のどこまでを OAuth で使えるか
-- 署名付きの POST でのアップロードを、API キーと OAuth で使うときの CSRF の扱い(API では CSRF の確認を外す)
+- CloudFront を通したアップロードを、API キーと OAuth で使うときの CSRF の扱い(API では CSRF の確認を外す)
 - webhook で送る出来事の種類の一覧(`WebhookPayload.events`)と、中身の形

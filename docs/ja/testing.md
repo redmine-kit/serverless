@@ -68,12 +68,12 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | `delete_from_disk!` | S3 の本体とサムネイルを消す。ほかの添付が同じファイルを使っていれば消さない(Redmine の判断のまま) |
 | `reuse_existing_file_if_possible` | 同じ digest とサイズなら共有し、新しいオブジェクトを消す |
 | `thumbnail` | S3 にあればそれを使い、なければ作って置く。画像でないファイルは作らない。リダイレクトに `Cache-Control` が付く |
-| `/s3_uploads/presign` | 権限のない人、許されない拡張子、上限を超えるサイズを断る。署名付きの POST のポリシーに、キーとサイズの範囲が入る。CSRF のトークンがない要求を断る |
-| `/s3_uploads/complete` | S3 の中身から SHA256 を計算する。ブラウザーが申告した値を使わない。`incoming/` 以外のキーを断る。ほかの人が送ったキーを登録できない |
-| `download` | 権限を確認してからリダイレクトする。権限がなければ S3 の URL を出さない。`response-content-disposition` に日本語のファイル名が正しく入る。PDF だけが inline |
+| `/s3_uploads/presign` | 権限のない人、許されない拡張子、上限を超えるサイズを断る。ちょうど `/incoming/<UUID>` への PUT のための、期限の短い CloudFront の署名付き URL を返し、申告されたサイズと SHA256 を残す。CSRF のトークンがない要求を断る |
+| `/s3_uploads/complete` | オブジェクトを読まずに、`HeadObject`(`ChecksumMode=ENABLED`)で `ChecksumSHA256` と `ContentLength` を読み、申告の SHA256 とサイズに等しく、チェックサムが `FULL_OBJECT` のときだけ登録する。そうでなければオブジェクトを消す。`incoming/` 以外のキーを断る。ほかの人が送ったキーを登録できない |
+| `download` | 権限を確認してから、`/files/` の下の CloudFront の署名付き URL にリダイレクトする。権限がなければ署名付き URL を出さない。`response-content-disposition` に日本語のファイル名が正しく入る。PDF だけが inline |
 | `show`(テキストと差分) | 差し替えずに、Redmine の標準の表示が `/tmp` のキャッシュで動く。上限(`file_max_size_displayed`)を超えたら表示しない |
 | CSV のインポート | 別の環境(`/tmp` が空)でも、S3 から取ってインポートを続けられる |
-| 添付の一括のダウンロード | 権限と合計の大きさの確認を Redmine の標準のまま通し、zip を `/tmp` に書いて S3 の `tmp/bulk/` に置き、署名付き URL にリダイレクトする。メモリにすべてを読まない。同じ組み合わせなら作り直さない |
+| 添付の一括のダウンロード | 権限と合計の大きさの確認を Redmine の標準のまま通し、zip を `/tmp` に書いて S3 の `tmp/bulk/` に置き、CloudFront の署名付き URL にリダイレクトする。メモリにすべてを読まない。同じ組み合わせなら作り直さない |
 
 <a id="running-on-lambda-redmine_serverless"></a>
 
@@ -153,14 +153,14 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 
 ## システムのテスト
 
-ブラウザーでの動きを、Capybara とヘッドレスの Chrome で確認します。S3 は moto で再現し、CORS も設定します。
+ブラウザーでの動きを、Capybara とヘッドレスの Chrome で確認します。S3 は moto で再現します。CloudFront を通るアップロードの PUT と署名付き URL は、デプロイのあとに確認します。
 
 | 確認すること | 理由 |
 | --- | --- |
 | ファイルを選んで添付し、チケットを保存できる | `uploadBlob` の差し替えの基本の流れ |
 | ドラッグ・アンド・ドロップ、画像の貼り付けで添付できる | 標準の UI の流れを壊していない |
 | 送信中の進み具合が表示され、終わるまで保存のボタンが押せない | 同上 |
-| 上限を超えるファイルで、エラーが表示される | S3 のポリシーと Redmine の上限 |
+| 上限を超えるファイルで、エラーが表示される | presign での Redmine の上限 |
 | 添付をクリックすると、S3 からダウンロードされる | リダイレクト |
 | wiki の本文の画像と、添付の一覧のサムネイルが表示される | 署名付き URL へのリダイレクト。サムネイルの多い画面で、同時実行数の予約を超えないか |
 
@@ -200,8 +200,9 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | 関数 URL への直接の要求 | 署名がないので 403。関数のログに出ない(関数が呼ばれない) |
 | CloudFront を通る POST | ログインとチケットの作成が通る(Lambda@Edge が入れたハッシュと OAC の署名で、関数 URL が受ける) |
 | 1 MB を超える本文の POST | CloudFront が 413 を返す |
-| アップロードとダウンロード | 確認用のプロジェクトで、署名付きの POST で送り、署名付き URL で取れる。取ったファイルの SHA256 が送ったものと同じ |
-| 権限のない人のダウンロード | S3 の URL が出ない |
+| アップロードとダウンロード | 確認用のプロジェクトで、CloudFront を通して PUT したファイルを、署名付き URL で取れる。取ったファイルの SHA256 が送ったものと同じ。中身が申告の SHA256 と合わない PUT は断られる |
+| 添付ファイルのヘッダー | `/files/` の下の応答に、`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` と `X-Content-Type-Options: nosniff` が付き、署名のない同じ URL は断られる。添付ファイルは Redmine のオリジンにあるので、ディストリビューションを変えるたびに、これが成り立つ必要がある |
+| 権限のない人のダウンロード | 署名付き URL が出ない |
 | メールの送信 | SES のメールボックスシミュレーター(`success@simulator.amazonses.com`)宛ての通知のジョブが、SQS を通って送られる |
 | メールの受信 | 確認用のアドレスから受信のアドレスに送ったメールが、確認用のプロジェクトのチケットになる |
 | タスク | `bin/rake -T` が成功する |
@@ -215,7 +216,7 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | 起動にかかる時間 | Lambda のログの初期化の時間と、最初の要求の時間 | 温めの呼び出しが要るか、メモリの大きさ |
 | メモリ | Lambda のログの最大メモリ | メモリの大きさ |
 | 要求の時間 | Lambda のログの実行時間 | 費用の見込みの見直し([cost.md](cost.md)) |
-| 登録のときの SHA256 の計算 | 大きなファイルでの `/s3_uploads/complete` の時間 | 添付ファイルの大きさの上限 |
+| ブラウザーでの SHA256 の計算 | 大きなファイルを、アップロードの前にハッシュする時間 | 添付ファイルの大きさの上限 |
 
 <a id="order-in-ci"></a>
 
@@ -245,7 +246,7 @@ flowchart TD
 
 ## 確認すること
 
-- moto が、S3 の署名付きの POST(ポリシーの条件の検査)と CORS を、どこまで再現できるか
+- moto が、`x-amz-checksum-sha256` を付けた PUT で `ChecksumSHA256` を保存して返し、合わない中身を断るか
 - moto が、SES v2 の `SendEmail`(全文での送信)を再現できるか
 - LocalStack の Hobby のプランで、コンテナイメージの arm64 の関数、関数 URL、SQS のイベントソースマッピングが動くか
 - CI での Hobby の利用の決まり(Fair Use)と、Hobby で CI Auth Token を使えるか

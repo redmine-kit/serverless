@@ -37,7 +37,7 @@ Unit prices on this page come from the Tokyo files of the AWS price list (Price 
 | After an intrusion | The execution environment is read-only and is replaced after a short time, so an attacker cannot persist by modifying files | Changes remain on disk, so an attacker may persist | Same as left | Tasks are replaced, but writable locations depend on the configuration |
 | Separation of permissions | A separate execution role per function (web, worker, task) ([iam.md](iam.md)) | All permissions gather in the server's single role | Same as left | Roles can be separated per task |
 | Database | RDS in the private subnets of a VPC. Connects with a password kept in SSM Parameter Store, over TLS that checks the server certificate ([rds.md](rds.md#settings)) | On the same server. If the server is compromised, the database can be read too | RDS inside a VPC. Connects with a password | RDS inside a VPC. Connects with a password |
-| Attachments | S3. Versioning allows restoring deleted files. Downloads use 5-minute presigned URLs | The server's disk. You take backups yourself | Same as left | Needs shared storage (EFS or S3) |
+| Attachments | S3. Versioning allows restoring deleted files. Downloads use 5-minute CloudFront signed URLs | The server's disk. You take backups yourself | Same as left | Needs shared storage (EFS or S3) |
 | Secrets | SSM Parameter Store. Not even in Lambda environment variables | The server's configuration file | Same as left | SSM or Secrets Manager from the task definition |
 | Availability | Lambda runs across multiple AZs. RDS is Single-AZ; if it stops, it is restored from a backup ([rds.md](rds.md#settings)) | If the one server stops, everything stops | One Redmine server | Tasks can be placed in multiple AZs |
 

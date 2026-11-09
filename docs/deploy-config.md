@@ -19,6 +19,7 @@ This design uses one configuration file for each Redmine you set up, and the sam
 | S3 buckets | `<instance>-files-<account ID>-<Region>`; `-assets-` and `-mail-` follow the same pattern |
 | SQS queues | `<instance>-jobs`, `<instance>-jobs-dlq`, `<instance>-task-failures` (destination for failed invocations from SES) |
 | Database | `<instance>` (the RDS instance identifier) |
+| Attachments through CloudFront | Behaviors on the instance's own distribution (no second distribution); the trusted key group `<instance>-attachments`, whose private key is a SecureString under `/<instance>/env/` |
 | CloudFormation stacks | `<instance>` (per instance), `<instance>-edge` (per instance; the CloudFront certificate in us-east-1), `redmine-shared` (shared base; below), `redmine-shared-edge` (shared base; Lambda@Edge in us-east-1) |
 | Tags | Every resource gets `redmine:instance=<instance>`. Cost can be viewed per instance |
 
@@ -114,7 +115,7 @@ bin/deploy path/to/redmine.json             # set up or update
 | --- | --- |
 | 1 | Check the configuration file against the JSON Schema |
 | 2 | Create the shared base stacks (`redmine-shared` and `redmine-shared-edge` in us-east-1) if they do not exist, or update them if they do |
-| 3 | Create the secrets in SSM if they do not exist (leave them unchanged if they do). This comes before the instance stack, because RDS reads the database password from SSM when it is created |
+| 3 | Create the secrets in SSM if they do not exist (leave them unchanged if they do), including the private key of the CloudFront key pair for attachment URLs; its public key goes into the instance stack. This comes before the instance stack, because RDS reads the database password from SSM when it is created |
 | 4 | Create or update the instance stacks (`<instance>` and `<instance>-edge` in us-east-1). Reapply the retention period to the log groups Lambda@Edge created in each Region ([security.md](security.md#retention-periods)) |
 | 5 | Put the image of the version to use into that account's ECR (Lambda can use only images in ECR in the same Region) |
 | 6 | Sync assets to S3 |

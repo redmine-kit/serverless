@@ -35,7 +35,7 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | --- | --- |
 | [architecture.md](architecture.md) | 全体の構成、決めたことと理由、自前のプラグイン、まだ決めていないこと |
 | [lambda.md](lambda.md) | Event Functions、コンテナイメージ、Lambda Web Adapter、読み取り専用のファイルシステム、SSM Parameter Store、Rails の設定、SQS でのジョブ、CloudFront とアセット |
-| [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) | S3 のプラグインを参考にした設計、バケットの構成、S3 への直接のアップロード、署名付き URL でのダウンロード、`/tmp` のキャッシュ |
+| [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) | S3 のプラグインを参考にした設計、バケットの構成、CloudFront と署名付き URL を通したアップロードとダウンロード、sandbox の CSP、`/tmp` のキャッシュ |
 | [rds.md](rds.md) | データベース(RDS for PostgreSQL)と VPC。設定、VPC の外への道(VPC のエンドポイントか NAT インスタンス)、Systems Manager での接続、費用 |
 | [tasks.md](tasks.md) | 同じイメージで 3 つの役割を切り替える仕組み。タスク用の関数での migration、任意の rake、`rails runner`、メールの取り込み |
 | [mail.md](mail.md) | Rails の ActionMailer から SES の API で送るメールと、SES で受けて取り込むメール |

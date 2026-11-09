@@ -61,9 +61,8 @@ The role names are provisional.
 
 | Permission | Resource | Use |
 | --- | --- | --- |
-| `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | `files/*`, `thumbnails/*`, `imports/*`, `incoming/*`, `tmp/*` in the attachments bucket | Storing attachments, presigned POST and GET, the `/tmp` cache, deletion, temporary files for bulk download ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html)) |
+| `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | `files/*`, `thumbnails/*`, `imports/*`, `incoming/*`, `tmp/*` in the attachments bucket | Storing attachments, `HeadObject` with the checksum and copying at registration, the `/tmp` cache, deletion, temporary files for bulk download ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html)) |
 | `s3:ListBucket` | The attachments bucket | Get 404 instead of 403 for `HeadObject` on a missing object. Delete thumbnails by prefix |
-| `s3:GetBucketCors` | The attachments bucket | The "Attachments in S3" admin page |
 | `sqs:SendMessage` | The job queue | Enqueuing jobs ([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | The job queue and the dead-letter queue | The "Jobs" admin page |
 | `sqs:StartMessageMoveTask`, `sqs:ListMessageMoveTasks` | The job dead-letter queue | Moving the dead-letter queue back to the source queue from the "Jobs" admin page |
@@ -72,8 +71,7 @@ The role names are provisional.
 | `ses:GetAccount`, `ses:ListSuppressedDestinations`, `ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)) |
 
 - **Two sending permissions:** Email is sent by passing the full message (raw) to SES v2 `SendEmail`. The examples in the AWS SES documentation allow both `ses:SendEmail` and `ses:SendRawEmail` as sending permissions, so this design follows them. Whether `ses:SendRawEmail` is required for raw sending with v2 has not been checked (not checked yet).
-- **Presigned URLs:** Presigned POST and GET are created with this role's credentials. What the browser can do in S3 is determined by both what this role allows and the conditions in the signature (key, size, expiry).
-- **No scoping by network path:** Browsers use presigned URLs from the internet, so the request source (IP address or VPC) is not restricted with `aws:SourceIp` or similar.
+- **Signed URLs:** Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([setup.md](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#iam-permissions)). CloudFront reaches the bucket through OAC, allowed by the bucket policy ("Resource-based policies" below).
 
 ## Execution role of `redmine-worker`
 
@@ -182,7 +180,7 @@ If an operations permission set is created, it has the following scope (whether 
 ## In the VPC
 
 - **Security groups:** Not a permission, but RDS allows only port 5432 from the functions' security groups, and the VPC interface endpoints allow only port 443 from the functions' security groups ([rds.md](rds.md#security)).
-- **Presigned URLs:** Even with the VPC endpoint setup, browsers use presigned URLs from the internet, so they are not restricted with `aws:SourceVpce`.
+- **Browsers and S3:** Browsers reach attachments only through CloudFront, so nothing from the internet uses the functions' roles on S3.
 
 ### Role of the NAT instance (only with a NAT instance)
 

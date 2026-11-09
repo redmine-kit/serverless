@@ -60,12 +60,12 @@ S3 is reproduced with SDK `stub_responses` in unit and functional tests, and wit
 | `delete_from_disk!` | Deletes the file and its thumbnails in S3. Does not delete if another attachment uses the same file (Redmine's decision is kept) |
 | `reuse_existing_file_if_possible` | Shares the file if digest and size match, and deletes the new object |
 | `thumbnail` | Uses the one in S3 if it exists; otherwise creates and stores it. Does not create one for non-image files. The redirect has `Cache-Control` |
-| `/s3_uploads/presign` | Rejects users without permission, disallowed extensions and sizes over the limit. The presigned POST policy contains the key and the size range. Rejects requests without a CSRF token |
-| `/s3_uploads/complete` | Computes the SHA256 from the S3 contents. Does not use the value the browser reports. Rejects keys outside `incoming/`. A key uploaded by someone else cannot be registered |
-| `download` | Redirects after checking permissions. Without permission, no S3 URL is exposed. Japanese file names are set correctly in `response-content-disposition`. Only PDFs are inline |
+| `/s3_uploads/presign` | Rejects users without permission, disallowed extensions and sizes over the limit. Returns a CloudFront signed URL for a PUT to exactly `/incoming/<UUID>` with a short expiry, and keeps the declared size and SHA256. Rejects requests without a CSRF token |
+| `/s3_uploads/complete` | Reads `ChecksumSHA256` and `ContentLength` with `HeadObject` (`ChecksumMode=ENABLED`) without reading the object, and registers only if they equal the declared SHA256 and size and the checksum is `FULL_OBJECT`; otherwise deletes the object. Rejects keys outside `incoming/`. A key uploaded by someone else cannot be registered |
+| `download` | Redirects to a CloudFront signed URL under `/files/` after checking permissions. Without permission, no signed URL is exposed. Japanese file names are set correctly in `response-content-disposition`. Only PDFs are inline |
 | `show` (text and diffs) | Not replaced; Redmine's standard view works with the `/tmp` cache. Not shown above the limit (`file_max_size_displayed`) |
 | CSV import | The import can continue in another environment (with an empty `/tmp`) by fetching from S3 |
-| Downloading all attachments | Applies the standard Redmine checks for permissions and total size, writes the zip to `/tmp`, puts it in `tmp/bulk/` in S3, and redirects to a presigned URL. Does not read everything into memory. Does not rebuild for the same set |
+| Downloading all attachments | Applies the standard Redmine checks for permissions and total size, writes the zip to `/tmp`, puts it in `tmp/bulk/` in S3, and redirects to a CloudFront signed URL. Does not read everything into memory. Does not rebuild for the same set |
 
 ### Running on Lambda (`redmine_serverless`)
 
@@ -131,16 +131,16 @@ The plugins replace Redmine code with `prepend`. Redmine's tests check that Redm
 
 ## System tests
 
-Browser behavior is checked with Capybara and headless Chrome. S3 is reproduced with moto, with CORS configured too.
+Browser behavior is checked with Capybara and headless Chrome. S3 is reproduced with moto; the upload PUT and the signed URLs, which go through CloudFront, are checked after deployment.
 
 | What to check | Reason |
 | --- | --- |
 | A file can be selected, attached and the issue saved | The basic flow of the `uploadBlob` replacement |
 | Files can be attached by drag and drop and by pasting images | The standard UI flow is not broken |
 | Progress is shown during upload, and the save button cannot be pressed until it finishes | Same as above |
-| An error is shown for a file over the limit | The S3 policy and Redmine's limit |
+| An error is shown for a file over the limit | Redmine's limit at presign |
 | Clicking an attachment downloads it from S3 | Redirect |
-| Images in wiki text and thumbnails in the attachment list are shown | Redirect to presigned URLs. Whether pages with many thumbnails exceed the reserved concurrency |
+| Images in wiki text and thumbnails in the attachment list are shown | Redirect to signed URLs. Whether pages with many thumbnails exceed the reserved concurrency |
 
 ## Image tests
 
@@ -172,8 +172,9 @@ On every deployment, `bin/smoke-test` checks behavior on real AWS. A project and
 | Direct request to the function URL | 403 because there is no signature. Does not appear in the function logs (the function is not invoked) |
 | POST through CloudFront | Login and issue creation pass (the function URL accepts them with the hash added by Lambda@Edge and the OAC signature) |
 | POST with a body over 1 MB | CloudFront returns 413 |
-| Upload and download | In the check project, a file sent with a presigned POST can be fetched with a presigned URL. The SHA256 of the fetched file matches what was sent |
-| Download by a user without permission | No S3 URL is exposed |
+| Upload and download | In the check project, a file PUT through CloudFront can be fetched with a signed URL. The SHA256 of the fetched file matches what was sent. A PUT whose contents do not match the declared SHA256 is rejected |
+| Attachment headers | A response under `/files/` has `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` and `X-Content-Type-Options: nosniff`, and the same URL without the signature is refused. Attachments are on Redmine's origin, so this must hold after every change of the distribution |
+| Download by a user without permission | No signed URL is exposed |
 | Mail sending | A notification job addressed to the SES mailbox simulator (`success@simulator.amazonses.com`) is sent through SQS |
 | Mail receiving | Mail sent from the check address to the receiving address becomes an issue in the check project |
 | Tasks | `bin/rake -T` succeeds |
@@ -185,7 +186,7 @@ On every deployment, `bin/smoke-test` checks behavior on real AWS. A project and
 | Startup time | Init duration and first request duration in the Lambda logs | Whether warm-up invocations are needed, memory size |
 | Memory | Max memory used in the Lambda logs | Memory size |
 | Request time | Duration in the Lambda logs | Revising the cost estimate ([cost.md](cost.md)) |
-| SHA256 computation at registration | Duration of `/s3_uploads/complete` for large files | Attachment size limit |
+| SHA256 computation in the browser | Time to hash large files before the upload | Attachment size limit |
 
 ## Order in CI
 
@@ -211,7 +212,7 @@ flowchart TD
 
 ## To verify
 
-- How far moto reproduces S3 presigned POST (checking policy conditions) and CORS
+- Whether moto stores and returns `ChecksumSHA256` for a PUT with `x-amz-checksum-sha256`, and rejects a mismatch
 - Whether moto reproduces SES v2 `SendEmail` (sending the full message)
 - Whether arm64 container image functions, function URLs and SQS event source mappings work on the LocalStack Hobby plan
 - The Hobby usage rules (Fair Use) for CI, and whether a CI Auth Token is available on Hobby

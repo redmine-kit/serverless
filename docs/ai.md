@@ -8,7 +8,7 @@ The specifications on this page were checked against the Redmine 7.0.3 source as
 
 - **AI features are separate:** Calls to AI services, prompts, cost, and the screens of AI features live in a separate project. They are not part of this project's image, plugin or IAM.
 - **Connect only through public interfaces:** The AI side uses only the Redmine REST API and Redmine's standard webhooks (below). It does not touch the database or S3 directly. This keeps Redmine's permissions in effect for the AI side too.
-- **No custom mechanisms:** Every interface is a standard Redmine 7.0 feature (REST API, OAuth, webhooks). The only thing this project adds is a way to send large attachments through the API (uploading to S3 with a presigned POST).
+- **No custom mechanisms:** Every interface is a standard Redmine 7.0 feature (REST API, OAuth, webhooks). The only thing this project adds is a way to send large attachments through the API (uploading through CloudFront to S3 with a signed URL).
 
 ```mermaid
 flowchart LR
@@ -36,7 +36,7 @@ flowchart LR
 | REST API | Redmine's standard REST API (issues, notes, wiki, projects, attachments, etc.) | The AI side reads content and writes results |
 | API key | Redmine standard. One key per user | Used by the bot user (below) |
 | OAuth 2 | Redmine 7.0 can act as an OAuth 2 provider with the doorkeeper gem (`Gemfile`, `config/initializers/doorkeeper.rb`, the `oauth2_applications` pages) | When an MCP server or similar operates Redmine with a user's permissions |
-| Large attachments | Make uploads with a presigned POST (`/s3_uploads/presign`, `/s3_uploads/complete`) available with API keys and OAuth too | When the AI side attaches files such as summaries. `POST /uploads.json` in the REST API is limited to 1 MB ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#uploads-through-lambda)) |
+| Large attachments | Make uploads through CloudFront (`/s3_uploads/presign`, `/s3_uploads/complete`) available with API keys and OAuth too | When the AI side attaches files such as summaries. `POST /uploads.json` in the REST API is limited to 1 MB ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#uploads-through-lambda)) |
 
 - **Bot user:** When AI processing writes, it uses a dedicated Redmine user. What the AI writes stays as notes and updates by this user. Its permissions are limited by role to the projects and actions it needs (reading, adding notes, etc.). It is not an administrator. The API key is managed as a secret on the AI side, in the AI project.
 - **The user's permissions:** When an AI agent operates Redmine on behalf of a user, OAuth allows only what that user's permissions allow.
@@ -86,5 +86,5 @@ Issues received by email contain text written by outside people ([mail.md](mail.
 ## To verify
 
 - Which scopes are available with OAuth in Redmine 7.0, and how much of the REST API can be used with OAuth
-- How CSRF is handled when uploads with a presigned POST are used with API keys and OAuth (the CSRF check is skipped for the API)
+- How CSRF is handled when uploads through CloudFront are used with API keys and OAuth (the CSRF check is skipped for the API)
 - The list of event types sent by webhooks (`WebhookPayload.events`) and the payload format

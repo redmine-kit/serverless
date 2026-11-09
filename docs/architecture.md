@@ -30,8 +30,8 @@ flowchart LR
 
   user --> cf
   cf -- "/assets/*" --> assets
+  cf -- "/files/* /thumbnails/*<br>/tmp/bulk/* /incoming/*<br>(signed URLs)" --> files
   cf -- "everything else" --> url --> app
-  user -- "attachment upload and download<br>(presigned)" --> files
   app --> rds
   app --> files
   app --> sqs
@@ -67,8 +67,8 @@ flowchart LR
 | IAM | A separate execution role per function, with resources narrowed by ARN. No access keys | The web function does not have permissions for rake or mail receiving | [iam.md](iam.md) |
 | Security | Only CloudFront is reachable from outside. AWS WAF (the five rules of the flat-rate Free plan), two-factor authentication, secure default settings, retention periods for logs and records | Assets to protect, possible incidents, remaining risks and incident procedures are gathered in one place | [security.md](security.md) |
 | Attachments | Read and written through the S3 API, following the approach of a Redmine S3 plugin | S3 can be the only storage. Files are shared across Lambda environments | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html) |
-| Upload | All uploads go directly from the browser to S3 (presigned POST) | Lambda requests are limited to 6 MB. Request bodies through CloudFront are limited to 1 MB | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload) |
-| Download | All downloads redirect to an S3 presigned URL | Lambda responses are limited to 6 MB | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
+| Upload | Browser → CloudFront → S3 by PUT, with a CloudFront signed URL and a SHA256 that S3 checks | Lambda requests are limited to 6 MB. Request bodies to Lambda through CloudFront are limited to 1 MB | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload) |
+| Download | All downloads redirect to a CloudFront signed URL on Redmine's domain; CloudFront reads S3 and adds the sandbox CSP | Lambda responses are limited to 6 MB. S3 cannot add the sandbox CSP | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
 | Background jobs | ActiveJob enqueues to SQS with AWS's official gem `aws-activejob-sqs`, and `redmine-worker` runs the jobs | No custom code needed. Retries and a dead-letter queue are available. Page requests do not wait for jobs | [lambda.md](lambda.md#background-jobs) |
 | Mail sending | Sent through the SES API using a Rails ActionMailer delivery method (`:ses_v2` from `aws-actionmailer-ses`). `redmine-worker` sends | Standard Rails mechanism; no custom code needed | [mail.md](mail.md#sending) |
 | Domain and DNS | Web and mail use the same host name (a subdomain for Redmine). The web uses an alias-type record pointing to CloudFront, with MX on the same name. If the parent domain's DNS cannot hold these, the subdomain is delegated to Route 53 | URLs and mail addresses match. CNAME and MX cannot be on the same name | [mail.md](mail.md#receiving-domain) |
@@ -103,8 +103,8 @@ One environment handles only one request at a time. When concurrent requests inc
 
 ### Attachments
 
-- **Upload:** The browser receives a presigned POST from Redmine and sends the file directly to S3. Redmine computes the SHA256 from the S3 object and creates the attachment record.
-- **Download:** Redmine checks permissions, then redirects to an S3 presigned URL.
+- **Upload:** The browser computes the SHA256 of the file, receives a CloudFront signed URL from Redmine and PUTs the file through CloudFront to S3, which rejects it if the contents do not match the SHA256. Redmine reads the checksum S3 has checked and creates the attachment record.
+- **Download:** Redmine checks permissions, then redirects to a CloudFront signed URL under `/files/`. CloudFront reads the object from S3 through OAC and adds Redmine's sandbox CSP.
 - **Server-side processing:** Processing that needs a local file, such as thumbnails and previews of Office files, fetches the file from S3 into the `/tmp` cache.
 
 Details are in [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html).
@@ -123,7 +123,7 @@ Extensions for Lambda and AWS are the project's own plugins, built with Redmine'
 | Plugin | What it does | Enabled when | Documentation |
 | --- | --- | --- | --- |
 | [`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless) | Running on Lambda: the Rack middleware for Lambda Web Adapter's `/events`, the setting that stops automatic asset compilation, Redmine settings that cannot work on Lambda fixed to disabled, jobs, the "Status and connections" and "Jobs" administration pages | `REDMINE_ROLE` exists | [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/) |
-| [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) | Attachments in S3: storage, uploads to S3, redirects to presigned URLs, the `/tmp` cache, the "Attachments in S3" administration page | S3 bucket settings exist | [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/) |
+| [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) | Attachments in S3: storage, uploads through CloudFront to S3, redirects to CloudFront signed URLs with the sandbox CSP, the `/tmp` cache, the "Attachments in S3" administration page | S3 bucket settings exist | [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/) |
 | [`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses) | Mail through SES: retries of sending, importing received mail, addresses per project, the mail administration pages | SES settings exist | [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/) |
 | [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | Settings and secrets: reads the parameters under `REDMINE_SSM_PATH` into environment variables before Rails reads `config/database.yml` and `SECRET_KEY_BASE`. It is also a gem, added by path in `image/Gemfile.local`, so that it runs that early | `REDMINE_SSM_PATH` is set | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/) |
 

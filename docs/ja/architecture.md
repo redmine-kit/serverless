@@ -32,8 +32,8 @@ flowchart LR
 
   user --> cf
   cf -- "/assets/*" --> assets
+  cf -- "/files/* /thumbnails/*<br>/tmp/bulk/* /incoming/*<br>(署名付き URL)" --> files
   cf -- "そのほか" --> url --> app
-  user -- "添付の送受信<br>(署名付き)" --> files
   app --> rds
   app --> files
   app --> sqs
@@ -71,8 +71,8 @@ flowchart LR
 | IAM | 関数ごとに実行ロールを分け、対象を ARN で絞る。アクセスキーを作らない | 画面の関数が rake やメールの受信の権限を持たない | [iam.md](iam.md) |
 | セキュリティ | 外から届くのは CloudFront だけ。AWS WAF(定額プラン Free の 5 つのルール)、二要素認証、安全な既定の設定、ログと記録の保持の期間 | 守るもの、起きうること、残るリスク、事故のときの手順を 1 か所にまとめる | [security.md](security.md) |
 | 添付ファイル | S3 の API で読み書きする。Redmine の S3 のプラグインのやり方を参考にする | S3 を唯一の保存先にできる。Lambda の環境どうしでファイルを共有できる | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) |
-| アップロード | すべてブラウザーから S3 に直接送る(署名付きの POST) | Lambda の要求は 6 MB まで。CloudFront を通る要求の本文は 1 MB まで | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
-| ダウンロード | すべて S3 の署名付き URL にリダイレクトする | Lambda の応答は 6 MB まで | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
+| アップロード | ブラウザー → CloudFront → S3 の PUT。CloudFront の署名付き URL と、S3 が確認する SHA256 を使う | Lambda の要求は 6 MB まで。CloudFront を通って Lambda に届く要求の本文は 1 MB まで | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
+| ダウンロード | すべて Redmine のドメインの CloudFront の署名付き URL にリダイレクトする。CloudFront が S3 から読み、sandbox の CSP を付ける | Lambda の応答は 6 MB まで。S3 では sandbox の CSP を付けられない | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
 | バックグラウンドのジョブ | ActiveJob を AWS の公式の gem `aws-activejob-sqs` で SQS に積み、`redmine-worker` で実行する | 自前のコードが要らない。やり直しとデッドレターキューがある。画面の要求がジョブを待たない | [lambda.md](lambda.md#background-jobs) |
 | メールの送信 | Rails の ActionMailer の送信方法(`aws-actionmailer-ses` の `:ses_v2`)で、SES の API から送る。送るのは `redmine-worker` | Rails の標準の仕組みで、自前のコードが要らない | [mail.md](mail.md#sending) |
 | ドメインと DNS | Web とメールを同じホスト名(Redmine のサブドメイン)にする。Web は CloudFront を向く別名の種類のレコード、同じ名前に MX を置く。親のドメインの DNS で置けなければ、サブドメインを Route 53 に委任する | URL とメールのアドレスがそろう。CNAME と MX は同じ名前に置けない | [mail.md](mail.md#receiving-domain) |
@@ -115,8 +115,8 @@ Lambda Managed Instances(1 環境で複数のリクエストを処理する Even
 
 ### 添付ファイル
 
-- **アップロード:** ブラウザーが Redmine から署名付きの POST を受け取り、S3 に直接送ります。Redmine は、S3 のオブジェクトから SHA256 を計算して、添付のレコードを作ります。
-- **ダウンロード:** Redmine が権限を確認してから、S3 の署名付き URL へリダイレクトします。
+- **アップロード:** ブラウザーがファイルの SHA256 を計算し、Redmine から CloudFront の署名付き URL を受け取って、CloudFront を通して S3 に PUT します。中身が SHA256 と合わなければ、S3 が断ります。Redmine は、S3 が確認したチェックサムを読んで、添付のレコードを作ります。
+- **ダウンロード:** Redmine が権限を確認してから、`/files/` の下の CloudFront の署名付き URL へリダイレクトします。CloudFront が OAC で S3 からオブジェクトを読み、Redmine の sandbox の CSP を付けます。
 - **サーバーでの処理:** サムネイルや Office のファイルのプレビューなど、ローカルのファイルが要る処理は、S3 から `/tmp` のキャッシュに取って行います。
 
 詳しくは [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) にあります。
@@ -139,7 +139,7 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 | プラグイン | すること | 有効にする条件 | 資料 |
 | --- | --- | --- | --- |
 | [`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless) | Lambda での実行。Lambda Web Adapter の `/events` に答える Rack のミドルウェア、アセットの自動の書き出しを止める設定、Lambda で使えない Redmine の設定を無効に固定すること、ジョブ、管理画面の「状態と接続」と「ジョブ」 | `REDMINE_ROLE` がある | [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/ja/) |
-| [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) | S3 の添付ファイル。保存、S3 へのアップロード、署名付き URL へのリダイレクト、`/tmp` のキャッシュ、管理画面の「添付ファイルの S3」 | S3 のバケットの設定がある | [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/) |
+| [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) | S3 の添付ファイル。保存、CloudFront を通した S3 へのアップロード、sandbox の CSP を付ける CloudFront の署名付き URL へのリダイレクト、`/tmp` のキャッシュ、管理画面の「添付ファイルの S3」 | S3 のバケットの設定がある | [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/) |
 | [`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses) | SES でのメール。送信のやり直し、受けたメールの取り込み、プロジェクトごとのアドレス、メールの管理画面 | SES の設定がある | [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/ja/) |
 | [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | 設定と秘密の値。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。その時機に動くように gem でもあり、`image/Gemfile.local` で道筋を指定して足す | `REDMINE_SSM_PATH` がある | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) |
 

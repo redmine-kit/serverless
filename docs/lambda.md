@@ -13,7 +13,7 @@ The specifications on this page were checked against official information as of 
 | Architecture | arm64 | Lower unit price for run time than x86 (in Tokyo, $0.0000133334 versus $0.0000166667 per GB-second) |
 | Memory | 2,048 MB | CPU is allocated in proportion to memory. Speeds up Rails start-up and thumbnail generation. To be revised after measurement |
 | Timeout | 60 seconds (`redmine-web`), 900 seconds (`redmine-worker`, `redmine-task`) | Matches the CloudFront origin response timeout (below) |
-| `/tmp` | 2,048 MB | The attachment cache ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache)), PDF output, the Rails cache. Selectable from 512 to 10,240 MB |
+| `/tmp` | 512 MB (the default, no extra charge) | The attachment cache, up to 256 MB ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache)), PDF output. Lambda reads no whole file at registration (S3 checks the SHA256) and downloads do not pass through Lambda, so the default is enough |
 | Reserved concurrency | 10 (`redmine-web`) | Caps load and cost |
 | VPC | Private subnets of a VPC (two AZs) | RDS is reached only from inside the VPC. S3 is reached through a gateway endpoint, and SES, SSM and SQS through VPC endpoints or a NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)) |
 
@@ -202,7 +202,7 @@ Whether a Rails setting takes effect depends on where it is written.
 | `config.active_job.queue_adapter` | `:sqs` on Lambda (when `REDMINE_ROLE` exists), `:inline` locally | `additional_environment.rb` | With the default `:async`, jobs are lost when the environment shuts down (below). `production.rb` does not set it |
 | `config.active_record.dump_schema_after_migration` | `false` | `additional_environment.rb` | Stops writing `db/schema.rb` after migrations. Commented out in `production.rb` |
 | `config.hosts` | The Redmine domain | `additional_environment.rb` | — |
-| `config.filter_redirect` | The S3 host name | `additional_environment.rb` | Makes redirects to attachment presigned URLs appear as `[FILTERED]` in logs ([security.md](security.md#logs)) |
+| `config.filter_redirect` | The paths `/files/`, `/thumbnails/` and `/tmp/bulk/` | `additional_environment.rb` | Makes redirects to attachment signed URLs appear as `[FILTERED]` in logs ([security.md](security.md#logs)) |
 | `config.action_mailer.raise_delivery_errors` | `true` only in `redmine-worker` | `init.rb` of the plugin `redmine_serverless_ses` | `production.rb` sets it to `false`. Sending errors fail the job so that it can be retried ([mail.md](mail.md#when-sending-fails)) |
 | `config.assets.redmine_detect_update` | `false` | `init.rb` of the plugin `redmine_serverless` | `production.rb` sets it to `true`. The value is read after initialization (`after_initialize`), so overwriting it when the plugin loads is early enough (an assumption; to be checked when building) |
 | `RAILS_ENV` | `production` | Environment variable | — |
@@ -307,7 +307,7 @@ flowchart LR
 - **Body hash:** Function URLs do not accept unsigned bodies (`UNSIGNED-PAYLOAD`), so PUT and POST must send the body's SHA256 in `x-amz-content-sha256` (CloudFront documentation). Forms in Redmine pages in the browser do not add it. So the Lambda@Edge function `redmine-body-hash`, which runs at the origin request, computes the hash from the body and adds it. OAC then signs the request.
 - **Not possible with CloudFront Functions:** The request data in CloudFront Functions has no body (only the method, URI, query string, headers and cookies). Only Lambda@Edge can read the body.
 - **`Host`:** The viewer's `Host` is not forwarded to the function URL (the origin request policy is `AllViewerExceptHostHeader`). OAC signs with the function URL's host name. The Redmine domain is passed in the origin custom header `X-Forwarded-Host`. Rails builds URLs from `X-Forwarded-Host`.
-- **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below).
+- **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below). Attachments use the behaviors `/files/*`, `/thumbnails/*`, `/tmp/bulk/*` and `/incoming/*`, which go to the attachments bucket through OAC and require signed URLs ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)); the body hash function is not attached to them.
 - **Origin response timeout:** The CloudFront default is 30 seconds, configurable from 1 to 120 seconds. It is set to 60 seconds to match the function timeout.
 
 ### Function that adds the body hash (Lambda@Edge)
@@ -377,9 +377,9 @@ CloudFront uses the flat-rate Free plan ($0 per month) by default. It includes 1
 
 Synchronous invocations of Event Functions are limited to 6 MB each for the request and the response. Function URLs put binary bodies such as images into the event as base64, so the file that can actually be sent is about 4.5 MB (an assumption). In addition, request bodies through CloudFront are limited to the 1 MB that the Lambda@Edge function adding the body hash can read (see "Function that adds the body hash" above).
 
-- **Attachments:** Both uploads and downloads go directly between the browser and S3 ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html)). The REST API `POST /uploads.json` goes through Lambda, so it is limited to 1 MB. Large files are sent with the upload to S3 by presigned POST (`/s3_uploads/presign`, `/s3_uploads/complete`; also usable with API keys and OAuth) ([ai.md](ai.md)).
+- **Attachments:** Both uploads and downloads go between the browser and S3 through CloudFront, not through Lambda ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html)). The REST API `POST /uploads.json` goes through Lambda, so it is limited to 1 MB. Large files are sent with the upload through CloudFront (`/s3_uploads/presign`, `/s3_uploads/complete`; also usable with API keys and OAuth) ([ai.md](ai.md)).
 - **CSV import:** Import files are sent to Lambda through a page form, so they are limited to 1 MB. Large CSV files are split and imported in parts.
-- **Downloading all attachments (zip):** Created as a temporary file in S3, with a redirect to a presigned URL ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#downloading-all-attachments)).
+- **Downloading all attachments (zip):** Created as a temporary file in S3, with a redirect to a CloudFront signed URL ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#downloading-all-attachments)).
 - **Exports (CSV, PDF, wiki HTML and so on):** Returned directly from Redmine. Issue CSV and PDF are limited to 500 issues by default (`issues_export_limit`). CSV exports of spent time, users, projects and so on have no row limit, but at this scale they are not expected to reach 6 MB. If one does, narrow the filter (such as the period) and export again.
 - **Pages and API:** Ordinary page and API responses are not expected to exceed 6 MB. The number of items per list page is chosen from 25, 50 and 100 by default (`per_page_options`), and the REST API limits the number of items returned per call to 100 (`ApplicationController`). Responses are also compressed (`AWS_LWA_ENABLE_COMPRESSION` above). If a response does exceed 6 MB, it fails.
 

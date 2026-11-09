@@ -23,6 +23,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | S3 のバケット | `<instance>-files-<アカウント ID>-<リージョン>`、`-assets-`、`-mail-` も同じ形 |
 | SQS のキュー | `<instance>-jobs`、`<instance>-jobs-dlq`、`<instance>-task-failures`(SES からの呼び出しの失敗の送り先) |
 | データベース | `<instance>`(RDS のインスタンスの識別子) |
+| CloudFront を通す添付ファイル | インスタンス自身のディストリビューションのビヘイビア(2 つめのディストリビューションは作らない)。信頼されたキーグループは `<instance>-attachments` で、その秘密鍵は `/<instance>/env/` の下の SecureString |
 | CloudFormation のスタック | `<instance>`(インスタンスごと)、`<instance>-edge`(インスタンスごと。us-east-1 の CloudFront の証明書)、`redmine-shared`(共有の土台。下記)、`redmine-shared-edge`(共有の土台。us-east-1 の Lambda@Edge) |
 | タグ | すべてのリソースに `redmine:instance=<instance>` を付ける。費用をインスタンスごとに分けて見られる |
 
@@ -126,7 +127,7 @@ bin/deploy path/to/redmine.json             # 立てる、更新する
 | --- | --- |
 | 1 | 設定のファイルを JSON Schema で確認する |
 | 2 | 共有の土台のスタック(`redmine-shared` と、us-east-1 の `redmine-shared-edge`)を、無ければ作り、あれば更新する |
-| 3 | 秘密の値が SSM に無ければ作る(あれば変えない)。RDS は作るときにデータベースのパスワードを SSM から読むので、インスタンスのスタックより先に行う |
+| 3 | 秘密の値が SSM に無ければ作る(あれば変えない)。添付ファイルの URL のための CloudFront のキーペアの秘密鍵も含め、その公開鍵はインスタンスのスタックに入れる。RDS は作るときにデータベースのパスワードを SSM から読むので、インスタンスのスタックより先に行う |
 | 4 | インスタンスのスタック(`<instance>` と、us-east-1 の `<instance>-edge`)を、作るか更新する。Lambda@Edge が各リージョンに作ったロググループに、保持の期間を当て直す([security.md](security.md#retention-periods)) |
 | 5 | 使うバージョンのイメージを、そのアカウントの ECR に置く(Lambda は、同じリージョンの ECR のイメージしか使えない) |
 | 6 | アセットを S3 に同期する |

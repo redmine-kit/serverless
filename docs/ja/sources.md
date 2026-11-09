@@ -77,8 +77,9 @@
 | --- | --- |
 | [S3 Files の同期](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-files-synchronization.html) | 検討して使わなかった理由の一つ。書き込みが 60 秒止まってから S3 に書き出す |
 | [S3 の料金](https://aws.amazon.com/s3/pricing/) | S3 Files の料金の考え方。東京の単価は価格表(AmazonS3)で、載っているデータ 1 GB あたり月 0.36 ドル |
-| [署名付き URL](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html) | 一時的な認証情報で作った URL は、認証情報が切れると無効 |
-| [Aws::S3::PresignedPost](https://docs.aws.amazon.com/sdk-for-ruby/v3/api/Aws/S3/PresignedPost.html) | `content_length_range`、期限 |
+| [GetObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) | (署名付きの)GET で上書きできるのは `response-content-type`、`-language`、`-expires`、`-cache-control`、`-disposition`、`-encoding` だけなので、CSP は付けられない。添付ファイルを CloudFront に通す理由 |
+| [Implementing secure file uploads to Amazon S3 at the edge: Choosing the right pattern](https://aws.amazon.com/blogs/networking-and-content-delivery/implementing-secure-file-uploads-to-amazon-s3-at-the-edge-choosing-the-right-pattern/) | AWS のブログ、2026-02-24。オリジンアクセスコントロールは POST のポリシーに署名しないので、CloudFront を通したアップロードは PUT にする |
+| [Checking object integrity for data uploads](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html) | アップロードの `x-amz-checksum-sha256` と、`ChecksumMode` を付けた `HeadObject` がチェックサムを返すこと([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
 | [関数 URL のオリジンを OAC で守る](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-lambda.html) | PUT と POST に `x-amz-content-sha256` が要る。Lambda は署名のない本文を受けない。関数 URL は `AWS_IAM`。CloudFront に `lambda:InvokeFunctionUrl` と `lambda:InvokeFunction` を、ディストリビューションの `AWS:SourceArn` で許す(2026-11-09 に確認) |
 | [CloudFront Functions のイベントの形](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/functions-event-structure.html) | 要求のデータは、メソッド、URI、クエリー、ヘッダー、Cookie だけで、本文がない(2026-11-09 に確認)。[lambda.md](lambda.md#cloudfront-and-function-urls) |
 | [Lambda@Edge の制限](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-at-edge-function-restrictions.html) | 本文は base64 で渡る。オリジンへの要求では 1 MB、ビューアーからの要求では 40 KB で切り詰める。us-east-1、Node.js と Python、コンテナイメージと arm64 は使えない。実行ロールは `edgelambda.amazonaws.com` にも引き受けを許す(2026-11-09 に確認) |

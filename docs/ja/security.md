@@ -37,9 +37,9 @@ Serverless のセキュリティの設計です。守るもの、起きうるこ
 | パスワードの総当たり、使い回しのパスワード | 二要素認証(管理者は必須)、パスワードの決まり、WAF のログインへの回数の制限 | 下の「Redmine の設定」「AWS WAF」 |
 | 関数 URL を直接呼ばれる | 関数 URL は IAM の認証で、OAC の署名がないと関数が呼ばれない | [lambda.md](lambda.md#cloudfront-and-function-urls) |
 | データベースに外からつながれる | RDS はパブリックアクセスのないプライベートのサブネットに置く。セキュリティグループは関数からだけを許す。パスワードは SSM と RDS にだけ置く | [rds.md](rds.md#security) |
-| 添付ファイルを権限のない人に読まれる | Redmine が権限を確認してから、5 分の署名付き URL を出す。バケットは公開しない | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
+| 添付ファイルを権限のない人に読まれる | Redmine が権限を確認してから、5 分の CloudFront の署名付き URL を出す。バケットは公開せず、OAC を通した CloudFront だけを許す | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
 | 署名付き URL が漏れる | 期限は 5 分。ログに残さない(下の「ログ」) | 下の「ログ」 |
-| 添付ファイルで悪いコードを動かされる(HTML、SVG) | 添付ファイルは S3 のドメインから配るので、Redmine とは別のオリジンになり、Redmine の Cookie を読めない。PDF のほかは、ダウンロードとして返す(`Content-Disposition: attachment`。Redmine の標準と同じ) | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
+| 添付ファイルで悪いコードを動かされる(HTML、SVG) | 添付ファイルは、Redmine の標準と同じく Redmine のオリジンから、CloudFront のビヘイビア `/files/*`、`/thumbnails/*`、`/tmp/bulk/*` を通して返り、Redmine が付けるのと同じ `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` と `X-Content-Type-Options: nosniff` が付く。sandbox の文書は不透明なオリジンになり、スクリプトも動かないので、Redmine の Cookie を読むことも、Redmine を呼ぶこともできない。PDF のほかは、ダウンロードとして返す(`Content-Disposition: attachment`。Redmine の標準と同じ)。デプロイのあとの確認で、ヘッダーを確認する([testing.md](testing.md#checks-after-deployment)) | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
 | 差出人を偽ったメールで、チケットを作られる | DMARC が通らないメール、迷惑メール、ウイルスのメールを捨てる。登録のないアドレスのメールを受けない | [mail.md](mail.md#spoofing-and-spam) |
 | webhook で、内向きのアドレスに要求を送らされる(SSRF) | `webhook_blocklist` で、プライベート、ループバック、リンクローカルのアドレスを断る | [lambda.md](lambda.md#rails-and-redmine-settings) |
 | 依存の gem やイメージに悪いコードが混ざる | digest と SHA256 で固定する、依存の弱点の検査、GitHub Actions を SHA で固定する | 下の「供給網」 |
@@ -54,9 +54,10 @@ Serverless のセキュリティの設計です。守るもの、起きうるこ
 | 項目 | 決めたこと |
 | --- | --- |
 | HTTPS | ビューアーには HTTPS だけを許し、HTTP は HTTPS にリダイレクトする。TLS の最低のバージョンは、CloudFront のセキュリティポリシー `TLSv1.2_2021` |
-| 応答のヘッダー | CloudFront の AWS 管理の応答のヘッダーのポリシー `SecurityHeadersPolicy`(ID `67f7725c-6f97-4210-82d7-5512b31e9d03`)を付ける。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので(`config/environments/production.rb`)、HSTS は CloudFront で付ける |
+| 応答のヘッダー | Redmine のビヘイビアに、CloudFront の AWS 管理の応答のヘッダーのポリシー `SecurityHeadersPolicy`(ID `67f7725c-6f97-4210-82d7-5512b31e9d03`)を付ける。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので(`config/environments/production.rb`)、HSTS は CloudFront で付ける |
+| 添付ファイル | ビヘイビアの `/files/*`、`/thumbnails/*`、`/tmp/bulk/*`(GET)と `/incoming/*`(PUT)は、OAC で添付ファイルのバケットに送り、CloudFront の署名付き URL を必須にする。ダウンロードのビヘイビアには、sandbox の CSP と `nosniff` を付ける、専用のレスポンスヘッダーポリシーを付ける([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
 | 関数 URL | OAC の署名がない要求は、関数が呼ばれる前に断られる([lambda.md](lambda.md#cloudfront-and-function-urls)) |
-| 要求の本文 | 1 MB まで。超えたら Lambda@Edge が 413 を返す |
+| 要求の本文 | Redmine のビヘイビアでは 1 MB まで。超えたら Lambda@Edge が 413 を返す。`/incoming/*` へのアップロードは、Lambda ではなく S3 に届き、アップロードの上限を超える本文は CloudFront Functions が断る([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
 
 - **自分で作る応答のヘッダー:** Content Security Policy などを自分で決めるポリシーは、定額プランの Business より上だけです。Free と Pro では、上の AWS 管理のポリシーを使います。
 
@@ -193,7 +194,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 
 ## ログ
 
-- **署名付き URL を残さない:** Rails は、リダイレクトの先の URL をログに書きます。添付ファイルのダウンロードの署名付き URL がログに残ると、ログを読める人が、期限のあいだ添付ファイルを読めます。Rails の設定 `config.filter_redirect` に S3 のホスト名を入れ、ログには `[FILTERED]` と書かせます([lambda.md](lambda.md#rails-and-redmine-settings))。
+- **署名付き URL を残さない:** Rails は、リダイレクトの先の URL をログに書きます。添付ファイルのダウンロードの署名付き URL がログに残ると、ログを読める人が、期限のあいだ添付ファイルを読めます。Rails の設定 `config.filter_redirect` にパスの `/files/`、`/thumbnails/`、`/tmp/bulk/` を入れ、ログには `[FILTERED]` と書かせます([lambda.md](lambda.md#rails-and-redmine-settings))。
 - **パラメーターを伏せる:** Redmine は、`password`、`salt`、`twofa_totp_key`、`key` のパラメーターを、ログで伏せます(`config/application.rb` の `filter_parameters`)。プラグインが足す画面のパラメーターも、秘密のものは同じく伏せます。
 - **IP アドレス:** CloudFront を通るので、Redmine には `X-Forwarded-For` で利用者の IP アドレスが届きます。Rails の `remote_ip` が、CloudFront の IP アドレスではなく利用者の IP アドレスを返すか(信頼するプロキシの設定)は、作るときに確認します。
 - **見る人を絞る:** ログを読める権限は、運用する人だけにします([iam.md](iam.md#permissions-of-people))。
@@ -247,7 +248,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 
 ## 確認すること
 
-- `config.filter_redirect` で、S3 の署名付き URL へのリダイレクトがログに残らないか
+- `config.filter_redirect` で、CloudFront の署名付き URL へのリダイレクトがログに残らないか
 - CloudFront の応答のヘッダーのポリシーと WAF のルールが、定額プラン Free で使えるか
 - WAF の Common Rule Set のうち、Redmine の正しい要求を止めるルール(本文の大きさ、XSS の形など)
 - Rails の `remote_ip` が、CloudFront を通った要求で、利用者の IP アドレスになるか

@@ -38,7 +38,7 @@ flowchart LR
   user --> cf
   cf -- "/assets/*" --> assets
   cf -- "そのほか" --> url --> app
-  user -- "添付の送受信<br>(署名付き)" --> files
+  user -- "添付の送受信<br>(CloudFront を通す。署名付き URL)" --> files
   app --> rds
   app --> gw
   gw --> files

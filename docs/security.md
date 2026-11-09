@@ -31,9 +31,9 @@ The specifications in this page were checked against official information and th
 | Password brute force, reused passwords | Two-factor authentication (required for administrators), password rules, WAF rate limit on login | "Redmine settings" and "AWS WAF" below |
 | Function URLs are called directly | Function URLs use IAM authentication; the function is not invoked without an OAC signature | [lambda.md](lambda.md#cloudfront-and-function-urls) |
 | Someone connects to the database from outside | RDS in private subnets without public access. The security group allows only the functions. The password is only in SSM and RDS | [rds.md](rds.md#security) |
-| Attachments are read by people without permission | Redmine checks permissions before issuing a 5-minute presigned URL. Buckets are not public | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
-| A presigned URL leaks | It expires in 5 minutes. It is not written to logs ("Logs" below) | "Logs" below |
-| Malicious code runs through an attachment (HTML, SVG) | Attachments are served from the S3 domain, which is a different origin from Redmine, so they cannot read Redmine's cookies. Everything except PDF is returned as a download (`Content-Disposition: attachment`, the same as standard Redmine) | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
+| Attachments are read by people without permission | Redmine checks permissions before issuing a 5-minute CloudFront signed URL. The bucket is not public and allows only CloudFront through OAC | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
+| A signed URL leaks | It expires in 5 minutes. It is not written to logs ("Logs" below) | "Logs" below |
+| Malicious code runs through an attachment (HTML, SVG) | Attachments are served from Redmine's origin, as in standard Redmine, through the CloudFront behaviors `/files/*`, `/thumbnails/*` and `/tmp/bulk/*`, with the same `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` that Redmine sets and `X-Content-Type-Options: nosniff`. A sandboxed document gets an opaque origin and runs no scripts, so it cannot read Redmine's cookies or call Redmine. Everything except PDF is returned as a download (`Content-Disposition: attachment`, the same as standard Redmine). A check after deployment confirms the header ([testing.md](testing.md#checks-after-deployment)) | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
 | Email with a forged sender creates issues | Drop email that fails DMARC, spam, and email with viruses. Do not accept email from unregistered addresses | [mail.md](mail.md#spoofing-and-spam) |
 | A webhook is used to send requests to internal addresses (SSRF) | `webhook_blocklist` rejects private, loopback and link-local addresses | [lambda.md](lambda.md#rails-and-redmine-settings) |
 | Malicious code gets into a dependent gem or image | Pin with digests and SHA256, scan dependencies for vulnerabilities, pin GitHub Actions by SHA | "Supply chain" below |
@@ -46,9 +46,10 @@ The specifications in this page were checked against official information and th
 | Item | Decision |
 | --- | --- |
 | HTTPS | Viewers are allowed HTTPS only; HTTP is redirected to HTTPS. The minimum TLS version is the CloudFront security policy `TLSv1.2_2021` |
-| Response headers | Attach the CloudFront AWS-managed response headers policy `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`). It adds `Strict-Transport-Security: max-age=31536000`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin` and `X-XSS-Protection: 1; mode=block`. Redmine does not enable `force_ssl` (`config/environments/production.rb`), so HSTS is added by CloudFront |
+| Response headers | On Redmine's behaviors, attach the CloudFront AWS-managed response headers policy `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`). It adds `Strict-Transport-Security: max-age=31536000`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin` and `X-XSS-Protection: 1; mode=block`. Redmine does not enable `force_ssl` (`config/environments/production.rb`), so HSTS is added by CloudFront |
+| Attachments | The behaviors `/files/*`, `/thumbnails/*`, `/tmp/bulk/*` (GET) and `/incoming/*` (PUT) go to the attachments bucket through OAC and require CloudFront signed URLs. The download behaviors have their own response headers policy with the sandbox CSP and `nosniff` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)) |
 | Function URLs | Requests without an OAC signature are rejected before the function is invoked ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
-| Request body | Up to 1 MB. Above that, Lambda@Edge returns 413 |
+| Request body | Up to 1 MB on Redmine's behaviors. Above that, Lambda@Edge returns 413. Uploads to `/incoming/*` go to S3, not to Lambda; a CloudFront Function rejects a body over the upload limit ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload)) |
 
 - **Custom response headers:** Policies you define yourself, such as a Content Security Policy, are available only on the Business flat-rate plan and above. Free and Pro use the AWS-managed policy above.
 
@@ -165,7 +166,7 @@ How long logs, records, temporary files and backups are kept. All periods are de
 
 ## Logs
 
-- **Do not log presigned URLs:** Rails writes the redirect target URL to the log. If the presigned URL for an attachment download is in the log, anyone who can read the log can read the attachment until it expires. Add the S3 host name to the Rails setting `config.filter_redirect` so the log shows `[FILTERED]` ([lambda.md](lambda.md#rails-and-redmine-settings)).
+- **Do not log signed URLs:** Rails writes the redirect target URL to the log. If the signed URL for an attachment download is in the log, anyone who can read the log can read the attachment until it expires. Add the paths `/files/`, `/thumbnails/` and `/tmp/bulk/` to the Rails setting `config.filter_redirect` so the log shows `[FILTERED]` ([lambda.md](lambda.md#rails-and-redmine-settings)).
 - **Filter parameters:** Redmine filters the `password`, `salt`, `twofa_totp_key` and `key` parameters in logs (`filter_parameters` in `config/application.rb`). Secret parameters on pages the plugin adds are filtered the same way.
 - **IP addresses:** Because requests pass through CloudFront, Redmine receives the user's IP address in `X-Forwarded-For`. Whether Rails' `remote_ip` returns the user's IP address rather than CloudFront's (trusted proxy settings) is checked when building.
 - **Limit who can read:** Only operators have permission to read logs ([iam.md](iam.md#permissions-of-people)).
@@ -211,7 +212,7 @@ Risks this design cannot fully prevent, covered by operations.
 
 ## To verify
 
-- Whether `config.filter_redirect` keeps redirects to S3 presigned URLs out of the logs
+- Whether `config.filter_redirect` keeps redirects to CloudFront signed URLs out of the logs
 - Whether the CloudFront response headers policy and the WAF rules are available on the Free flat-rate plan
 - Which rules in the WAF Common Rule Set block legitimate Redmine requests (body size, XSS patterns, etc.)
 - Whether Rails' `remote_ip` is the user's IP address for requests that pass through CloudFront

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Draws the AWS architecture diagrams (docs/diagrams/*.py) with the Python
+# library diagrams and the AWS Architecture Icons it ships, in Docker, and
+# writes self-contained SVGs next to them (docs/architecture.md#aws-resources).
+#   bin/diagrams          # writes docs/diagrams/architecture.svg and .ja.svg
+#   bin/diagrams --lock   # writes docs/diagrams/requirements.txt from .in
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+dir=docs/diagrams
+image=serverless-diagrams
+base=$(sed -n 's/^FROM //p' "$dir/Dockerfile")
+
+if [[ "${1:-}" == --lock ]]; then
+  # Versions at least 7 days old, with hashes.
+  cutoff=$(date -u -v-7d +%Y-%m-%d 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%d)
+  docker run --rm -v "$PWD/$dir:/w" -w /w "$base" sh -c \
+    "pip install -q --root-user-action=ignore uv==0.9.5 && uv pip compile --quiet --generate-hashes \
+     --python-version 3.13 --python-platform linux --exclude-newer $cutoff requirements.in -o requirements.txt"
+  exit
+fi
+
+docker build -q -t "$image" "$dir" >/dev/null
+for lang in en ja; do
+  out=architecture
+  [[ "$lang" == en ]] || out="architecture.$lang"
+  docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" "$image" \
+    sh -c "python architecture.py $lang $out && python embed.py $out.svg"
+  echo "wrote $dir/$out.svg"
+done

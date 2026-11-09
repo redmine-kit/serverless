@@ -204,7 +204,7 @@ SES receipt rules are grouped in rule sets, and only one rule set can be active 
 The rake task `redmine_serverless_ses:receive_mail` of the plugin `redmine_serverless_ses` does the following.
 
 1. Get the full message from S3.
-2. Decide whether to import it from the headers that SES added ("Spoofing and spam" below).
+2. Decide whether to import it from the verdicts in the SES event ("Spoofing and spam" below).
 3. Determine the project from the recipients (below).
 4. Pass the full message and options to Redmine's `MailHandler.safe_receive`. This is the same processing as Redmine's `rake redmine:email:read`.
 5. On success, move it to `processed/`.
@@ -229,16 +229,19 @@ The rake task `redmine_serverless_ses:receive_mail` of the plugin `redmine_serve
 
 ### Spoofing and spam
 
-Redmine decides which user an email comes from by the sender (`From`) address. If email with a forged sender is imported, an issue is created as that user. So, based on the headers that SES added, the following email is discarded without import and logged.
+Redmine decides which user an email comes from by the sender (`From`) address. If email with a forged sender is imported, an issue is created as that user. So, based on the verdicts in the SES event, the following email is discarded without import and recorded with the verdicts.
 
-| Header | Discard condition |
+| Verdict in the event (`receipt`) | Discard condition |
 | --- | --- |
-| `X-SES-Virus-Verdict` | Not `PASS` |
-| `X-SES-Spam-Verdict` | Not `PASS` |
-| `Authentication-Results` | No `dmarc=pass` |
+| `virusVerdict.status` | Not `PASS` |
+| `spamVerdict.status` | Not `PASS` |
+| `dmarcVerdict.status` | Not `PASS` |
+
+The values are `PASS`, `FAIL`, `GRAY` or `PROCESSING_FAILED`. `spfVerdict`, `dkimVerdict` and `dmarcPolicy` are recorded too, but do not decide on their own.
 
 - **Why DMARC is required:** If DMARC passes, the sender's domain has been verified with SPF or DKIM. Email sent from Microsoft 365 or Gmail usually passes.
-- **Trusting the headers:** These headers are read as added by SES at receipt. A sender can also send headers with the same names, so only the ones in the position where SES adds them (the top) are used (when building, check how SES handles existing headers with the same names).
+- **From the SES event:** The verdicts come from the event that the receipt rule passes to `redmine-task`, never from the message's headers (`X-SES-*`, `Authentication-Results`): a sender can add headers with the same names. The task handler passes the verdicts and the recipients to the import as variables (`SES_SPAM_VERDICT`, `SES_VIRUS_VERDICT`, `SES_DMARC_VERDICT`, `SES_DMARC_POLICY`, `SES_SPF_VERDICT`, `SES_DKIM_VERDICT`, `SES_RECIPIENTS`; [tasks.md](tasks.md#kinds-of-events)); a command event cannot pass them.
+- **Re-imports:** The import record keeps the verdicts and the recipients. A re-import (from the administration screen, or `bin/rake` with `MESSAGE_ID` only) uses the record. A message without verdicts is not imported.
 
 ### Senders per project
 
@@ -263,5 +266,4 @@ Redmine sends all notification email from the global sender setting (`Setting.ma
 - Whether the sender name (the display name of `Setting.mail_from`) appears as the From of the email
 - Whether the parent domain's DNS can place an alias-type record and MX on the same name for the subdomain (if not, delegate to Route 53 with an NS record)
 - How to handle recipients (`receipt.recipients`) that include addresses not on Redmine's subdomain
-- How to tell SES receiving headers (`X-SES-*`, `Authentication-Results`) from headers with the same names added by the sender
 - Whether DMARC passes for email sent from Microsoft 365

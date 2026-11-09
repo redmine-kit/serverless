@@ -77,7 +77,7 @@ sequenceDiagram
 | `bin/rake`、デプロイ | `{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}` | rake を実行する |
 | `bin/rails` | `{"command": "runner", "args": ["puts User.count"]}` | `rails runner` を実行する |
 | `bin/rake` | `{"command": "rake", "args": ["redmine_serverless_ses:receive_mail"], "env": {"MESSAGE_ID": "<メッセージ ID>"}}` | S3 のメールを取り込む([mail.md](mail.md#receiving)) |
-| SES の受信のルール | SES のイベント(`Records[0].ses`) | 同上。メッセージ ID はイベントから取る |
+| SES の受信のルール | SES のイベント(`Records[0].ses`) | 同上。イベントから、メッセージ ID(`mail.messageId` → `MESSAGE_ID`)、宛先(`receipt.recipients` → `SES_RECIPIENTS`。カンマ区切り)、判定(`receipt.spamVerdict.status`、`virusVerdict`、`dmarcVerdict`、`spfVerdict`、`dkimVerdict` → `SES_SPAM_VERDICT`、`SES_VIRUS_VERDICT`、`SES_DMARC_VERDICT`、`SES_SPF_VERDICT`、`SES_DKIM_VERDICT`。`receipt.dmarcPolicy` → `SES_DMARC_POLICY`)を取る。形の正しくない値は入れない。コマンドのイベントでは、これらの変数を渡せない([mail.md](mail.md#spoofing-and-spam)) |
 | EventBridge Scheduler | `{"command": "rake", "args": ["redmine:attachments:prune"]}` | 定期のタスク(下記) |
 
 - **`command`:** `rake` と `runner` だけを受け付けます。SES のイベントは、形で見分けます。
@@ -121,7 +121,7 @@ EventBridge Scheduler から、上の形の入力で `redmine-task` を呼びま
 | --- | --- |
 | `redmine:attachments:prune` | 毎日 |
 | `redmine:send_reminders`(期日の通知) | 使うなら、平日の朝 |
-| `redmine_serverless:prune_records` と `redmine_serverless_ses:prune_records`(プラグインの記録を、保持の期間より古いものから消す。失敗したジョブと受け取ったメール。[security.md](security.md#retention-periods)) | 毎日 |
+| `redmine_serverless_sqs:prune_records[<日数>]` と `redmine_serverless_ses:prune_records[<日数>]`(プラグインの記録を、保持の期間 `retention.recordsDays` より古いものから消す。失敗したジョブと受け取ったメール。[security.md](security.md#retention-periods)) | 毎日 |
 
 <a id="stopping-unused-functions"></a>
 

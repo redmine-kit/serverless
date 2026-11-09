@@ -71,7 +71,7 @@ sequenceDiagram
 | `bin/rake`, deployment | `{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}` | Run rake |
 | `bin/rails` | `{"command": "runner", "args": ["puts User.count"]}` | Run `rails runner` |
 | `bin/rake` | `{"command": "rake", "args": ["redmine_serverless_ses:receive_mail"], "env": {"MESSAGE_ID": "<message ID>"}}` | Import email from S3 ([mail.md](mail.md#receiving)) |
-| SES receipt rule | SES event (`Records[0].ses`) | Same as above. The message ID is taken from the event |
+| SES receipt rule | SES event (`Records[0].ses`) | Same as above. From the event: the message ID (`mail.messageId` → `MESSAGE_ID`), the recipients (`receipt.recipients` → `SES_RECIPIENTS`, comma-separated) and the verdicts (`receipt.spamVerdict.status`, `virusVerdict`, `dmarcVerdict`, `spfVerdict`, `dkimVerdict` → `SES_SPAM_VERDICT`, `SES_VIRUS_VERDICT`, `SES_DMARC_VERDICT`, `SES_SPF_VERDICT`, `SES_DKIM_VERDICT`; `receipt.dmarcPolicy` → `SES_DMARC_POLICY`). Values that are not well formed are left out. A command event cannot pass these variables ([mail.md](mail.md#spoofing-and-spam)) |
 | EventBridge Scheduler | `{"command": "rake", "args": ["redmine:attachments:prune"]}` | Scheduled tasks (below) |
 
 - **`command`:** Only `rake` and `runner` are accepted. SES events are identified by their shape.
@@ -107,7 +107,7 @@ EventBridge Scheduler invokes `redmine-task` with input in the form above.
 | --- | --- |
 | `redmine:attachments:prune` | Daily |
 | `redmine:send_reminders` (due date reminders) | If used, weekday mornings |
-| `redmine_serverless:prune_records` and `redmine_serverless_ses:prune_records` (delete the plugins' records older than the retention period: failed jobs and received email; [security.md](security.md#retention-periods)) | Daily |
+| `redmine_serverless_sqs:prune_records[<days>]` and `redmine_serverless_ses:prune_records[<days>]` (delete the plugins' records older than the retention period, `retention.recordsDays`: failed jobs and received email; [security.md](security.md#retention-periods)) | Daily |
 
 ## Stopping unused functions
 

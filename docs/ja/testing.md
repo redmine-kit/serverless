@@ -95,7 +95,7 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | 宛先からプロジェクトを決める | SES のイベントの宛先(Bcc を含む)から、識別子と別名でプロジェクトを決める。受けないプロジェクト、当てはまらない宛先、全体用のアドレスを、設定のとおりに扱う。本文の `Project:` のキーワードでプロジェクトを変えられない |
 | プロジェクトごとの送信元 | `X-Redmine-Project` のあるメールの送信元がプロジェクトのアドレスに、ないメール(パスワードの再設定など)が全体用のアドレスになる。メールを受けないプロジェクトでは `Reply-To` が全体用のアドレスになる |
 | プロジェクトのメールの設定 | 別名の重なりと予約した名前を断る。権限のない人が開けない |
-| `redmine_serverless_ses:receive_mail` | DMARC が通り、迷惑メールとウイルスの検査が `PASS` のメールだけを取り込む。登録のないアドレスのメールを取り込まない。送信者が付けた偽の `X-SES-*` のヘッダーにだまされない。自動応答のメールを取り込まない。成功したら `processed/` に移す |
+| `redmine_serverless_ses:receive_mail` | SES のイベントの DMARC、迷惑メール、ウイルスの判定が `PASS` のメールだけを取り込み、判定を記録する。判定のないメールや、登録のないアドレスのメールを取り込まない。送信者が付けたヘッダー(`X-SES-*`、`Authentication-Results`)では何も変わらない。取り込み直しは、記録した判定と宛先を使う。自動応答のメールを取り込まない。成功したら `processed/` に移す |
 | メールの送信のやり直し | `redmine-worker` でだけ `raise_delivery_errors` が `true` になる。SES のエラーを、SDK の応答の差し替えで 1 つずつ起こし、一時的なものはやり直し、アカウントの問題はデッドレターキューへ、メールの問題は捨てる。どれも、最後に失敗したときに記録が残る |
 
 メールの取り込みのテストには、Redmine のテストのメールの見本(`test/fixtures/mail_handler/`)に、SES が付けるヘッダーを足したものを使います。
@@ -118,7 +118,7 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | --- | --- | --- |
 | Lambda で使えない設定 | `REDMINE_ROLE` があるとき、`enabled_scm` などが決めた値を返し、設定の画面から保存しても変わらない。設定の画面の入力が押せず、説明が出る。`REDMINE_ROLE` がないときは、Redmine の標準のまま | Minitest(ユニット、機能)、システムのテスト |
 | SSM の読み込み(`redmine_serverless_ssm`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。すでにある環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM につながらなければ失敗する。イメージのテストでは、3 つの役割が、データベースのホスト、そのパスワード、`SECRET_KEY_BASE` を SSM だけから読み、`config/database.yml` より前に読めていることを確認する | Minitest、moto(プラグインの `test/loader_test.rb`、`bin/test-image`) |
-| タスクのハンドラー | 決めた `command` と `env` だけを受け付ける。SES のイベントを見分ける。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
+| タスクのハンドラー | 決めた `command` と `env` だけを受け付ける。SES のイベントを見分け、メッセージ ID、宛先、判定を渡す。形の正しくない値は入れず、コマンドのイベントでは SES の変数を渡せない。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
 | 拡張機能のスクリプト | `REDMINE_ROLE` ごとに、本物の Lambda Web Adapter を起動するか、何もしない拡張機能として登録するかが変わる | ShellCheck、イメージのテスト |
 | webhook | `webhook_blocklist` の範囲(プライベート、リンクローカル)の送り先に送らない。送り先のエラーでジョブが失敗し、届け直される | Minitest、moto |
 | メールの送信(`aws-actionmailer-ses`) | Redmine の通知のメールが、SES v2 の `SendEmail` に、全文と宛先(To、Cc、Bcc)で渡る | Minitest、SDK の `stub_responses` |

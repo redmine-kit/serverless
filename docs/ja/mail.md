@@ -238,7 +238,7 @@ SES の受信のルールは、ルールのセットにまとめ、リージョ�
 プラグイン `redmine_serverless_ses` の rake のタスク `redmine_serverless_ses:receive_mail` が、次のことをします。
 
 1. S3 から全文を取ります。
-2. SES が付けたヘッダーを見て、取り込むかを決めます(下の「なりすましと迷惑メール」)。
+2. SES のイベントの判定を見て、取り込むかを決めます(下の「なりすましと迷惑メール」)。
 3. 宛先から、プロジェクトを決めます(下記)。
 4. Redmine の `MailHandler.safe_receive` に、全文とオプションを渡します。Redmine の `rake redmine:email:read` と同じ処理です。
 5. 成功したら、`processed/` に移します。
@@ -265,16 +265,19 @@ SES の受信のルールは、ルールのセットにまとめ、リージョ�
 
 ### なりすましと迷惑メール
 
-Redmine は、メールの差出人(`From`)のアドレスで、どのユーザーからのメールかを決めます。差出人を偽ったメールを取り込むと、そのユーザーとしてチケットが作られます。そこで、SES が付けたヘッダーを見て、次のメールは取り込まずに捨て、ログに残します。
+Redmine は、メールの差出人(`From`)のアドレスで、どのユーザーからのメールかを決めます。差出人を偽ったメールを取り込むと、そのユーザーとしてチケットが作られます。そこで、SES のイベントの判定を見て、次のメールは取り込まずに捨て、判定といっしょに記録します。
 
-| ヘッダー | 捨てる条件 |
+| イベントの判定(`receipt`) | 捨てる条件 |
 | --- | --- |
-| `X-SES-Virus-Verdict` | `PASS` でない |
-| `X-SES-Spam-Verdict` | `PASS` でない |
-| `Authentication-Results` | `dmarc=pass` がない |
+| `virusVerdict.status` | `PASS` でない |
+| `spamVerdict.status` | `PASS` でない |
+| `dmarcVerdict.status` | `PASS` でない |
+
+値は `PASS`、`FAIL`、`GRAY`、`PROCESSING_FAILED` のどれかです。`spfVerdict`、`dkimVerdict`、`dmarcPolicy` も記録しますが、それだけでは決めません。
 
 - **DMARC を求める理由:** DMARC が通っていれば、差出人のドメインが SPF か DKIM で確認されています。Microsoft 365 や Gmail から送ったメールは、ふつうは通ります。
-- **ヘッダーの信用:** これらのヘッダーは、SES が受信のときに付けたものを読みます。送信者が同じ名前のヘッダーを付けて送ってくることもあるので、SES が付けた位置(いちばん上)のものだけを使います(作るときに、SES が既存の同じ名前のヘッダーをどう扱うかを確認する)。
+- **SES のイベントから:** 判定は、受信のルールが `redmine-task` に渡すイベントから取り、メールのヘッダー(`X-SES-*`、`Authentication-Results`)からは取りません。送信者が同じ名前のヘッダーを付けられるからです。タスクのハンドラーは、判定と宛先を、変数(`SES_SPAM_VERDICT`、`SES_VIRUS_VERDICT`、`SES_DMARC_VERDICT`、`SES_DMARC_POLICY`、`SES_SPF_VERDICT`、`SES_DKIM_VERDICT`、`SES_RECIPIENTS`)で取り込みに渡します([tasks.md](tasks.md#kinds-of-events))。コマンドのイベントでは渡せません。
+- **取り込み直し:** 取り込みの記録が、判定と宛先を持ちます。取り込み直し(管理画面から、または `MESSAGE_ID` だけの `bin/rake`)は、記録を使います。判定のないメールは取り込みません。
 
 <a id="senders-per-project"></a>
 
@@ -305,5 +308,4 @@ Redmine は、すべての通知のメールを、全体の設定の送信元(`S
 - 送信元の名前(`Setting.mail_from` の表示名)が、メールの差出人に出るか
 - 親のドメインの DNS で、サブドメインに別名の種類のレコードと MX を同じ名前に置けるか(置けなければ、NS のレコードで Route 53 に委任する)
 - 宛先(`receipt.recipients`)に、Redmine のサブドメインでないアドレスが入ったときの扱い
-- SES の受信のヘッダー(`X-SES-*`、`Authentication-Results`)と、送信者が付けた同じ名前のヘッダーの見分け方
 - Microsoft 365 から送ったメールで、DMARC が通るか

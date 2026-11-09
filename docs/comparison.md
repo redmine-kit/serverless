@@ -24,9 +24,9 @@ Unit prices on this page come from the Tokyo files of the AWS price list (Price 
 | One Lightsail instance | 2 GB instance $11.8 ($0.01612 per hour, including public IPv4) | about $11.8 |
 | ECS Fargate | Fargate $18.0 ($0.04045 per vCPU-hour, $0.00442 per GB-hour of memory), ALB $17.7 ($0.0243 per hour) plus LCUs, two public IPv4 addresses for the ALB $7.3, RDS about $21.0, an outbound route for the tasks (public IPv4 or NAT) | about $69 or more |
 
-- **Not included:** Backups (EBS snapshots, Lightsail snapshots), CloudFront and SES sending charges. They are small for every setup.
-- **Lightsail allowances:** The Lightsail instance price includes allowances for disk and data transfer. Their size will be checked on the Lightsail pricing page.
-- **How to read this:** Lambda is pay-per-use, but the database and the route out of the VPC are fixed costs. This design costs more than putting everything on one server (Lightsail, one EC2 instance). With the NAT instance, it costs less than EC2 and RDS; with the endpoints, about the same or more ([cost.md](cost.md)).
+Lambda is pay-per-use, but the database and the route out of the VPC are fixed costs. So this design costs more than putting everything on one server (Lightsail, one EC2 instance). With the NAT instance it costs less than EC2 and RDS; with the endpoints, about the same or more ([cost.md](cost.md)).
+
+Backups (EBS snapshots, Lightsail snapshots) and the CloudFront and SES sending charges are not included; they are small for every setup. The Lightsail instance price includes allowances for disk and data transfer, whose size will be checked on the Lightsail pricing page.
 
 ## Security
 
@@ -41,8 +41,7 @@ Unit prices on this page come from the Tokyo files of the AWS price list (Price 
 | Secrets | SSM Parameter Store. Not even in Lambda environment variables | The server's configuration file | Same as left | SSM or Secrets Manager from the task definition |
 | Availability | Lambda runs across multiple AZs. RDS is Single-AZ; if it stops, it is restored from a backup ([rds.md](rds.md#settings)) | If the one server stops, everything stops | One Redmine server | Tasks can be placed in multiple AZs |
 
-- **Entry point:** The function URL uses IAM authentication and accepts only requests signed by CloudFront OAC. Direct requests are rejected before the function is invoked ([lambda.md](lambda.md#cloudfront-and-function-urls)).
-- **Image updates:** AWS does not update Lambda container images automatically. Each time the base image, Redmine or a gem is updated, the image is rebuilt and deployed.
+The function URL uses IAM authentication and accepts only requests signed by CloudFront OAC, so direct requests are rejected before the function is invoked ([lambda.md](lambda.md#cloudfront-and-function-urls)). AWS does not update Lambda container images automatically: each time the base image, Redmine or a gem is updated, the image is rebuilt and deployed.
 
 ## Operations
 

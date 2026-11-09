@@ -38,9 +38,9 @@ flowchart LR
 | OAuth 2 | Redmine 7.0 can act as an OAuth 2 provider with the doorkeeper gem (`Gemfile`, `config/initializers/doorkeeper.rb`, the `oauth2_applications` pages) | When an MCP server or similar operates Redmine with a user's permissions |
 | Large attachments | Make uploads through CloudFront (`/s3_uploads/presign`, `/s3_uploads/complete`) available with API keys and OAuth too | When the AI side attaches files such as summaries. `POST /uploads.json` in the REST API is limited to 1 MB ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#uploads-through-lambda)) |
 
-- **Bot user:** When AI processing writes, it uses a dedicated Redmine user. What the AI writes stays as notes and updates by this user. Its permissions are limited by role to the projects and actions it needs (reading, adding notes, etc.). It is not an administrator. The API key is managed as a secret on the AI side, in the AI project.
-- **The user's permissions:** When an AI agent operates Redmine on behalf of a user, OAuth allows only what that user's permissions allow.
-- **API entry point:** The API, like the pages, comes in through CloudFront. The per-IP rate limit in WAF applies to the API too ([lambda.md](lambda.md#flat-rate-free-plan-and-waf)).
+When AI processing writes, it uses a dedicated Redmine user, so what the AI writes stays as notes and updates by this user. The user is not an administrator; its role limits it to the projects and actions it needs (reading, adding notes and so on). Its API key is managed as a secret on the AI side, in the AI project. When an AI agent operates Redmine on behalf of a person, OAuth allows only what that person's permissions allow.
+
+The API, like the pages, comes in through CloudFront, so the per-IP rate limit in WAF applies to the API too ([lambda.md](lambda.md#flat-rate-free-plan-and-waf)).
 
 ### Event notifications (Redmine's standard webhooks)
 
@@ -55,10 +55,11 @@ Events in Redmine are sent to the AI side with Redmine 7.0's standard webhooks. 
 | Delivery | Sent by a job (`WebhookJob`). In this design, `redmine-worker` sends it |
 | Destination restrictions | `webhook_blocklist` in `configuration.yml` defines destinations that must not be used |
 
-- **Create them as the bot user:** Webhooks for AI are created by the bot user ("REST API and authorization" above). The payload is limited to what the bot user can see.
-- **Route out:** Webhooks are sent from `redmine-worker` to a URL on the AI side. `redmine-worker` is outside a VPC and can reach the internet directly, so it can send them as is. With the RDS setup, only the NAT instance setup can send them. The VPC endpoint setup cannot, so the AI side polls for updates through the REST API instead ([rds.md](rds.md#routes-out-of-the-vpc)).
-- **Destinations that must not be used:** Put private, loopback and link-local addresses in `webhook_blocklist`. The values are in the table in [lambda.md](lambda.md#rails-and-redmine-settings). This prevents webhooks from being used to send requests to internal addresses. The NAT instance in the RDS setup uses the same values.
-- **Receiving endpoint on the AI side:** The AI project provides an endpoint (such as a Lambda function URL) that verifies the signature and receives webhooks.
+Webhooks for AI are created by the bot user ("REST API and authorization" above), so their payload is limited to what the bot user can see. The AI project provides an endpoint, such as a Lambda function URL, that verifies the signature and receives them.
+
+Webhooks are sent from `redmine-worker` to a URL on the AI side. `redmine-worker` is outside a VPC and can reach the internet directly, so it can send them as is. With the RDS setup, only the NAT instance setup can send them; with the VPC endpoint setup, the AI side polls for updates through the REST API instead ([rds.md](rds.md#routes-out-of-the-vpc)).
+
+Private, loopback and link-local addresses go in `webhook_blocklist` (the values are in the table in [lambda.md](lambda.md#rails-and-redmine-settings)), so that webhooks cannot be used to send requests to internal addresses. The NAT instance in the RDS setup uses the same values.
 
 ## What the other side takes care of
 

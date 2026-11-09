@@ -16,10 +16,9 @@ Checked in the code of Redmine 7.0.3 on 2026-11-09.
 
 ## On Lambda
 
-- **Every environment reads every cookie:** All environments read `SECRET_KEY_BASE` from SSM Parameter Store at start-up ([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store)), so each one can read the cookie that another one wrote.
-- **Every environment checks the same tokens:** The tokens are in RDS, which all environments use.
-- **Writes:** With "Session inactivity timeout" set, checking the token updates its time at most once a minute per session, which is one small write to the database.
-- **Changing `SECRET_KEY_BASE`:** Every session cookie becomes unreadable, and everyone signs in again (also listed as a step after an incident in [security.md](security.md)).
+Any environment can continue a session that another one started. All environments read `SECRET_KEY_BASE` from SSM Parameter Store at start-up ([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store)), so each one can read the cookie another one wrote, and they all check the same tokens in RDS.
+
+With "Session inactivity timeout" set, checking the token updates its time at most once a minute per session, which is one small write to the database. Changing `SECRET_KEY_BASE` makes every session cookie unreadable, so everyone signs in again; this is also a step after an incident in [security.md](security.md).
 
 ## What can be set
 
@@ -43,9 +42,9 @@ config.session_store :cookie_store, key: '_redmine_session', path: config.relati
                                     same_site: :lax, secure: true
 ```
 
-- **Why:** CloudFront redirects HTTP to HTTPS and sends `Strict-Transport-Security` ([security.md](security.md)), so after the first visit the browser does not send the cookie over plain HTTP anyway. `Secure` is the usual protection for the first visit and for anything outside that path.
-- **Why not `config.force_ssl`:** With `hsts: false` in `ssl_options`, Rails sends `Strict-Transport-Security: max-age=0`, which would undo the header CloudFront adds.
-- **Locally:** Rails writes a `Secure` cookie only on HTTPS requests (behind CloudFront and the function URL, requests arrive as HTTPS), and a browser does not send one over plain HTTP, so signing in to the image over `http://` does not work. The image tests send `X-Forwarded-Proto: https`.
+CloudFront redirects HTTP to HTTPS and sends `Strict-Transport-Security` ([security.md](security.md)), so after the first visit the browser does not send the cookie over plain HTTP anyway. `Secure` is the usual protection for the first visit and for anything outside that path. `config.force_ssl` is not used: with `hsts: false` in `ssl_options`, Rails would send `Strict-Transport-Security: max-age=0`, undoing the header CloudFront adds.
+
+Locally, this means signing in to the image over `http://` does not work: Rails writes a `Secure` cookie only on HTTPS requests (behind CloudFront and the function URL, requests arrive as HTTPS), and a browser does not send one over plain HTTP. The image tests send `X-Forwarded-Proto: https`.
 
 ## To verify
 

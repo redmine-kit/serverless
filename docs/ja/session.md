@@ -20,10 +20,9 @@ Redmine は、セッションを暗号化した Cookie に入れ、データベ�
 
 ## Lambda では
 
-- **どの環境もどの Cookie も読める:** どの環境も、起動のときに `SECRET_KEY_BASE` を SSM Parameter Store から読むので([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store))、ほかの環境が書いた Cookie を読めます。
-- **どの環境も同じトークンを確認する:** トークンは、すべての環境が使う RDS にあります。
-- **書き込み:** 「無操作タイムアウト」を設定すると、トークンの確認のときに、1 つのセッションにつき最大で 1 分に 1 回、トークンの時刻を更新します。データベースへの小さな書き込みが 1 回です。
-- **`SECRET_KEY_BASE` を変えると:** すべてのセッションの Cookie が読めなくなり、全員がログインし直します(事故のあとの手順として [security.md](security.md) にもあります)。
+どの環境でも、ほかの環境で始まったセッションを続けられます。どの環境も、起動のときに `SECRET_KEY_BASE` を SSM Parameter Store から読むので([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store))、ほかの環境が書いた Cookie を読め、トークンもすべての環境が使う RDS で確認します。
+
+「無操作タイムアウト」を設定すると、トークンの確認のときに、1 つのセッションにつき最大で 1 分に 1 回トークンの時刻を更新します。データベースへの小さな書き込みが 1 回です。`SECRET_KEY_BASE` を変えると、すべてのセッションの Cookie が読めなくなり、全員がログインし直します。これは事故のあとの手順として [security.md](security.md) にもあります。
 
 <a id="what-can-be-set"></a>
 
@@ -51,9 +50,9 @@ config.session_store :cookie_store, key: '_redmine_session', path: config.relati
                                     same_site: :lax, secure: true
 ```
 
-- **理由:** CloudFront は HTTP を HTTPS に送り直し、`Strict-Transport-Security` を付けるので([security.md](security.md))、初めて訪れたあとは、ブラウザーが暗号化なしの HTTP で Cookie を送ることはありません。`Secure` は、初めての訪問と、その経路の外に向けた、ふつうの守りです。
-- **`config.force_ssl` にしない理由:** `ssl_options` で `hsts: false` にすると、Rails は `Strict-Transport-Security: max-age=0` を送り、CloudFront が付けるヘッダーを打ち消してしまいます。
-- **手元では:** Rails は、`Secure` の Cookie を HTTPS の要求にだけ書き込み(CloudFront と関数 URL の後ろでは、要求は HTTPS として届きます)、ブラウザーも暗号化なしの HTTP では送らないので、`http://` でイメージにログインすることはできません。イメージのテストは `X-Forwarded-Proto: https` を付けて確認します。
+CloudFront は HTTP を HTTPS に送り直し、`Strict-Transport-Security` を付けるので([security.md](security.md))、初めて訪れたあとは、ブラウザーが暗号化なしの HTTP で Cookie を送ることはありません。`Secure` は、初めての訪問と、その経路の外に向けた、ふつうの守りです。`config.force_ssl` は使いません。`ssl_options` で `hsts: false` にすると、Rails は `Strict-Transport-Security: max-age=0` を送り、CloudFront が付けるヘッダーを打ち消してしまうためです。
+
+そのため手元では、`http://` でイメージにログインできません。Rails は `Secure` の Cookie を HTTPS の要求にだけ書き込み(CloudFront と関数 URL の後ろでは、要求は HTTPS として届きます)、ブラウザーも暗号化なしの HTTP では送らないためです。イメージのテストは `X-Forwarded-Proto: https` を付けて確認します。
 
 <a id="to-verify"></a>
 

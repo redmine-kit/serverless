@@ -25,9 +25,9 @@ Redmine 7.0.3 がキャッシュを使うのは、次の数か所だけです(20
 | `config.redmine_search_cache_store` | Redmine の既定の `:memory_store`(32 MB) |
 | 費用 | なし |
 
-- **Rails の既定を使わない理由:** Rails 8.1 の既定は `tmp/cache/` のファイルです。Lambda では `/tmp` に置くことになり、際限なく増えます([lambda.md](lambda.md#read-only-file-system))。
-- **失うもの:** キャッシュは環境ごとで、新しい環境は空から始まります。別の環境が出すページでは整形済みのテキストを作り直し、検索の結果のページを別の環境で送ると、検索をやり直します。結果は同じで、かかる時間だけが違います。
-- **これで足りる理由:** 少人数のチームでは、キャッシュで省ける手間は少しです。整形済みのテキストは、設定が有効で長いテキストのときだけキャッシュし、検索のやり直しは、次のページが別の環境に届いたときだけです。
+Rails 8.1 の既定は `tmp/cache/` のファイルですが、Lambda では `/tmp` に置くことになり、際限なく増えます([lambda.md](lambda.md#read-only-file-system))。
+
+メモリに置くと、キャッシュは環境ごとになり、新しい環境は空から始まります。別の環境が出すページでは整形済みのテキストを作り直し、検索の結果のページを別の環境で送ると検索をやり直します。結果は同じで、かかる時間だけが違います。少人数のチームなら、この差は小さく済みます。整形済みのテキストは、設定が有効で長いテキストのときだけキャッシュし、検索のやり直しは、次のページが別の環境に届いたときだけだからです。
 
 <a id="what-can-be-tuned"></a>
 
@@ -42,7 +42,7 @@ Redmine 7.0.3 がキャッシュを使うのは、次の数か所だけです(20
 | 環境の寿命 | Provisioned Concurrency か、温めるための呼び出し([deploy-config.md](deploy-config.md#fields-of-redminejson) の `lambda.warmup`) | キャッシュは環境と同じだけ残る。温めておく環境はキャッシュを保ち、Lambda が要求の集中のために始めた環境は、空から始まる。Provisioned Concurrency は 2 GB の環境 1 つで月に約 23 ドル([cost.md](cost.md#what-adds-cost)) |
 | 共有のキャッシュ | `config.cache_store` と `config.redmine_search_cache_store` を ElastiCache に向ける(下記) | どの環境も同じ項目を使い、新しい環境も最初からそれを使える |
 
-- **先に測る:** キャッシュの項目がどれだけ見つかるかは、まだ測っていません。Rails は、キャッシュの読み取りを ActiveSupport の通知(`cache_read.active_support`)に出すので、試すあいだはそれをログに出せます。
+キャッシュの項目がどれだけ見つかるかは、まだ測っていません。Rails はキャッシュの読み取りを ActiveSupport の通知(`cache_read.active_support`)に出すので、試すあいだはそれをログに出せます。
 
 <a id="when-a-shared-cache-is-worth-it"></a>
 
@@ -56,10 +56,11 @@ Redmine 7.0.3 がキャッシュを使うのは、次の数か所だけです(20
 | ElastiCache Serverless for Valkey | マネージドで、大きさは自動。置いたデータの量(1 つのキャッシュで最低 100 MB)と、ElastiCache Processing Unit(ECPU。単純な読み書きは 1 KB ごとに 1 ECPU)で課金 | データ: 0.1 GB × 1 GB 時間あたり 0.101 ドル = 7.37 ドル。ECPU: 100 万あたり 0.0027 ドルで、たとえば 1,000 万なら 0.03 ドル。合わせて約 7.4 ドル |
 | ElastiCache for Valkey の `cache.t4g.micro` のノード 1 台 | レプリカなしのノード(0.5 GiB) | 1 時間 0.02 ドル = 14.60 ドル |
 
-- **価格:** 東京(ap-northeast-1)の ElastiCache の AWS の価格表(2026-10-28 公開)と、ElastiCache の料金のページの Valkey の最低 100 MB です(2026-11-09 に確認)。同じノードでも Valkey は Redis OSS より安く(`cache.t4g.micro` は Redis OSS で 1 時間 0.025 ドル)、Serverless の最低の量も小さくなります(Redis OSS と Memcached は 1 GB)。
-- **ネットワーク:** 関数はもう VPC の中にあるので、VPC のエンドポイントも NAT インスタンスも使わずに、プライベートのサブネットの ElastiCache に直接つなげます。セキュリティグループで、関数のセキュリティグループからを許します。
-- **Rails では:** キャッシュのエンドポイントを指定して `config.cache_store = :redis_cache_store` にし(Valkey は Redis のプロトコルで話します。ElastiCache Serverless は TLS が必須です)、`config.redmine_search_cache_store` も同じにします。イメージに `redis` の gem を足します。
-- **今は選ばない理由:** 少人数のチームでは、月に約 7.4 ドル以上は、基本の費用([cost.md](cost.md))の大きな割合になります。それに対して、キャッシュで省ける手間は少しです。Redmine を変えずに、あとから足せます。
+価格は、東京(ap-northeast-1)の ElastiCache の AWS の価格表(2026-10-28 公開)と、ElastiCache の料金のページにある Valkey の最低 100 MB によります(2026-11-09 に確認)。同じノードでも Valkey は Redis OSS より安く(`cache.t4g.micro` は Redis OSS で 1 時間 0.025 ドル)、Serverless の最低の量も小さくなります(Redis OSS と Memcached は 1 GB)。
+
+関数はもう VPC の中にあるので、VPC エンドポイントも NAT インスタンスも使わずに、プライベートサブネットの ElastiCache に直接接続できます。セキュリティグループでは、関数のセキュリティグループからの接続を許します。Rails では、キャッシュのエンドポイントを指定して `config.cache_store = :redis_cache_store` にし(Valkey は Redis のプロトコルで話します。ElastiCache Serverless は TLS が必須です)、`config.redmine_search_cache_store` も同じにして、イメージに `redis` の gem を足します。
+
+今は選びません。少人数のチームでは、月に約 7.4 ドル以上は基本の費用([cost.md](cost.md))の大きな割合になるのに、キャッシュで省ける手間は少しです。Redmine を変えずに、あとから足せます。
 
 <a id="to-verify"></a>
 

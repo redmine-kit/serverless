@@ -44,9 +44,9 @@ flowchart LR
 | OAuth 2 | Redmine 7.0 は、doorkeeper の gem で OAuth 2 のプロバイダーになれる(`Gemfile`、`config/initializers/doorkeeper.rb`、`oauth2_applications` の画面) | MCP のサーバーなど、使う人の権限で Redmine を操作するとき |
 | 大きな添付ファイル | CloudFront を通したアップロード(`/s3_uploads/presign`、`/s3_uploads/complete`)を、API キーと OAuth でも使えるようにする | AI の側が、要約などのファイルを添付するとき。REST API の `POST /uploads.json` は 1 MB まで([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#uploads-through-lambda)) |
 
-- **ボットのユーザー:** AI の処理が書き込むときは、専用の Redmine のユーザーを使います。AI が書いたものは、このユーザーの注記や更新として残ります。権限はロールで、使うプロジェクトと操作(読む、注記を足すなど)に絞ります。管理者にはしません。API キーは、AI の側の秘密の値として、AI のプロジェクトで管理します。
-- **使う人の権限:** AI のエージェントが、使う人の代わりに Redmine を操作するときは、OAuth で、その人の権限の範囲だけを許します。
-- **API の入口:** API も、画面と同じく CloudFront から入ります。WAF の IP ごとのレート制限が、API にも効きます([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。
+AI の処理が書き込むときは、専用の Redmine のユーザーを使うので、AI が書いたものはこのユーザーの注記や更新として残ります。このユーザーは管理者にはせず、ロールで、使うプロジェクトと操作(読む、注記を足すなど)に絞ります。API キーは、AI の側の秘密の値として、AI のプロジェクトで管理します。AI のエージェントが利用者の代わりに Redmine を操作するときは、OAuth で、その人の権限の範囲だけを許します。
+
+API も画面と同じく CloudFront から入るので、WAF の IP ごとのレート制限が API にも効きます([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。
 
 <a id="event-notifications-redmines-standard-webhooks"></a>
 
@@ -63,10 +63,11 @@ Redmine で起きた出来事は、Redmine 7.0 の標準の webhook で、AI の
 | 送り方 | ジョブ(`WebhookJob`)で送る。この設計では、`redmine-worker` が送る |
 | 送り先の制限 | `configuration.yml` の `webhook_blocklist` で、送ってはいけない宛先を決める |
 
-- **ボットのユーザーで作る:** AI のための webhook は、ボットのユーザー(上の「REST API と認可」)で作ります。送る中身は、ボットのユーザーに見える範囲に限られます。
-- **外に出る経路:** webhook は、`redmine-worker` から、AI の側の URL に送ります。`redmine-worker` は VPC の外にあり、インターネットに直接出られるので、そのまま送れます。RDS の形では、NAT インスタンスの形だけが送れます。VPC のエンドポイントの形では送れないので、AI の側が REST API で、更新を定期的に読みに来る形にします([rds.md](rds.md#routes-out-of-the-vpc))。
-- **送ってはいけない宛先:** `webhook_blocklist` に、プライベート、ループバック、リンクローカルのアドレスを入れます。値は [lambda.md](lambda.md#rails-and-redmine-settings) の表にあります。webhook で、内向きのアドレスに要求を送らせないためです。RDS の形の NAT インスタンスでも同じ値にします。
-- **AI の側の受信のエンドポイント:** AI のプロジェクトが、署名を確認して webhook を受けるエンドポイント(Lambda の関数 URL など)を用意します。
+AI のための webhook はボットのユーザー(上の「REST API と認可」)で作るので、送る中身はボットのユーザーに見える範囲に限られます。AI のプロジェクトは、署名を確認して webhook を受けるエンドポイント(Lambda の関数 URL など)を用意します。
+
+webhook は、`redmine-worker` から AI の側の URL に送ります。`redmine-worker` は VPC の外にあり、インターネットに直接出られるので、そのまま送れます。RDS の形では、NAT インスタンスの形だけが送れます。VPC エンドポイントの形では送れないので、AI の側が REST API で更新を定期的に読みに来る形にします([rds.md](rds.md#routes-out-of-the-vpc))。
+
+`webhook_blocklist` には、プライベート、ループバック、リンクローカルのアドレスを入れます(値は [lambda.md](lambda.md#rails-and-redmine-settings) の表にあります)。webhook で内向きのアドレスに要求を送らせないためです。RDS の形の NAT インスタンスでも同じ値にします。
 
 <a id="what-the-other-side-takes-care-of"></a>
 

@@ -21,9 +21,9 @@ Redmine 7.0.3 uses the cache in only a few places (checked in the code on 2026-1
 | `config.redmine_search_cache_store` | Redmine's default, `:memory_store` (32 MB) |
 | Cost | None |
 
-- **Why not the Rails default:** The Rails 8.1 default is files in `tmp/cache/`, which is in `/tmp` on Lambda and would grow without limit ([lambda.md](lambda.md#read-only-file-system)).
-- **What is lost:** Each environment has its own cache, and a new environment starts empty. A page that is served by another environment computes the formatted text again, and paging through search results in another environment runs the search again. The results are the same; only the time differs.
-- **Why it is enough:** For a small team the cache saves little. Formatted text is cached only when the setting is on and the text is long, and searches are run again only when the next page goes to another environment.
+The Rails 8.1 default would be files in `tmp/cache/`, which is in `/tmp` on Lambda and would grow without limit ([lambda.md](lambda.md#read-only-file-system)).
+
+With memory, each environment has its own cache, and a new environment starts empty. A page served by another environment computes the formatted text again, and paging through search results in another environment runs the search again. The results are the same; only the time differs. For a small team this costs little: formatted text is cached only when the setting is on and the text is long, and a search is run again only when the next page goes to another environment.
 
 ## What can be tuned
 
@@ -36,7 +36,7 @@ Redmine 7.0.3 uses the cache in only a few places (checked in the code on 2026-1
 | How long environments live | Provisioned Concurrency, or the warm-up invocations (`lambda.warmup` in [deploy-config.md](deploy-config.md#fields-of-redminejson)) | The cache lives as long as its environment. Environments that are kept warm keep their cache; an environment that Lambda starts for a burst of requests starts empty. Provisioned Concurrency costs about USD 23 a month per 2 GB environment ([cost.md](cost.md#what-adds-cost)) |
 | A shared cache | `config.cache_store` and `config.redmine_search_cache_store` pointing at ElastiCache (below) | Every environment uses the same entries, and new environments start with them |
 
-- **Measuring first:** How often an entry is found has not been measured. Rails reports cache reads (`cache_read.active_support`) to ActiveSupport notifications, which can be logged while trying it out.
+How often an entry is found has not been measured yet. Rails reports cache reads (`cache_read.active_support`) to ActiveSupport notifications, which can be logged while trying it out.
 
 ## When a shared cache is worth it
 
@@ -48,10 +48,11 @@ A shared cache keeps the formatted text and the search results for all environme
 | ElastiCache Serverless for Valkey | Managed, sized automatically. Billed for the data stored (at least 100 MB per cache) and for ElastiCache Processing Units (ECPUs; a simple read or write is 1 ECPU per KB) | Data: 0.1 GB × USD 0.101 per GB-hour = USD 7.37. ECPUs: USD 0.0027 per million, for example USD 0.03 for 10 million. About USD 7.4 |
 | ElastiCache for Valkey, one `cache.t4g.micro` node | A node (0.5 GiB) without a replica | USD 0.02 per hour = USD 14.60 |
 
-- **Prices:** From the AWS price list for ElastiCache in ap-northeast-1 (published 2026-10-28) and the 100 MB minimum for Valkey on the ElastiCache pricing page (checked on 2026-11-09). Valkey costs less than Redis OSS for the same node (`cache.t4g.micro` is USD 0.025 per hour for Redis OSS) and has a lower minimum on Serverless (1 GB for Redis OSS and Memcached).
-- **Network:** The functions are in the VPC already, so they reach ElastiCache directly in the private subnets, without a VPC endpoint or a NAT instance. A security group allows the functions' security group.
-- **In Rails:** `config.cache_store = :redis_cache_store` with the cache's endpoint (Valkey speaks the Redis protocol; ElastiCache Serverless requires TLS), and the same for `config.redmine_search_cache_store`. The `redis` gem is added to the image.
-- **Not chosen now:** For a small team, about USD 7.4 or more per month is a large share of the base cost ([cost.md](cost.md)), for a cache that saves little. It can be added later without changing Redmine.
+The prices come from the AWS price list for ElastiCache in ap-northeast-1 (published 2026-10-28) and the 100 MB minimum for Valkey on the ElastiCache pricing page (checked on 2026-11-09). Valkey costs less than Redis OSS for the same node (`cache.t4g.micro` is USD 0.025 per hour for Redis OSS) and has a lower minimum on Serverless (1 GB for Redis OSS and Memcached).
+
+The functions are in the VPC already, so they reach ElastiCache directly in the private subnets, without a VPC endpoint or a NAT instance; a security group allows the functions' security group. In Rails, set `config.cache_store = :redis_cache_store` with the cache's endpoint (Valkey speaks the Redis protocol; ElastiCache Serverless requires TLS), set `config.redmine_search_cache_store` the same way, and add the `redis` gem to the image.
+
+It is not chosen now. For a small team, about USD 7.4 or more per month is a large share of the base cost ([cost.md](cost.md)), for a cache that saves little, and it can be added later without changing Redmine.
 
 ## To verify
 

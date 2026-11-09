@@ -28,9 +28,9 @@
 | Lightsail 1 台 | 2 GB のインスタンス 11.8 ドル(1 時間 0.01612 ドル。パブリック IPv4 を含む) | 約 11.8 ドル |
 | ECS Fargate | Fargate 18.0 ドル(vCPU 1 時間 0.04045 ドル、メモリ 1 GB 1 時間 0.00442 ドル)、ALB 17.7 ドル(1 時間 0.0243 ドル)と LCU、ALB のパブリック IPv4 2 つで 7.3 ドル、RDS 約 21.0 ドル、タスクの外への経路(パブリック IPv4 か NAT) | 約 69 ドル以上 |
 
-- **含めていないもの:** バックアップ(EBS のスナップショット、Lightsail のスナップショット)、CloudFront、SES の送信の料金。どの形でも少額です。
-- **Lightsail の枠:** Lightsail のインスタンスの料金には、ディスクとデータの転送の枠が含まれます。枠の大きさは、Lightsail の料金のページで確認します。
-- **読み方:** Lambda は使った分だけですが、データベースと VPC の外への道は決まった費用です。この設計は、1 台のサーバーに全部を載せる形(Lightsail、EC2 1 台)より高くなります。NAT インスタンスなら EC2 と RDS より安く、エンドポイントなら同じくらいか高くなります([cost.md](cost.md))。
+Lambda は使った分だけですが、データベースと VPC の外への経路は決まった費用です。そのため、この設計は、1 台のサーバーに全部を載せる形(Lightsail、EC2 1 台)より高くなります。NAT インスタンスなら EC2 と RDS より安く、エンドポイントなら同じくらいか高くなります([cost.md](cost.md))。
+
+バックアップ(EBS のスナップショット、Lightsail のスナップショット)と、CloudFront と SES の送信の料金は含めていません。どの形でも少額です。Lightsail のインスタンスの料金にはディスクとデータの転送の枠が含まれ、その大きさは Lightsail の料金のページで確認します。
 
 <a id="security"></a>
 
@@ -47,8 +47,7 @@
 | 秘密の値 | SSM Parameter Store。Lambda の環境変数にも置かない | サーバーの設定ファイル | 同左 | タスクの定義から SSM か Secrets Manager |
 | 止まりにくさ | Lambda は複数の AZ で動く。RDS は Single-AZ で、止まったらバックアップから戻す([rds.md](rds.md#settings)) | サーバー 1 台が止まると、すべて止まる | Redmine のサーバーが 1 台 | タスクを複数の AZ に置ける |
 
-- **入口:** 関数 URL は IAM の認証にし、CloudFront の OAC が署名した要求だけを受けます。直接の要求は、関数が呼ばれる前に断られます([lambda.md](lambda.md#cloudfront-and-function-urls))。
-- **イメージの更新:** Lambda のコンテナイメージは、AWS が自動では更新しません。土台のイメージ、Redmine、gem の更新のたびに、イメージを作り直してデプロイします。
+関数 URL は IAM の認証にし、CloudFront の OAC が署名した要求だけを受けるので、直接の要求は関数が呼ばれる前に断られます([lambda.md](lambda.md#cloudfront-and-function-urls))。Lambda のコンテナイメージは、AWS が自動では更新しません。土台のイメージ、Redmine、gem の更新のたびに、イメージを作り直してデプロイします。
 
 <a id="operations"></a>
 

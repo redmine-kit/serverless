@@ -70,44 +70,11 @@ production:
 
 ### 送信に失敗したとき
 
-SES の API が失敗したメールは、自動でやり直し、それでも送れなかったものは記録して、管理画面から送り直せるようにします。
+SES の API の呼び出しに失敗したメールは、自動でやり直し、それでも送れないメールは記録して、管理画面から送り直せます。プラグイン `redmine_serverless_ses` が、`redmine-worker` でだけ配送のエラーを出し、SES のエラーを種類ごとに扱います。詳しいことと送り直しの手順は、プラグインの [sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html) にあります。Serverless では、次のとおりです。
 
-<a id="raising-errors"></a>
-
-#### エラーを例外にする
-
-Redmine の本番の設定(`production.rb`)は `raise_delivery_errors = false` で、SES の API のエラーは、メールの送信の中で握りつぶされます。Rails のメールのジョブ(`ActionMailer::MailDeliveryJob`。Redmine は `Mailer::DeliveryJob` で継いでいる)は、例外が出ればジョブを失敗させますが、握りつぶされると成功になり、SQS のやり直しが効きません。
-
-そこで、プラグイン `redmine_serverless_ses` が、`redmine-worker`(`REDMINE_ROLE=worker`)でだけ `raise_delivery_errors` を `true` にします。プラグインは `production.rb` のあとで読み込まれるので、上書きできます。`redmine-task` の rake のタスク(期日の通知など)は、1 通の失敗でタスク全体が止まらないよう、`false` のままにします。
-
-<a id="handling-by-kind-of-error"></a>
-
-#### エラーの種類ごとの扱い
-
-SES v2 の `SendEmail` のエラー(API リファレンスの一覧)を、3 つに分けます。
-
-| エラー | 意味 | 扱い |
-| --- | --- | --- |
-| `TooManyRequestsException`(429)、SES の 5xx、ネットワークのエラー | 一時的なもの | ジョブの中でやり直す(下記) |
-| `SendingPausedException`、`AccountSuspendedException`、`MailFromDomainNotVerifiedException`、`NotFoundException`、`LimitExceededException` | アカウントや設定の問題。直すまで、何度送っても失敗する | やり直さずに失敗として記録し、デッドレターキューに送る |
-| `MessageRejected`、`BadRequestException` | そのメールの中身や宛先の問題 | やり直さずに失敗として記録し、ジョブを捨てる |
-
-- **ジョブの中でのやり直し:** Redmine の `Mailer::DeliveryJob` に、ActiveJob の `retry_on` を足します。待ち時間は `:polynomially_longer` で、5 回までです。待ち時間は 3 秒、18 秒、83 秒、258 秒、627 秒ほどで、SQS で時間を置ける上限(15 分)に収まります。
-- **SDK のやり直し:** AWS の SDK も、429 や 5xx では、ジョブより前に自分でやり直します(既定のやり直しの設定)。
-- **使い切ったとき:** `retry_on` を使い切ると、例外がそのまま上がり、SQS がメッセージを届け直します。3 回届け直しても失敗したら、デッドレターキューに移ります。
-- **記録:** 最後に失敗したときに、プラグインのテーブル(`serverless_job_failures`)に、ジョブの中身とエラーを残します([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/admin.html#jobs))。
-- **2 通届くことがある:** SES がメールを受け付けたあとで応答が途切れると、やり直しで同じメールを 2 回送ることがあります。この規模では受け入れます。
-
-<a id="sending-again"></a>
-
-#### 送り直し
-
-1. **知る:** デッドレターキューの件数と、失敗の記録の件数が 1 以上になったら、CloudWatch のアラームで通知します。
-2. **原因を直す:** 管理画面の「メールの送信」で、SES のアカウントの状態、送信元のドメイン、サプレッションリストを確認して直します([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email))。
-3. **送り直す:** 管理画面の「ジョブ」で、失敗したメールを選んで送り直します。デッドレターキューに残っているものは、元のキューに戻します。
-
-- **CloudWatch Logs:** 送信のエラーは、ログにも残ります。メトリクスフィルターで数え、アラームの材料にします。
-- **SES が受け付けたあとの失敗:** SES が受け付けたあとで、相手のメールサーバーに断られたもの(バウンス)は、API のエラーにはなりません。SES は、そのアドレスをサプレッションリストに入れ、以後の送信を止めます。管理画面の「メールの送信」で、サプレッションリストを確認できます。
+- **キューでのやり直し:** アカウントのエラーと、ジョブの中のやり直しを使い切った一時的なエラーは、例外になります。SQS がメッセージを配り直し、3 回受け取ったあとにデッドレターキューに移し([lambda.md](lambda.md#background-jobs))、`redmine_serverless_sqs` が記録します。
+- **通知を受ける:** デッドレターキューか失敗の記録が 1 件以上になると、CloudWatch のアラームが通知します。送信のエラーはログにも出し、メトリクスフィルターで数えます。
+- **送り直す:** 管理画面の「メールの送信」(SES)と「ジョブ」(SQS)です。
 
 <a id="cost"></a>
 
@@ -168,48 +135,7 @@ DNS の置き方は、親のドメイン(`example.com`)の DNS のサービス�
 
 ### プロジェクトごとのアドレス
 
-| アドレス | 使い道 |
-| --- | --- |
-| `<プロジェクトの識別子>@redmine.example.com` | そのプロジェクトのアドレス。届いたメールはそのプロジェクトのチケットになり、そのプロジェクトの通知はこのアドレスから送る |
-| プロジェクトの別名(たとえば `support@redmine.example.com`) | 識別子とは別の、覚えやすいアドレス。プロジェクトの設定で足す |
-| `redmine@redmine.example.com`(全体用) | プロジェクトに属さないメール(パスワードの再設定、アカウント、期日の通知など)の送信元。下の「全体用のアドレス」 |
-
-- **識別子とアドレス:** Redmine のプロジェクトの識別子は、英小文字、数字、`-`、`_` で作るので、そのままアドレスの `@` の前に使えます。アドレスの `@` の前は 64 文字までなので、それより長い識別子のプロジェクトは、別名を付けます。
-- **受けるかどうか:** プロジェクトごとに、メールを受けるかを選べます(既定は受けない)。受けないプロジェクトのアドレスに届いたメールは、取り込まずに捨て、記録に残します。
-- **別名の重なり:** 別名は、ほかのプロジェクトの識別子とも、ほかの別名とも重ならないようにします。`redmine`、`postmaster`、`abuse` などは予約します。
-- **プロジェクトの設定:** プロジェクトの設定に「メール」のタブを足し、受けるか、別名、既定の値(トラッカー、カテゴリー、優先度、担当者、プライベートにするか)を設定します。設定できるのは、Redmine の管理者と、プラグインが足す権限(「メールの設定の管理」)を持つ人です([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#project-email-settings))。
-- **記録:** プロジェクトごとの設定は、プラグインのテーブル(`serverless_project_mail_settings`)に入れます。
-
-<a id="without-addresses-per-project"></a>
-
-### プロジェクトごとのアドレスを使わないとき
-
-設定のファイルの `mail.perProjectAddresses` が `false`(既定)か、プラグインの設定で無効のときは、Redmine の標準と同じ形で受けます。
-
-- **受けるアドレス:** 全体用のアドレス(たとえば `redmine@redmine.example.com`)だけです。
-- **プロジェクトの選び方:** Redmine の標準のサブアドレス(`redmine+<識別子>@redmine.example.com`。`MailHandler` の `project_from_subaddress`)で選びます。サブアドレスがないメールは、プラグインの設定の既定のプロジェクトに入れるか、捨てます([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#receiving-email))。
-- **送信元:** すべての通知を、全体用のアドレスから送ります。
-
-<a id="address-for-the-whole-redmine"></a>
-
-### 全体用のアドレス
-
-プロジェクトに属さないメールは、全体用のアドレス(たとえば `redmine@redmine.example.com`)から送ります。Redmine の管理画面の「送信元メールアドレス」(`Setting.mail_from`)が、このアドレスです。
-
-| 全体用のアドレスから送るメール | Redmine のメーラーのメソッド |
-| --- | --- |
-| パスワードの再設定(パスワードリマインダー) | `lost_password` |
-| アカウントの登録の確認、有効化の依頼、有効化の通知 | `register`、`account_activation_request`、`account_activated` |
-| アカウントの情報(管理者が作ったアカウント) | `account_information` |
-| 期日の通知(複数のプロジェクトのチケットをまとめる) | `reminder` |
-| セキュリティの通知、設定の変更の通知 | `security_notification`、`settings_updated` |
-| テストのメール | `test_email` |
-
-上のメソッドは、Redmine 7.0.3 のメーラーのうち、プロジェクトのヘッダー(`X-Redmine-Project`)を付けないものです(`app/models/mailer.rb`)。
-
-- **アドレスを選べる:** `@` の前は、プラグインの設定で変えられます(既定は `redmine`。`noreply` なども選べる)。プロジェクトの識別子と別名には使えないよう、予約します。
-- **届いたメールの扱い:** 全体用のアドレスに届いたメールは、プラグインの設定で、既定のプロジェクトに入れるか、取り込まずに捨てるかを選びます(既定は捨てる)。パスワードの再設定などのメールへの返信は、ふつうは取り込む必要がないためです。
-- **送信の ID:** 全体用のアドレスも、Redmine のサブドメインの SES の ID で送ります。
+プロジェクトごとに、Redmine のサブドメインのアドレス(`<識別子>@redmine.example.com` か別名)を持たせ、そのプロジェクトのメールを受け取り、通知を送れます。プロジェクトに属さないメールは、Redmine 全体のアドレス(`redmine@redmine.example.com`)を使います。設定ファイルの `mail.perProjectAddresses` で有効にします。無効なら、Redmine の標準と同じに受け取ります(アドレスは 1 つで、プロジェクトはサブアドレスで決める)。アドレス、別名、送信元のしくみは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#addresses-per-project) と [sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#senders-per-project) にあります。
 
 <a id="receipt-rules"></a>
 
@@ -235,70 +161,22 @@ SES の受信のルールは、ルールのセットにまとめ、リージョ�
 
 ### 取り込み
 
-プラグイン `redmine_serverless_ses` の rake のタスク `redmine_serverless_ses:receive_mail` が、次のことをします。
+受信のルールは、SES のイベントを付けて `redmine-task` を非同期で呼びます。そのハンドラーが、イベントのメッセージ ID、エンベロープの宛先、SES の判定を付けて、rake のタスク `redmine_serverless_ses:receive_mail` を動かします([tasks.md](tasks.md#kinds-of-events))。タスクは、メールのバケットからメッセージを読み、宛先からプロジェクトを決め、Redmine の `MailHandler` に渡し、`processed/` に移します。手順とオプションは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#importing) にあります。
 
-1. S3 から全文を取ります。
-2. SES のイベントの判定を見て、取り込むかを決めます(下の「なりすましと迷惑メール」)。
-3. 宛先から、プロジェクトを決めます(下記)。
-4. Redmine の `MailHandler.safe_receive` に、全文とオプションを渡します。Redmine の `rake redmine:email:read` と同じ処理です。
-5. 成功したら、`processed/` に移します。
-
-**宛先からプロジェクトを決める:**
-
-- **宛先は SES のイベントから取る:** メールの `To` と `Cc` のヘッダーではなく、SES のイベントの宛先(SMTP の `RCPT TO`。`receipt.recipients`)を使います。Bcc で届いたメールも、正しく見分けられます。取り込み直しのために、宛先は取り込みの記録にも残します。
-- **当てはめ方:** 宛先のうち Redmine のサブドメインのアドレスを順に見て、識別子か別名に当てはまる最初のプロジェクトにします。当てはまるものがなければ、取り込まずに捨て、記録に残します。
-- **Redmine に渡す:** 決めたプロジェクトの識別子と、プロジェクトの既定の値を、`MailHandler` のオプション(`issue[:project]` など)で渡します。Redmine の標準の決め方では、本文の `Project:` のキーワードの方が強いので、キーワードでプロジェクトを変えられないよう、`allow_override` にプロジェクトを入れません。
-- **返信:** 通知のメールへの返信は、Redmine が `In-Reply-To` と `References` のヘッダーから、元のチケットに注記として付けます(`MailHandler#dispatch`)。どのアドレスに返信しても、元のチケットに付きます。
-
-| オプション | 値 | 意味 |
-| --- | --- | --- |
-| `unknown_user` | プロジェクトの設定(既定は `ignore`) | Redmine に登録のないアドレスからのメールの扱い |
-| `no_permission_check` | `0` | 送信者の権限を確認する |
-| `issue[:project]` | 宛先から決めたプロジェクト | 上記 |
-| `issue[:tracker]` など | プロジェクトの既定の値 | 作るチケットの既定 |
-
-- **自動応答:** Redmine は、`Auto-Submitted`(`auto-replied` と `auto-generated`)と `X-Autoreply: yes` のヘッダーがあるメールを取り込みません(`MailHandler.ignored_emails_headers`)。自動応答のメールで、通知と取り込みが繰り返されることを防ぎます。
-- **添付ファイル:** メールの添付ファイルは、Redmine の添付として保存され、プラグイン `redmine_serverless_s3` が S3 に置きます([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#uploads-through-lambda))。
+- **添付ファイル:** メールの添付ファイルは Redmine の添付ファイルとして保存し、プラグイン `redmine_serverless_s3` が S3 に置きます([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#uploads-through-lambda))。
 - **失敗したとき:** SES は Lambda を非同期で呼ぶので、失敗すると Lambda が 2 回までやり直します。それでも失敗したイベントは、失敗の送り先(SQS)に入れ、件数をアラームで通知します。
 
 <a id="spoofing-and-spam"></a>
 
 ### なりすましと迷惑メール
 
-Redmine は、メールの差出人(`From`)のアドレスで、どのユーザーからのメールかを決めます。差出人を偽ったメールを取り込むと、そのユーザーとしてチケットが作られます。そこで、SES のイベントの判定を見て、次のメールは取り込まずに捨て、判定といっしょに記録します。
-
-| イベントの判定(`receipt`) | 捨てる条件 |
-| --- | --- |
-| `virusVerdict.status` | `PASS` でない |
-| `spamVerdict.status` | `PASS` でない |
-| `dmarcVerdict.status` | `PASS` でない |
-
-値は `PASS`、`FAIL`、`GRAY`、`PROCESSING_FAILED` のどれかです。`spfVerdict`、`dkimVerdict`、`dmarcPolicy` も記録しますが、それだけでは決めません。
-
-- **DMARC を求める理由:** DMARC が通っていれば、差出人のドメインが SPF か DKIM で確認されています。Microsoft 365 や Gmail から送ったメールは、ふつうは通ります。
-- **SES のイベントから:** 判定は、受信のルールが `redmine-task` に渡すイベントから取り、メールのヘッダー(`X-SES-*`、`Authentication-Results`)からは取りません。送信者が同じ名前のヘッダーを付けられるからです。タスクのハンドラーは、判定と宛先を、変数(`SES_SPAM_VERDICT`、`SES_VIRUS_VERDICT`、`SES_DMARC_VERDICT`、`SES_DMARC_POLICY`、`SES_SPF_VERDICT`、`SES_DKIM_VERDICT`、`SES_RECIPIENTS`)で取り込みに渡します([tasks.md](tasks.md#kinds-of-events))。コマンドのイベントでは渡せません。
-- **取り込み直し:** 取り込みの記録が、判定と宛先を持ちます。取り込み直し(管理画面から、または `MESSAGE_ID` だけの `bin/rake`)は、記録を使います。判定のないメールは取り込みません。
-
-<a id="senders-per-project"></a>
-
-### プロジェクトごとの送信元
-
-Redmine は、すべての通知のメールを、全体の設定の送信元(`Setting.mail_from`)から送ります。プラグインが、プロジェクトの通知だけ、送信元をそのプロジェクトのアドレスに替えます。
-
-- **見分け方:** Redmine は、プロジェクトの通知(チケット、ニュース、文書、ファイル、フォーラム、wiki)に、`X-Redmine-Project` のヘッダーでプロジェクトの識別子を付けます(`Mailer#redmine_headers`)。プラグインは、ActionMailer のインターセプター(送る前にメールを書き換える Rails の標準の仕組み)で、このヘッダーを見て、送信元を `<識別子>@redmine.example.com`(別名があれば別名)に替えます。
-- **表示名:** Redmine は、送信元に表示名がなければ、書いた人の名前を表示名にします。この表示名はそのまま使います。
-- **ヘッダーのないメール:** パスワードの再設定やアカウントなど、プロジェクトに属さないメールは、全体用のアドレスのままです([全体用のアドレス](#address-for-the-whole-redmine))。
-- **メールを受けないプロジェクト:** 送信元はプロジェクトのアドレスにしますが、返信は取り込まれないので、`Reply-To` を全体の送信元にします。
-- **選べるようにする:** プラグインの設定で、プロジェクトごとの送信元を使うかを選べるようにします。使わないときは、Redmine の標準と同じです。
+Redmine は差出人のアドレスで利用者を決めるので、取り込みは、イベントの SES の判定を確認します(送信者が決められるメールのヘッダーからは取りません)。ウイルスのあるメールはいつも取り込まず、迷惑メールと DMARC が通らないメールは、受信の設定で取り込むようにしない限り取り込みません(`import_spam`、`import_without_dmarc_pass`。`redmine.json` の `pluginSettings`。[deploy-config.md](deploy-config.md#fields-of-redminejson))。決まりは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#spoofing-and-spam) にあります。SES が判定を出すように、受信のルールでは、迷惑メールとウイルスの検査を有効にしておきます。
 
 <a id="settings-for-receiving-replies"></a>
 
 ### 返信を受けるための設定
 
-| 設定 | 値 | 理由 |
-| --- | --- | --- |
-| 管理画面の「送信元メールアドレス」 | 全体用のアドレス(たとえば `redmine@redmine.example.com`) | プロジェクトに属さないメールの送信元([全体用のアドレス](#address-for-the-whole-redmine)) |
-| 管理画面の「メール本文の区切り」 | 引用の前の行(「--- 返信は、この行より上に書いてください ---」など) | 返信の引用の部分を、注記に入れない |
+Redmine の管理画面で、「送信元メールアドレス」を Redmine 全体のアドレスに、「この行以降を切り捨てる」を引用の前の行にします([receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#settings-for-receiving-replies))。
 
 <a id="to-verify"></a>
 

@@ -13,13 +13,11 @@ gem 'puma'
 # Parameter Store before Rails reads the configuration, and the boot/ files of
 # redmine_serverless (the /events middleware), redmine_serverless_sqs (the
 # queue adapter) and redmine_serverless_ses (the SES delivery method). Redmine
-# loads redmine_serverless_s3 and redmine_serverless_cost from plugins/ like
-# any plugin.
+# loads redmine_serverless_s3 from plugins/ like any plugin.
 source 'https://rubygems.pkg.github.com/redmine-kit' do
   gem 'redmine_serverless_ssm', '>= 0.1.1'
   gem 'redmine_serverless', '>= 0.1.0'
   gem 'redmine_serverless_sqs', '>= 0.1.2'
   gem 'redmine_serverless_ses', '>= 0.1.1'
   gem 'redmine_serverless_s3', '>= 0.1.1', require: false
-  gem 'redmine_serverless_cost', '>= 0.1.0', require: false
 end

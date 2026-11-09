@@ -54,11 +54,13 @@ RUN bundle config set --local path vendor/bundle \
 
 # bin/update-gems writes Gemfile.lock from this stage. It starts from the
 # current lock, so only new gems are resolved unless UPDATE is set, and the
-# lock keeps its only platform, arm64 Linux (glibc), which Lambda runs.
+# lock keeps its only platform, arm64 Linux (glibc), which Lambda runs. An
+# update takes only versions published at least 7 days ago, as Dependabot does
+# for the other dependencies.
 FROM source AS lock
 COPY image/Gemfile.lock ./
 ARG UPDATE=
-RUN bundle lock ${UPDATE:+--update}
+RUN bundle lock ${UPDATE:+--update --cooldown=7}
 FROM scratch AS lockfile
 COPY --from=lock /var/task/redmine/Gemfile.lock /
 

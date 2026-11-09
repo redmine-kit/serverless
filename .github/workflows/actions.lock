@@ -6,6 +6,8 @@ workflows:
     '.github/workflows/ci.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/docs.yml': []
+    '.github/workflows/update-gems.yml':
+        - 'actions/checkout@v7.0.1'
     '.github/workflows/verify-lockfile.yml':
         - 'actions/checkout@v7.0.1'
 dependencies:

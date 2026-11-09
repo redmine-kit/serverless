@@ -1,0 +1,48 @@
+# Weekly pull request that updates image/Gemfile.lock (bin/update-gems
+# --update). Dependabot cannot update it: the lock is resolved from Redmine's
+# Gemfile, which is not in this repository, together with image/Gemfile.local
+# and the plugins' Gemfiles, inside the image. CI runs on the pull request's
+# branch through workflow_dispatch, because pull requests opened with
+# GITHUB_TOKEN do not start pull_request workflows. Opening the pull request
+# needs "Allow GitHub Actions to create and approve pull requests".
+name: Update gems
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: update-gems
+  cancel-in-progress: false
+
+jobs:
+  update:
+    # The lock is for arm64 Linux, which Lambda runs.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: bin/update-gems --update
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet image/Gemfile.lock; then
+            echo "image/Gemfile.lock is up to date"
+            exit 0
+          fi
+          branch="update-gems/$(date -u +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add image/Gemfile.lock
+          git commit -m "Update the gems of the image"
+          git push origin "$branch"
+          gh pr create --head "$branch" --title "Update the gems of the image" \
+            --body "bin/update-gems --update: gem versions published at least 7 days ago. CI runs on this branch through workflow_dispatch."
+          gh workflow run ci.yml --ref "$branch"

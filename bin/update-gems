@@ -2,7 +2,7 @@
 # Writes image/Gemfile.lock: resolves Redmine's Gemfile with image/Gemfile.local
 # and the plugin's Gemfile, starting from the current lock.
 #   bin/update-gems            # add what is new, keep the other versions
-#   bin/update-gems --update   # update every gem
+#   bin/update-gems --update   # update every gem (versions at least 7 days old)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . bin/lib/plugin.sh

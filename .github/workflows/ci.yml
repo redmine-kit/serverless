@@ -31,11 +31,22 @@ jobs:
   edge:
     needs: static
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # Codecov takes the upload with an OIDC token instead of a secret.
+      id-token: write
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - run: bin/test-edge
+      # Not failing the run until the Codecov GitHub App is installed.
+      - uses: codecov/codecov-action@v7.1.1
+        with:
+          files: coverage/edge.lcov
+          flags: edge
+          use_oidc: true
+          fail_ci_if_error: false
 
   # bin/deploy without AWS: the schema, the stack parameters and the steps
   # against fake AWS.
@@ -75,6 +86,10 @@ jobs:
       matrix:
         redmine: ["7.0.3", master]
     continue-on-error: ${{ matrix.redmine == 'master' }}
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
     env:
       REDMINE_BRANCH: ${{ matrix.redmine == 'master' && 'master' || '' }}
       BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ github.token }}
@@ -91,6 +106,13 @@ jobs:
         run: bin/test-lambda
         env:
           LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
+      - if: matrix.redmine != 'master'
+        uses: codecov/codecov-action@v7.1.1
+        with:
+          files: coverage/image/image.lcov
+          flags: image
+          use_oidc: true
+          fail_ci_if_error: false
       - if: always()
         run: bin/test-services --down
       - if: always()

@@ -89,9 +89,13 @@ task() {
 }
 
 echo "== task handler unit tests"
+# With the coverage of the handler in coverage/image.lcov (test/image/coverage.rb).
+mkdir -p coverage/image
+chmod a+rwx coverage/image
 handler_tests() {
   docker run --rm --read-only --tmpfs /tmp --user 993:993 -v "$PWD/test/image:/test:ro" \
-    --entrypoint ruby "$image" -r/var/task/handler.rb /test/task_handler_test.rb
+    -v "$PWD/coverage/image:/coverage" -e COVERAGE_FILE=/coverage/image.lcov \
+    --entrypoint ruby "$image" -r/test/coverage.rb -r/var/task/handler.rb /test/task_handler_test.rb
 }
 check "task handler" handler_tests
 ssm_tests() {

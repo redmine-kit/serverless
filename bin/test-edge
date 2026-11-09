@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # Tests of the functions that run at CloudFront (edge/): redmine-body-hash
 # (Lambda@Edge) and redmine-incoming-size (CloudFront Functions), with
-# node:test in the Node.js image. No npm packages.
+# node:test in the Node.js image. No npm packages. The coverage of the files
+# the tests load as modules is written to coverage/edge.lcov, with Node.js's
+# own coverage.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NODE=node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f
-docker run --rm -v "$PWD:/work:ro" -w /work "$NODE" sh -c '
+mkdir -p coverage
+docker run --rm -v "$PWD:/work:ro" -v "$PWD/coverage:/coverage" -w /work --user "$(id -u):$(id -g)" "$NODE" sh -c '
   node --check edge/body-hash/index.js &&
   node --check edge/incoming-size/index.js &&
-  node --test "edge/**/*.test.mjs"'
+  node --test --experimental-test-coverage --test-coverage-include="edge/**/index.js" \
+    --test-reporter=spec --test-reporter-destination=stdout \
+    --test-reporter=lcov --test-reporter-destination=/coverage/edge.lcov \
+    "edge/**/*.test.mjs"'
+# Paths relative to the repository, as Codecov expects them.
+sed -i.bak 's|^SF:/work/|SF:|' coverage/edge.lcov && rm coverage/edge.lcov.bak

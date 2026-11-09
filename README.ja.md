@@ -1,5 +1,7 @@
 # Serverless
 
+[![codecov](https://codecov.io/gh/redmine-kit/serverless/graph/badge.svg)](https://codecov.io/gh/redmine-kit/serverless)
+
 最新の Redmine(7.0.3)を、データベースに RDS for PostgreSQL、添付ファイルとアセットに S3 を使って、AWS Lambda(Event Functions)で動かす設計です。外部のプラグインは入れず、テーマは標準のままにします。Lambda と AWS のための拡張は、自前のプラグインです。[`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless)(Lambda での実行)、[`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3)(S3 の添付ファイル)、[`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses)(SES でのメール)に分けます。
 
 [English](README.md)

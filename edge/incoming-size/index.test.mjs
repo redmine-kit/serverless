@@ -1,13 +1,21 @@
 // Runs the CloudFront Function's source as CloudFront does: a plain script
-// whose handler(event) is called, with the limit written in.
+// whose handler(event) is called, with the limit written in. The script
+// keeps the file's URL, so that the coverage counts it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 
-const source = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+const url = new URL('./index.js', import.meta.url);
+const source = readFileSync(url, 'utf8');
 
 export function load(maxBytes) {
-  return new Function(`${source.replace('__MAX_BYTES__', String(maxBytes))}; return handler;`)();
+  const context = vm.createContext({});
+  // Padded to the placeholder's length, so that the offsets in the coverage
+  // match the file.
+  const limit = String(maxBytes).padStart('__MAX_BYTES__'.length);
+  new vm.Script(source.replace('__MAX_BYTES__', limit), { filename: url.href }).runInContext(context);
+  return context.handler;
 }
 
 const handler = load(1000);

@@ -194,6 +194,18 @@ On every deployment, `bin/smoke-test` checks behavior on real AWS. A project and
 | Request time | Duration in the Lambda logs | Revising the cost estimate ([cost.md](cost.md)) |
 | SHA256 computation in the browser | Time to hash large files before the upload | Attachment size limit |
 
+## Coverage
+
+CI sends the coverage of what this repository tests to Codecov, with a flag for each part. The plugins send theirs from their own repositories.
+
+| Flag | What is measured | How |
+| --- | --- | --- |
+| `edge` | The functions that run at CloudFront (`edge/`) | Node.js's own coverage in `bin/test-edge` (`--experimental-test-coverage`, LCOV). No npm packages |
+| `image` | The image's own Ruby files (`image/*.rb`; now the task handler) | Ruby's `Coverage` in the task handler's unit tests in `bin/test-image` (`test/image/coverage.rb`, LCOV). No gem is added to the image |
+
+- **Upload:** `codecov/codecov-action` with an OIDC token, so no secret is needed. Until the Codecov GitHub App is installed for the repository, a failed upload does not fail the run.
+- **Not measured:** `bin/deploy` and the other shell scripts, which `bin/test-deploy` tests against a fake AWS CLI ([Deployment tests](#deployment-tests)); Redmine and the plugins in the image.
+
 ## Order in CI
 
 GitHub Actions runs the steps in the following order. The arm64 image is built on an arm64 runner.

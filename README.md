@@ -1,5 +1,7 @@
 # Serverless
 
+[![codecov](https://codecov.io/gh/redmine-kit/serverless/graph/badge.svg)](https://codecov.io/gh/redmine-kit/serverless)
+
 A design for running the latest Redmine (7.0.3) on AWS Lambda (Event Functions), with RDS for PostgreSQL as the database and S3 for attachments and assets. No third-party plugins are installed, and the theme stays the default. Extensions for Lambda and AWS are the project's own plugins: [`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless) (running on Lambda), [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) (attachments in S3) and [`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses) (mail through SES).
 
 [日本語](README.ja.md)

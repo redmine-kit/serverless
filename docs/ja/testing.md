@@ -226,6 +226,20 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | 要求の時間 | Lambda のログの実行時間 | 費用の見込みの見直し([cost.md](cost.md)) |
 | ブラウザーでの SHA256 の計算 | 大きなファイルを、アップロードの前にハッシュする時間 | 添付ファイルの大きさの上限 |
 
+<a id="coverage"></a>
+
+## カバレッジ
+
+このリポジトリでテストするものの網羅率を、CI が Codecov に送ります。部分ごとにフラグを分けます。プラグインの網羅率は、それぞれのリポジトリから送ります。
+
+| フラグ | 測るもの | 方法 |
+| --- | --- | --- |
+| `edge` | CloudFront で動く関数(`edge/`) | `bin/test-edge` で、Node.js の標準の機能で測る(`--experimental-test-coverage`、LCOV)。npm のパッケージは使わない |
+| `image` | イメージに入れる自前の Ruby のファイル(`image/*.rb`。いまはタスクのハンドラー) | `bin/test-image` のハンドラーの単体テストで、Ruby の `Coverage` で測る(`test/image/coverage.rb`、LCOV)。イメージに gem は足さない |
+
+- **送り方:** `codecov/codecov-action` で、OIDC のトークンを使って送ります。シークレットは要りません。リポジトリに Codecov の GitHub App を入れるまでは、送るのに失敗しても CI を失敗にしません。
+- **測らないもの:** `bin/deploy` などのシェルスクリプト(`bin/test-deploy` が偽の AWS CLI でテストします。[デプロイのテスト](#deployment-tests))。イメージの中の Redmine とプラグイン。
+
 <a id="order-in-ci"></a>
 
 ## CI の順番

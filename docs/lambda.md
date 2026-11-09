@@ -315,7 +315,7 @@ flowchart LR
 | Item | Value | Reason |
 | --- | --- | --- |
 | Function | `redmine-body-hash`, attached to the origin request of the default behavior, with the body included (`IncludeBody`) | Only Lambda@Edge can read the body. At the origin request it can read up to 1 MB of the body (up to 40 KB at the viewer request) |
-| Runtime | Node.js (the latest version Lambda@Edge supports). Written with `node:crypto` only, without npm package dependencies | Lambda@Edge supports only Node.js and Python, and does not support container images or arm64 |
+| Runtime | Node.js 24 (`nodejs24.x`, the latest Lambda@Edge supports), x86_64, 128 MB, 5 seconds. Written with `node:crypto` only, without npm package dependencies. The code is inline in `infra/shared-edge.yaml` and is tested by `bin/test-edge` ([testing.md](testing.md#edge-function-tests)) | Lambda@Edge supports only Node.js and Python, and does not support container images or arm64 |
 | Architecture, memory, timeout | x86_64, 128 MB, 5 seconds | It only computes a hash |
 | Region | us-east-1 (N. Virginia) | Lambda@Edge functions must be created in us-east-1 |
 | Location | `edge/body-hash/` in this repository | It runs outside Redmine, so it is not part of the plugin |

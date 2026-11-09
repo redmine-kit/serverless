@@ -253,5 +253,5 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 - WAF の Common Rule Set のうち、Redmine の正しい要求を止めるルール(本文の大きさ、XSS の形など)
 - Rails の `remote_ip` が、CloudFront を通った要求で、利用者の IP アドレスになるか
 - GuardDuty と、S3 のマルウェアの検査の費用
-- Lambda@Edge のロググループに、すべてのリージョンで保持の設定を当てる方法(`bin/deploy` で当てるのに要る権限を含む)
+- `bin/deploy` が、デプロイ用のロールで、すべてのリージョンの Lambda@Edge のロググループに保持の設定を当てられるか(そのロググループへの `logs:PutRetentionPolicy`、`logs:DescribeLogGroups`、`ec2:DescribeRegions`。[iam.md](iam.md#role-for-deploying-infrastructure))
 - WAF のサンプルの要求を見られる期間

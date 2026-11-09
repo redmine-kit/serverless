@@ -34,16 +34,16 @@ flowchart LR
 
 | Role | Assumed by | Purpose |
 | --- | --- | --- |
-| `redmine-web-execution` | Lambda (`redmine-web`) | Pages, attachments, enqueuing jobs, admin pages |
-| `redmine-worker-execution` | Lambda (`redmine-worker`) | Running jobs (sending email, deleting projects, etc.) |
-| `redmine-task-execution` | Lambda (`redmine-task`) | rake, `rails runner`, email import |
+| `redmine-web` | Lambda (`redmine-web`) | Pages, attachments, enqueuing jobs, admin pages |
+| `redmine-worker` | Lambda (`redmine-worker`) | Running jobs (sending email, deleting projects, etc.) |
+| `redmine-task` | Lambda (`redmine-task`) | rake, `rails runner`, email import |
 | `redmine-scheduler` | EventBridge Scheduler | Scheduled rake and warm-up calls during business hours |
-| `redmine-body-hash-execution` | Lambda and Lambda@Edge (`redmine-body-hash`) | Adds the hash of the request body ([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge)). Only writes logs |
+| `redmine-body-hash` | Lambda and Lambda@Edge (`redmine-body-hash`) | Adds the hash of the request body ([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge)). Only writes logs |
 | `redmine-github-deploy` | GitHub Actions (OIDC) | Code deployment. Pushing the image, syncing assets, updating functions, migrations |
 | `redmine-infra-deploy` | SSO administrators, a GitHub Environment that requires approval (OIDC) | Applies the stacks with `bin/deploy`. The role that `deployRoleArn` in the configuration file points to |
 | `redmine-cfn-exec` | CloudFormation | Creates the stack resources (CloudFormation service role) |
 
-The role names are provisional.
+The roles that the stacks create are under the path `/redmine/` (for example `arn:aws:iam::<account>:role/redmine/redmine-web`), and have the permissions boundary `redmine-boundary`. The last three, and the boundary, are in `infra/account.yaml` ("Account roles" below).
 
 ## Permissions common to the three functions
 
@@ -138,10 +138,12 @@ The trust policy uses GitHub OIDC (`token.actions.githubusercontent.com`), with 
 | Permission | Resource | Use |
 | --- | --- | --- |
 | `ecr:GetAuthorizationToken` | `*` (cannot be scoped) | Logging in to ECR |
-| `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage` | The Redmine repository | Pushing the image |
-| `s3:PutObject`, `s3:GetObject`, `s3:ListBucket` | The assets bucket | Syncing assets ([lambda.md](lambda.md#serving-assets)) |
-| `lambda:UpdateFunctionCode`, `lambda:GetFunction`, `lambda:GetFunctionConfiguration` | The three functions | Updating the image and waiting for the update to finish |
-| `lambda:InvokeFunction` | `redmine-task` | Migrations during deployment ([tasks.md](tasks.md#migrations-during-deployment)) |
+| `ecr:DescribeImages`, `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer` | The Redmine repository | Copying the image (and skipping an image already there) |
+| `s3:PutObject`, `s3:GetObject`, `s3:ListBucket` | The assets buckets (`*-assets-<account>-*`, objects under `assets/`) | Syncing assets ([lambda.md](lambda.md#serving-assets)) |
+| `lambda:UpdateFunctionCode`, `lambda:GetFunction`, `lambda:GetFunctionConfiguration`, `lambda:InvokeFunction` | Functions with the tag `redmine:instance` | Updating the image, waiting for the update to finish, and the migrations in `redmine-task` ([tasks.md](tasks.md#migrations-during-deployment)) |
+| `cloudformation:DescribeStacks` | The account's stacks | Reading the outputs: the repository, the buckets and the distribution |
+
+- **One policy for every instance:** The permissions are in the managed policy `redmine-code-deploy` (`infra/account.yaml`), shared with the role for deploying infrastructure. Instance names are free, so functions are found by the tag `redmine:instance`, which every stack puts on its resources, and buckets by their names.
 
 - **What it does not get:** Other `iam:*` and `iam:PassRole`, `lambda:UpdateFunctionConfiguration` (because it can change the execution role and environment variables), CloudFormation, and the database password in SSM. These are changed with the infrastructure deployment role.
 - **Assets are not deleted:** Old assets are kept, so it does not get `s3:DeleteObject`. A lifecycle rule deletes old assets.
@@ -153,12 +155,26 @@ This role applies the shared base and instance stacks with `bin/deploy`. `deploy
 | Item | Details |
 | --- | --- |
 | Assumed by | The SSO administrator permission set. In GitHub Actions, only workflows in an Environment with designated approvers (`sub` restricted to that Environment) |
-| Permissions | Creating and updating CloudFormation stacks (`redmine-*` and `<instance>*` stacks), setting the retention period of the Lambda@Edge log groups (`logs:PutRetentionPolicy` in all regions, only for `/aws/lambda/us-east-1.redmine-body-hash`), `iam:PassRole` (only for the CloudFormation service role `redmine-cfn-exec`), creating SSM parameters (when creating secrets for the first time; only `/<instance>/env/*`), copying images to ECR, and the same permissions as the code deployment role |
+| Permissions | Creating change sets only with the service role `redmine-cfn-exec` (`cloudformation:CreateChangeSet` with the condition `cloudformation:RoleArn`), and describing, executing and deleting them; `iam:PassRole` only for `redmine-cfn-exec` to CloudFormation; setting the retention period of the Lambda@Edge log groups (`logs:PutRetentionPolicy` in all regions, only for `/aws/lambda/us-east-1.redmine-body-hash`, with `logs:DescribeLogGroups` and `ec2:DescribeRegions`); reading and creating SSM parameters under `/<instance>/env/` and `/<instance>/deploy/` (with `kms:Encrypt` through SSM); activating the SES receipt rule set; and the managed policy `redmine-code-deploy` of the code deployment role |
 | Permissions to create resources | None. CloudFormation creates resources with the permissions of `redmine-cfn-exec` |
 
 - **CloudFormation service role:** `redmine-cfn-exec` can create the resources of this design (Lambda, RDS, the VPC and its endpoints, the NAT instance, S3, SQS, SES, CloudFront, AWS WAF web ACL, ACM, IAM roles, logs, alarms). IAM roles it creates must have the permissions boundary `redmine-boundary` (`iam:PermissionsBoundary`).
 - **us-east-1:** The same role also applies the stacks for the Lambda@Edge function and the CloudFront certificate in us-east-1 ([deploy-config.md](deploy-config.md#shared-base-and-per-instance-resources)).
 - **Permissions to attach the function to CloudFront:** `redmine-cfn-exec` also gets `lambda:EnableReplication*` and `iam:CreateServiceLinkedRole` for attaching the Lambda@Edge function version to CloudFront.
+
+## Account roles
+
+`infra/account.yaml` (the stack `redmine-account`) creates the roles above that are not per instance. An administrator applies it once per account with their own credentials (`bin/deploy --account`; [deploy-config.md](deploy-config.md#deployment-commands)).
+
+| Resource | Contents |
+| --- | --- |
+| `redmine-boundary` (managed policy) | The permissions boundary of every role the stacks create. Allows only the actions of the roles on this page: writing logs, reading SSM parameters and `kms:Decrypt`, the network interfaces of Lambda in the VPC and the NAT instance's actions, objects in S3, SQS, SES, `lambda:InvokeFunction`, and the actions of `AmazonSSMManagedInstanceCore`. Nothing in IAM |
+| `redmine-cfn-exec` | CloudFormation (`cloudformation.amazonaws.com`, `aws:SourceAccount` this account). The services of the stacks, and IAM only under the path `/redmine/`: creating roles and putting or attaching their policies only with the boundary (`iam:PermissionsBoundary`), managing roles, instance profiles and policies under `/redmine/`, `iam:PassRole` for roles under `/redmine/` to Lambda, Lambda@Edge, EventBridge Scheduler and EC2, `iam:CreateServiceLinkedRole` and `lambda:EnableReplication*`. `iam:DeleteRolePermissionsBoundary` is denied. The account roles and the boundary are outside `/redmine/`, so it cannot change them |
+| `redmine-infra-deploy` | The users of an IAM Identity Center permission set (`account.ssoPermissionSet`, default `AdministratorAccess`; `aws:PrincipalArn` of its `AWSReservedSSO_…` roles), and with `account.githubRepository`, GitHub Actions in the Environment `account.githubInfraEnvironment` (default `infrastructure`). Permissions in "Role for deploying infrastructure" above. Sessions up to 2 hours |
+| `redmine-github-deploy` | Only with `account.githubRepository`: GitHub Actions in the Environment `account.githubCodeEnvironment` (default `production`), with the audience `sts.amazonaws.com`. The managed policy `redmine-code-deploy` |
+| The GitHub OIDC provider | Created with `account.githubRepository` unless `account.githubOidcProviderArn` names the one the account already has (an account has one per URL) |
+
+- **The GitHub Environments:** The required approvers of the infrastructure Environment are set on GitHub. The roles trust only the `sub` of that Environment (`repo:<owner>/<repository>:environment:<name>`).
 
 ## Permissions of people
 
@@ -208,4 +224,8 @@ If it finds a function URL, S3 bucket, SQS queue, SSM parameter or RDS snapshot,
 - Whether sending the full message (raw) with SES v2 `SendEmail` needs `ses:SendRawEmail`
 - Whether the resource of `ssm:GetParametersByPath` needs both the path ARN and the path below it (`/*`)
 - Whether the service-linked role needed for Lambda@Edge replication can be created under the permissions boundary and the CloudFormation service role
+- Whether `cloudformation:CreateChangeSet` honors the condition `cloudformation:RoleArn` for change sets that create a stack, and whether executing them needs anything else
+- Whether the Lambda actions of `redmine-code-deploy` (`UpdateFunctionCode`, `InvokeFunction`, `GetFunction`) can be scoped by the tag `aws:ResourceTag/redmine:instance`
+- Whether putting a SecureString with the `aws/ssm` key needs `kms:Encrypt` in the caller's policy
+- Whether Lambda@Edge replication works with an execution role that has a path and a permissions boundary
 - The ARN format for permissions on SES identities (`ses:SendEmail`, `ses:GetEmailIdentity`), and the permissions needed when using a configuration set

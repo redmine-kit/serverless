@@ -40,7 +40,9 @@ bin/test plugin test/unit/attachment_patch_test.rb   # Run a specific file
 | Redmine's own tests | Whether Redmine's own behavior still works with the plugins installed | Redmine's tests (unit, functional, integration) | Every commit |
 | System tests | Upload, download and thumbnails in the browser | Capybara, Selenium (headless Chrome), moto | Every commit |
 | Image tests | Whether the three roles start with a read-only file system and a low-privilege user | Docker, Lambda Runtime Interface Emulator | Every image build |
-| Lambda integration tests | Whether the same image, deployed as three functions, works with S3, SQS and SSM for the function URL, jobs from SQS and invocations of `redmine-task` | LocalStack (Hobby) | Every image build |
+| Edge function tests | The Lambda@Edge function and the CloudFront Function, and that the templates carry the same code | node:test (Node.js's own) | Every commit |
+| Deployment tests | The configuration schema, the stack parameters, and the steps of `bin/deploy` | check-jsonschema, a fake AWS CLI, Minitest | Every commit |
+| Lambda integration tests | Whether the same image, deployed as three functions, works with SQS and SSM for the function URL, jobs from SQS and invocations of `redmine-task` | LocalStack (Hobby) | Every image build |
 | Checks after deployment | Behavior on real AWS | `bin/smoke-test` (the project's own) | Every deployment |
 | Measurements | Startup time, memory, request time | CloudWatch logs and metrics | First deployment, and on Redmine upgrades |
 
@@ -122,7 +124,7 @@ The plugins replace Redmine code with `prepend`. Redmine's tests check that Redm
 | --- | --- | --- |
 | SDK `stub_responses` | Unit and functional tests. Tests that raise SES errors one by one | — |
 | moto | Plugin integration tests and system tests (S3, SQS, SSM). SES v2 `SendEmail` is used only after checking that moto reproduces it; until then, SDK `stub_responses` is used instead | — |
-| LocalStack (Hobby) | Lambda integration tests. Three functions from the same image, function URLs, SQS event source mappings | SES v2, CloudFront and RDS are not in Hobby. SES v2 is checked with moto, CloudFront in the checks after deployment, and the database is a PostgreSQL container |
+| LocalStack (Hobby) | Lambda integration tests. Three functions from the same image, function URLs, SQS event source mappings | SES v2, ECR, CloudFront and RDS are not in Hobby. SES v2 is checked with moto, CloudFront in the checks after deployment, and the database is a PostgreSQL container. The image goes to LocalStack's Lambda from the local Docker, without ECR |
 
 ## Administration pages
 
@@ -158,6 +160,33 @@ Every image build is started in Docker under the same conditions as production.
 - **`worker`:** Likewise with the emulator, pass an SQS-shaped event and check that the job runs (a project is deleted, and its notification mail is queued in SQS), and that a job class outside the allowlist is not run. After a job succeeds, the gem deletes the message at a queue URL it builds from the event's ARN (`https://sqs.<region>.amazonaws.com/...`), which cannot be pointed at moto. Here the only failure allowed is that deletion; it is checked in the Lambda integration tests.
 - **Contents:** Check that ImageMagick's `convert`, Ghostscript and Pandoc (3.8.3 or later) work, that everything in `/var/task` and `/opt` is readable by the low-privilege user, and that the compiled assets are there. The task handler's unit tests also run in the image. Whether the pushed manifest is arm64 only and not an index is checked when the image is pushed.
 
+## Edge function tests
+
+`bin/test-edge` runs the tests of `edge/` with `node:test` in the Node.js image, without npm packages.
+
+- **`redmine-body-hash` (Lambda@Edge):** The hash of an empty body, of a base64 body over its raw bytes (forms, binary, multipart) and of a text body; a forged `x-amz-content-sha256` is replaced; a truncated body (over 1 MB) gets 413; other fields of the request are kept.
+- **`<instance>-incoming-size` (CloudFront Function):** Run as CloudFront runs it, a plain script with the limit written in: a PUT within the limit passes, a larger one gets 413, one without a valid `Content-Length` gets 411, and other methods pass.
+- **The templates:** The code is inline in the templates (`infra/shared-edge.yaml`, `infra/instance.yaml`), so the tests check that the templates carry the same lines as the files.
+
+## Deployment tests
+
+`bin/test-deploy` tests `bin/deploy` without AWS, in the tools image of `bin/deploy`.
+
+- **Schema:** The example in [deploy-config.md](deploy-config.md#example) and the files in `test/deploy/valid/` pass; each file in `test/deploy/invalid/` fails (a missing field, a hosted zone missing with `route53`, an image without a digest, unknown fields, and so on).
+- **Stack parameters:** For each valid configuration, the parameters that `deploy/params.jq` makes for each template are parameters of that template, and every parameter without a default is given. Defaults and values are compared.
+- **Steps:** `deploy/deploy.sh` runs against fake `aws`, `crane` and `curl` (`test/deploy/fake/`) that record every call: the order of the steps the first time and later (the task migrates before web and worker get the image), `--dry-run` (nothing executed, written or invoked), `--code-only`, `--account`, a stack without changes, a failed migration that stops the deployment, a failed check, and an invalid configuration that stops before any call. The secrets are checked: their format, SecureString, the public key in the stack matching the private key, and that no secret is on a command line or in the output.
+- **Settings code:** The Ruby code that applies the settings runs in Ruby against a stand-in for Redmine's `Setting` (`initial` and `enforce`, and plugin settings merged).
+
+## Lambda integration tests
+
+`bin/test-lambda` runs the image as Lambda on LocalStack (its own Compose project, `test/lambda/compose.yml`). It needs `LOCALSTACK_AUTH_TOKEN` and is skipped without it. In CI it runs in the image job of the Redmine release.
+
+- **Image:** In LocalStack's ECR when the license includes it; otherwise the image is tagged locally under an ECR name, and LocalStack's Lambda starts it from the same Docker.
+- **Secrets:** `create_secrets` of `deploy/lib.sh` creates the secrets in SSM, and keeps them on a second run.
+- **`redmine-task`:** Invoked through `task` of `deploy/lib.sh`, as `bin/deploy` does: `db:migrate`, `redmine:load_default_data`, reading `SECRET_KEY_BASE` from SSM, a failed command failing, and the settings code.
+- **`redmine-worker`:** From an SQS event source mapping. The task queues a `DestroyProjectJob`; the worker runs it, and the job runs only once after the visibility timeout, which shows that the message was deleted (the image tests cannot check this with moto). The notification mail is checked when the license includes SES v2.
+- **`redmine-web`:** `/login` through a function URL, which goes through Lambda Web Adapter.
+
 ## Infrastructure checks
 
 | Target | Tools | What to check |
@@ -169,7 +198,7 @@ Every image build is started in Docker under the same conditions as production.
 
 ## Checks after deployment
 
-On every deployment, `bin/smoke-test` checks behavior on real AWS. A project and a user for checks are prepared so that regular data is not touched.
+On every deployment, `bin/smoke-test` checks behavior on real AWS. A project and a user for checks are prepared so that regular data is not touched. `bin/smoke-test` is not built yet; the last step of `bin/deploy` checks the login page (200 with `Strict-Transport-Security`) and that `/files/` without a signature is refused ([deploy-config.md](deploy-config.md#deployment-commands)).
 
 | What to check | Expected result |
 | --- | --- |
@@ -208,19 +237,21 @@ CI sends the coverage of what this repository tests to Codecov, with a flag for 
 
 ## Order in CI
 
-GitHub Actions runs the steps in the following order. The arm64 image is built on an arm64 runner.
+GitHub Actions (`.github/workflows/ci.yml`) runs the jobs in the following order. The arm64 image is built on an arm64 runner. The plugins' tests run in their own repositories.
 
 ```mermaid
 flowchart TD
-  a["Static checks"] --> b["Plugin<br>tests"]
-  b --> c["Redmine's own<br>tests"]
-  c --> d["System<br>tests"]
-  d --> e["Build<br>the image"]
-  e --> f["Image<br>tests"]
-  f --> f2["Lambda<br>integration tests<br>(LocalStack)"]
-  f2 --> g["Deploy"]
-  g --> h["Checks after<br>deployment"]
+  a["Static checks<br>(bin/lint)"] --> e["Edge functions<br>(bin/test-edge)"]
+  a --> d["Deployment<br>(bin/test-deploy)"]
+  a --> s["Services<br>(bin/test-services)"]
+  a --> c["Redmine's own tests<br>(bin/test-core)"]
+  a --> i["Image: build, image tests,<br>Lambda tests<br>(bin/test-image, bin/test-lambda)"]
+  s --> p["Publish the image<br>(main only)"]
+  c --> p
+  i --> p
 ```
+
+Deployment is not part of CI: `bin/deploy` runs when an administrator decides to deploy ([deploy-config.md](deploy-config.md#deployment-commands)).
 
 - **Redmine versions (matrix):** The image tests and Redmine's own tests run twice: on the Redmine release the image uses (now 7.0.3, from the release tar.gz checked by SHA256, with `image/Gemfile.lock`), and on Redmine's `master` branch, which becomes the next release (7.1; there is no `7.1-stable` branch yet, checked on 2026-11-09). `master` is taken from GitHub without pinning (`REDMINE_BRANCH=master` for `bin/build-image` and `bin/test-core`), its gems are resolved without the lock, and its jobs do not fail the run (`continue-on-error`): they show early what the next release breaks. CI also runs weekly for that reason. An image built from `master` is never deployed. When 7.1 is released, the matrix moves to 7.1 (pinned) and the next `master`.
 - **Updates:** Dependabot opens weekly pull requests for the actions (with `.github/workflows/actions.lock`), the Docker images and the lint gems, for versions published at least 3 days ago (patches) or 7 days ago (others). `image/Gemfile.lock` cannot be updated by Dependabot: it is resolved from Redmine's Gemfile, which is not in this repository, together with `image/Gemfile.local` and the plugins' Gemfiles, inside the image. A weekly workflow (`.github/workflows/update-gems.yml`) runs `bin/update-gems --update` with Bundler's `--cooldown=7` and opens a pull request, and starts CI on its branch. The lock is committed so that every build installs the same, reviewed gem versions with their checksums.

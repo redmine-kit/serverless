@@ -176,15 +176,18 @@ The following are not in the plugins, because they must load before plugins or t
 
 Mail sending (`aws-actionmailer-ses`) and jobs (`aws-activejob-sqs`) use AWS's official gems; no delivery method or queue adapter is written. The jobs' settings belong to `redmine_serverless_sqs`.
 
-## Repository layout (planned)
+## Repository layout
 
 ```text
 serverless/
   image/          Container image (Dockerfile, configuration files, startup script, extension script, task handler)
-  edge/           Lambda@Edge function (redmine-body-hash, which adds the body hash)
-  bin/            Local commands (rake and rails target production; test and check-migrations run locally and in CI)
-  infra/          CloudFormation (VPC, database, S3, SQS, Lambda, CloudFront, SES; Lambda@Edge and the CloudFront certificate in us-east-1)
-  .github/        Build and deployment workflows
+  edge/           The functions that run at CloudFront: redmine-body-hash (Lambda@Edge, adds the body hash) and the CloudFront Function that limits uploads, with their tests
+  infra/          CloudFormation (the account roles; the shared base; per instance: VPC use, database, S3, SQS, Lambda, CloudFront, WAF, SES, schedules, alarms; Lambda@Edge, the certificate and the web ACL in us-east-1)
+  deploy/         The steps of bin/deploy and its tools image
+  schema/         The JSON Schema of redmine.json
+  bin/            Commands: build, lint, tests, update-gems and deploy
+  test/           Tests outside the plugins (image, deployment, Lambda on LocalStack) and the services they use
+  .github/        CI and the other workflows
   docs/           Documentation
 ```
 

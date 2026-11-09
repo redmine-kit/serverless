@@ -58,36 +58,44 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | `deployRoleArn` | ○ | | デプロイのコマンドが引き受けるロール。立てるアカウントの、インフラのデプロイ用のロールを指す([iam.md](iam.md#role-for-deploying-infrastructure)) |
 | `domain` | ○ | | Web とメールのホスト名(たとえば `redmine.example.com`) |
 | `dns.mode` | | `route53` | `route53`(Route 53 のホストゾーンに置く)か `external`(ほかの DNS に、表示したレコードを自分で置く)([mail.md](mail.md#receiving-domain)) |
+| `dns.hostedZoneId` | `route53` のとき | | ドメインの Route 53 のホストゾーン |
+| `account.*` | | | アカウントのロールの設定。`bin/deploy --account` だけが使う。`ssoPermissionSet`(既定は `AdministratorAccess`)、`githubRepository`(`owner/repository`。なければ GitHub Actions のロールは作らない)、`githubInfraEnvironment`(既定は `infrastructure`)、`githubCodeEnvironment`(既定は `production`)、`githubOidcProviderArn`(アカウントに GitHub の OIDC のプロバイダーがすでにあるとき)([iam.md](iam.md#account-roles)) |
 | `network.mode` | | `endpoints` | VPC の外への道。`endpoints`(VPC のエンドポイント。インターネットへの出口なし)か `nat`(NAT インスタンス。webhook や外の API に届く)([rds.md](rds.md#which-to-choose)) |
-| `network.shared` | | `true` | 共有の土台のネットワークを使うか、インスタンスごとに作るか |
-| `database.instanceClass` | | `db.t4g.micro` | RDS のインスタンスの種類([rds.md](rds.md#database)) |
+| `network.shared` | | `true` | 共有の土台のネットワークを使うか。今は `true` だけ。インスタンスごとの VPC は作っていない |
+| `database.majorVersion` | ○ | | PostgreSQL のメジャーバージョン(たとえば `"17"`)。インスタンスを作るときに、RDS が出しているバージョンと照らして確認する([rds.md](rds.md#database)) |
+| `database.instanceClass` | | `db.t4g.micro` | RDS のインスタンスの種類 |
 | `database.storageGb` | | 20 | RDS のストレージ(gp3) |
 | `lambda.webMemoryMb` | | 2048 | `redmine-web` のメモリ |
 | `lambda.webReservedConcurrency` | | 10 | `redmine-web` の同時実行数の予約 |
 | `lambda.workerReservedConcurrency` | | 3 | `redmine-worker` の同時実行数の予約。`redmine-task` は 2 で決め打ち([tasks.md](tasks.md#kinds-of-events)) |
-| `lambda.warmup` | | `false` | 業務時間の温めの呼び出しをするか([lambda.md](lambda.md#waiting-for-start-up)) |
+| `lambda.warmup` | | `false` | 業務時間の温めの呼び出しをするか([lambda.md](lambda.md#waiting-for-start-up))。今は `false` だけ |
+| `uploads.maxBytes` | | 104857600(100 MB) | 添付ファイルの大きさの上限。`/incoming/*` の CloudFront Function が、これより大きいアップロードを 413 で断る |
 | `mail.receive` | | `true` | メールの受信を使うか |
 | `mail.perProjectAddresses` | | `false` | プロジェクトごとのアドレスを使うか。`false` なら Redmine の標準と同じ([mail.md](mail.md#addresses-per-project)) |
 | `mail.globalLocalPart` | | `redmine` | 全体用のアドレスの `@` の前 |
 | `webhooks` | | `false` | Redmine の webhook の設定(`webhooks_enabled`)の初めの値。webhook は `network.mode` が `nat` のときだけ使える([lambda.md](lambda.md#background-jobs)) |
 | `cloudfront.plan` | | `free` | CloudFront の料金のプラン。`free`、`pro`、`payg`(従量)([security.md](security.md#plan-and-cost)) |
+| `cloudfront.webAclArn` | | なし | 自分で用意した Web ACL(us-east-1)を使うとき。指定すると、`waf.*` は使わない |
 | `waf.loginRateLimit` | | 20 | WAF のログインの回数の制限(5 分あたり。[security.md](security.md#rules)) |
 | `waf.rateLimit` | | 1000 | WAF の全体の回数の制限(5 分あたり) |
 | `waf.commonRuleSet` | | `count` | WAF の Common Rule Set を、`count`(数えるだけ)にするか `block`(止める)にするか |
-| `waf.commonRuleSetCountOnly` | | `["SizeRestrictions_BODY"]` | `block` のときも、数えるだけにするルール |
-| `cloudfront.webAclArn` | | なし | 自分で用意した Web ACL を使うとき。指定すると、`waf.*` は使わない |
-| `redmine.version` | | `redmine.lock` のバージョン | 使う Redmine のバージョン。上げる前の確認の方法は [upgrade.md](upgrade.md) |
-| `image` | | このプロジェクトのイメージ | 使う側が作った派生のイメージ(テーマやプラグインを足したもの)を使うとき、その置き場所と digest(`image.repository`、`image.digest`)。派生のイメージの作り方は [architecture.md](architecture.md#derived-images) |
+| `waf.commonRuleSetCountOnly` | | `["SizeRestrictions_BODY"]` | `block` のときも、数えるだけにするルール(1 つ) |
+| `image.repository` | | `ghcr.io/redmine-kit/serverless` | 使うイメージ。使う側が作った派生のイメージ(テーマやプラグインを足したもの)は、ここで指定する([architecture.md](architecture.md#derived-images))。Redmine のバージョンはイメージで決まる。上げる前の確認の方法は [upgrade.md](upgrade.md) |
+| `image.digest` | `image` を書くとき | その時点の `main` の digest | イメージの digest(`sha256:…`)。書かないと、`bin/deploy` はその時点の `main` のタグの digest を使い、固定できるように表示する |
 | `redmine.settings` | | なし | Redmine の管理画面の設定の値(`host_name`、`default_language`、`mail_from` など) |
-| `redmine.settingsMode` | | `initial` | `initial`(初めて立てたときだけ入れる。あとは画面で変えられる)か `enforce`(デプロイのたびに入れ直す) |
-| `redmine.pluginSettings` | | なし | プラグインの設定の値。プラグインの名前(`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`)ごとに書く |
+| `redmine.settingsMode` | | `initial` | `initial`(まだ保存されていない設定だけ入れる。あとは画面で変えられる)か `enforce`(デプロイのたびに入れ直す) |
+| `redmine.pluginSettings` | | なし | プラグインの設定の値。プラグインの名前(`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`)ごとに書く。保存されている設定に足し合わせる |
+| `schedule.timezone` | | `UTC` | 定期の rake のタイムゾーン([tasks.md](tasks.md#scheduled-runs)) |
+| `schedule.sendReminders` | | `false` | 平日の朝に、期日の近いチケットのメール(`redmine:send_reminders`)を送るか |
 | `logs.retentionDays` | | 90 | CloudWatch Logs の保持の日数(Lambda@Edge のロググループを含む) |
 | `retention.recordsDays` | | 90 | プラグインの記録(受け取ったメール、失敗したジョブ)を残す日数 |
 | `retention.mailDays` | | 30 | メールのバケットのメール(`processed/` と `inbound/`)を残す日数 |
 | `retention.noncurrentVersionDays` | | 30 | 添付ファイルの古いバージョンを残す日数 |
 | `retention.backupDays` | | 7 | RDS の自動のバックアップを残す日数(35 まで)。割り当てたストレージの大きさまでは無料([rds.md](rds.md#settings)) |
 | `alarms.snsTopicArn` | | なし | アラームを送る SNS のトピック |
-| `tags` | | なし | すべてのリソースに足すタグ |
+| `tags` | | なし | すべてのスタックに、つまりリソースに足すタグ |
+
+- **スタックがまだ使わない項目:** `mail.perProjectAddresses`、`mail.globalLocalPart`、`webhooks`、`cloudfront.plan`、`retention.recordsDays` は、スキーマで確認するだけです。あとで作るプラグインの設定と CloudFront のプランで効くようになります。
 
 保持の期間の一覧は、[security.md](security.md#retention-periods) にあります。
 
@@ -102,6 +110,8 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
   "region": "ap-northeast-1",
   "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-infra-deploy",
   "domain": "redmine.example.com",
+  "dns": { "hostedZoneId": "Z0123456789ABCDEFGHIJ" },
+  "database": { "majorVersion": "17" },
   "network": { "mode": "endpoints" },
   "mail": { "receive": true, "perProjectAddresses": true },
   "redmine": {
@@ -118,31 +128,51 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 
 ## デプロイのコマンド
 
+`bin/deploy` に要るのは Docker だけです。道具のイメージ(`deploy/Dockerfile`。AWS CLI、jq、OpenSSL、crane、check-jsonschema を、バージョンを固定して入れる。Python のパッケージはハッシュで固定する)を作り、その中で `deploy/deploy.sh` を動かします。AWS の認証情報は、`AWS_*` の環境変数か、`~/.aws`(読むだけ)から取ります。
+
 ```sh
-bin/deploy path/to/redmine.json --dry-run   # 変わるものを表示するだけ
-bin/deploy path/to/redmine.json             # 立てる、更新する
+bin/deploy path/to/redmine.json --account    # アカウントごとに 1 回、管理者が
+bin/deploy path/to/redmine.json --dry-run    # 変わるものを表示するだけ
+bin/deploy path/to/redmine.json              # 立てる、更新する
+bin/deploy path/to/redmine.json --code-only  # イメージだけを更新する
 ```
 
 | 段 | すること |
 | --- | --- |
-| 1 | 設定のファイルを JSON Schema で確認する |
-| 2 | 共有の土台のスタック(`redmine-shared` と、us-east-1 の `redmine-shared-edge`)を、無ければ作り、あれば更新する |
-| 3 | 秘密の値が SSM に無ければ作る(あれば変えない)。添付ファイルの URL のための CloudFront のキーペアの秘密鍵も含め、その公開鍵はインスタンスのスタックに入れる。RDS は作るときにデータベースのパスワードを SSM から読むので、インスタンスのスタックより先に行う |
-| 4 | インスタンスのスタック(`<instance>` と、us-east-1 の `<instance>-edge`)を、作るか更新する。Lambda@Edge が各リージョンに作ったロググループに、保持の期間を当て直す([security.md](security.md#retention-periods)) |
-| 5 | 使うバージョンのイメージを、そのアカウントの ECR に置く(Lambda は、同じリージョンの ECR のイメージしか使えない) |
-| 6 | アセットを S3 に同期する |
-| 7 | `redmine-task` のイメージを更新し、`db:migrate` と `redmine:plugins:migrate` を実行する。初めて立てるときは、これで空のデータベースにスキーマができる |
-| 8 | 初めて立てるときは、`redmine-task` で初めのデータを入れる(`redmine:load_default_data`。言語は `redmine.settings.default_language`。なければ英語) |
-| 9 | `redmine-web` と `redmine-worker` のイメージを更新する |
-| 10 | Redmine とプラグインの設定を入れる(`redmine.settingsMode` のとおり。rake のタスク `redmine_serverless:apply_settings`) |
-| 11 | デプロイしたあとの確認([testing.md](testing.md#checks-after-deployment)) |
+| 1 | 設定のファイルを JSON Schema で確認し、`deployRoleArn` を引き受ける(認証情報がすでにそのロールのものなら、そのまま) |
+| 2 | 共有の土台のスタック(`redmine-shared` と、us-east-1 の `redmine-shared-edge`)を、作るか更新する。`mail.receive` なら、共有の受信のルールのセットを有効にする |
+| 3 | 秘密の値が SSM に無ければ作る。あれば変えない(下の「秘密の値」)。RDS は作るときにデータベースのパスワードを SSM から読むので、インスタンスのスタックより先に行う |
+| 4 | us-east-1 の `<instance>-edge`(証明書と Web ACL)を、作るか更新する。Lambda@Edge が各リージョンに作ったロググループに、`logs.retentionDays` を当てる([security.md](security.md#retention-periods)) |
+| 5 | イメージを、crane で digest のまま、そのアカウントの ECR に写す(Lambda は、同じリージョンの ECR のイメージしか使えない)。リポジトリのタグは変えられないので、タグは digest から作る(`sha256-<hex>`)。すでにあるイメージは写さない |
+| 6 | イメージの中のアセットを、保守の画面(`deploy/maintenance.html`)と一緒に S3(`/assets/`)に同期する。ブラウザーで開いたままのページのために、古いファイルは残す |
+| 7 | 初めてのときは、インスタンスのスタック `<instance>` を、そのイメージで作る。2 回目からは、`redmine-task` が今動かしているイメージのままスタックを更新し、そのあと `redmine-task` に新しいイメージを入れる。それから `redmine-task` で `db:migrate` と `redmine:plugins:migrate` を実行する |
+| 8 | 初めてのときは、`redmine-task` で初めのデータを入れる(`redmine:load_default_data`。言語は `redmine.settings.default_language`。なければ英語) |
+| 9 | `redmine-web` と `redmine-worker` に新しいイメージを入れる。スタックがイメージを持つように、スタックを通して入れる |
+| 10 | Redmine とプラグインの設定を、`redmine-task` の `rails runner` で入れる(`redmine.settingsMode` のとおり)。値は JSON を 16 進にして渡すので、Ruby に引用符の問題は届かない |
+| 11 | デプロイしたあとの確認。`/login` が `Strict-Transport-Security` 付きの 200 を返し、署名のない `/files/` が 403 を返すこと。要求は、ドメインのホスト名のまま、ディストリビューションそのものの名前に送るので、DNS を待たない([testing.md](testing.md#checks-after-deployment))。`dns.mode` が `external` なら、足すレコードを表示する |
 
-- **2 つの使い方:** すべての段は、インフラのデプロイ用のロールで動かします(SSO の管理者か、承認の要る GitHub の Environment)。Redmine のイメージだけを更新するときは、`bin/deploy --code-only` で、段 5〜7、9、11 だけを、GitHub Actions のコードのデプロイ用のロールで動かします([iam.md](iam.md))。
-- **保守の画面:** `redmine-web` と `redmine-worker` の同時実行数の予約を 0 にすると、書き込みを止められます(事故のときなど。[security.md](security.md))。`redmine-web` の同時実行数の予約が 0 のあいだ、関数 URL は要求を断ります。CloudFront のエラーの応答の設定で、そのときに S3 の保守の画面を返します。
-- **同じ設定なら何もしない:** 設定のファイルとイメージが変わっていなければ、何も変えません。
+- **イメージの順番:** Web と worker が新しいイメージになるのは、マイグレーションのあとです。データベースより新しいコードが動くことはありません。マイグレーションが失敗すると、デプロイはそこで止まり、Web と worker は前のイメージのままです。
+- **`--dry-run`:** 段 1〜4 とインスタンスのスタックについて、変更セットを作って表示し、消します。作られるはずのスタックも消します。秘密の値、イメージ、アセット、関数の呼び出しなど、ほかは何も変えません。
+- **`--code-only`:** 段 5〜7、9、11 を、スタックを変えずに、渡された認証情報で動かします(たとえば、GitHub Actions のコードのデプロイ用のロール。[iam.md](iam.md#role-for-deploying-code-github-actions))。関数は直接更新します。立てたインスタンスが要ります。
+- **`--account`:** `infra/account.yaml`(スタック `redmine-account`)を、管理者の自分の認証情報で当てます。それより前には、デプロイ用のロールも CloudFormation のサービスロールも無いからです。アカウントごとに 1 回、最初のデプロイの前に行います。
+- **CloudFormation のロール:** どのスタックも、サービスロール `redmine-cfn-exec` を付けた変更セットで当てます。デプロイ用のロールは、自分ではリソースを作れません([iam.md](iam.md#role-for-deploying-infrastructure))。
+- **保守の画面:** `redmine-web` と `redmine-worker` の同時実行数の予約を 0 にすると、書き込みを止められます(事故のときなど。[security.md](security.md))。CloudFront は、関数 URL からの 502、503、504 に、S3 の保守の画面(`/assets/maintenance.html`)を返します。`redmine-web` の同時実行数の予約が 0 のあいだ、関数 URL は 429 を返します。CloudFront のエラーの応答の設定は 429 を扱えないので、ブラウザーにはその 429 が届きます(下の「確認すること」)。
+- **同じ設定なら何も変えない:** 変更のない変更セットは消し、スタックはそのままにします。イメージは写し直さず、マイグレーションも何もしません。
 - **多くのインスタンスを立てるとき:** インスタンスの数だけ、同じコマンドを繰り返します。順番(先に試す小さなインスタンスから)は、使う側で決めます。
-- **イメージ:** このプロジェクトの CI が、Redmine のバージョンごとにイメージを作り、GitHub Packages のコンテナのレジストリ(`ghcr.io`)に公開します(案。[architecture.md](architecture.md#distribution))。デプロイのコマンドは、digest で指定してそのイメージを取り、立てるアカウントの ECR に置きます。
+- **イメージ:** このプロジェクトの CI が、イメージを GitHub Packages のコンテナのレジストリ(`ghcr.io`)に公開します([architecture.md](architecture.md#distribution))。デプロイのコマンドは digest のまま写すので、ECR のイメージも同じ digest です。
 
+<a id="secrets"></a>
+
+### 秘密の値
+
+CloudFormation は SecureString のパラメーターを作れないので、`bin/deploy` が段 3 で作ります。値を表示することも、コマンドラインに置くこともありません。値は、標準入力の JSON で AWS CLI に渡します。
+
+| パラメーター | 種類 | 値 |
+| --- | --- | --- |
+| `/<instance>/env/SECRET_KEY_BASE` | SecureString | 64 バイトの乱数の 16 進 |
+| `/<instance>/env/REDMINE_DB_PASSWORD` | SecureString | 32 バイトの乱数の 16 進(RDS が断る文字を含まない)。RDS は動的な参照(`{{resolve:ssm-secure:…}}`)で受け取る |
+| `/<instance>/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL のキーペアの秘密鍵(RSA 2048) |
+| `/<instance>/deploy/CLOUDFRONT_PUBLIC_KEY` | String | その公開鍵。インスタンスのスタックが CloudFront に登録する(キーグループ `<instance>-attachments`)。`env/` の下ではないので、関数は読み込まない |
 
 <a id="templates"></a>
 
@@ -150,20 +180,24 @@ bin/deploy path/to/redmine.json             # 立てる、更新する
 
 スタックは、`infra/` に CloudFormation で書きます。`bin/lint` が cfn-lint で検査します。
 
-| ファイル | スタック | 今の中身 |
+| ファイル | スタック | 中身 |
 | --- | --- | --- |
-| `infra/shared.yaml` | `redmine-shared` | ECR のリポジトリ、2 つの AZ のプライベートのサブネットを持つ VPC(インターネットゲートウェイはない)、S3 のゲートウェイのエンドポイント、`network.mode` が `endpoints` のときの、1 つの AZ の SSM と SQS のインターフェースのエンドポイント |
-| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL(パラメーターグループで TLS を必須にし、暗号化、削除保護、自動のバックアップ)、SSM の `REDMINE_DB_HOST` のパラメーター、ジョブのキューと、そのデッドレターキュー、関数 URL(IAM の認証)を持つ `redmine-web` と `redmine-task`(プライベートのサブネットの中)、その実行ロールとロググループ |
+| `infra/account.yaml` | `redmine-account` | 権限の境界 `redmine-boundary`、CloudFormation のサービスロール `redmine-cfn-exec`、ロール `redmine-infra-deploy` と `redmine-github-deploy`、要るときは GitHub の OIDC のプロバイダー([iam.md](iam.md#account-roles)) |
+| `infra/shared.yaml` | `redmine-shared` | ECR のリポジトリ、2 つの AZ のプライベートのサブネットを持つ VPC、S3 のゲートウェイのエンドポイント、共有の SES の受信のルールのセット、外への道。外への道は、1 つの AZ の SSM、SQS、SES のインターフェースのエンドポイント(`network.mode` が `endpoints`)か、NAT インスタンス(`nat`。インターネットゲートウェイ、パブリックのサブネット、起動のときに Elastic IP と経路を引き継ぐ 1 台の Auto Scaling グループ。[rds.md](rds.md#setup-2-nat-instance)) |
+| `infra/shared-edge.yaml` | `redmine-shared-edge`(us-east-1) | Lambda@Edge の関数 `redmine-body-hash`(Node.js 24。コードは `edge/body-hash/index.js` をそのまま埋め込む)と、そのバージョン。コードが変わると、新しいバージョンを作る |
+| `infra/instance-edge.yaml` | `<instance>-edge`(us-east-1) | ドメインの ACM の証明書(DNS で検証)と、`cloudfront.webAclArn` がなければ AWS WAF の Web ACL([security.md](security.md#rules)) |
+| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL。添付ファイル、アセット、メールのバケット。ジョブのキュー、そのデッドレターキュー、失敗したタスクの呼び出しのキュー。3 つの関数と、そのロールとロググループ。worker の SQS のイベントソース。CloudFront(OAC、本文のハッシュの関数、署名付き URL の添付ファイルのビヘイビア、CloudFront Function `<instance>-incoming-size`、保守の画面)。DNS のレコード。SES の ID と受信のルール。EventBridge Scheduler のスケジュール。アラーム |
 
-- **秘密の値:** CloudFormation は SecureString のパラメーターを作れません。`bin/deploy` が `SECRET_KEY_BASE` と `REDMINE_DB_PASSWORD` を作り(手順 3)、RDS のインスタンスは、動的な参照(`{{resolve:ssm-secure:/<instance>/env/REDMINE_DB_PASSWORD}}`)でパスワードを受け取ります。
 - **イメージ:** インスタンスのスタックは、そのアカウントの ECR のイメージを、digest で受け取ります(`ImageUri`)。
-- **PostgreSQL のバージョン:** `DbMajorVersion` には既定の値を置きません。メジャーバージョンは、インスタンスを作るときに、RDS が出しているバージョンと照らして確認します([rds.md](rds.md#database))。
-- **あとの段で足すもの:** `redmine-worker` と、その SQS のイベントソース(ジョブとメールの送信)、CloudFront、S3 のバケットと Lambda@Edge、SES、NAT インスタンス(`network.mode` が `nat`)、アラーム、us-east-1 のスタック、`bin/deploy` そのもの([architecture.md](architecture.md#order-of-work))。
+- **PostgreSQL のバージョン:** `DbMajorVersion` には既定の値を置きません([rds.md](rds.md#database))。
+- **ロール:** スタックが作るロールは、どれもパス `/redmine/` と権限の境界 `redmine-boundary` を持ちます([iam.md](iam.md#account-roles))。
 
 <a id="to-verify"></a>
 
 ## 確認すること
 
-- RDS のインスタンスが、作るときと更新のときに、`ssm-secure` の動的な参照でパスワードを受け取れるか(CloudFormation の資料では対応しているプロパティ。まだ試していない)
 - SES の受信のルールのセットを共有の土台に置き、インスタンスのスタックからルールを足す形が、CloudFormation で作れるか
-- `ghcr.io` から、立てるアカウントの ECR に、digest を変えずにイメージを写す方法(ECR のプルスルーキャッシュが `ghcr.io` に使えるかを含む)
+- RDS のインスタンスが、作るときと更新のときに、`ssm-secure` の動的な参照でパスワードを受け取れるか(CloudFormation の資料では対応しているプロパティ。まだ試していない)
+- crane が `ghcr.io` から写したイメージ(同じ digest)を、Lambda が動かせるか。初めて写すときにかかる時間
+- 本物のアカウントでの `bin/deploy` の全体。今は、偽の AWS CLI と LocalStack でだけテストしている([testing.md](testing.md#deployment-tests))
+- `redmine-web` の同時実行数の予約が 0 のあいだ、ブラウザーに何が見えるか(CloudFront を通った関数 URL の 429)。保守の画面を出す別の方法が要るか

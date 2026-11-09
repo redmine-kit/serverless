@@ -50,36 +50,44 @@ When several instances are set up in the same account, resources that can be com
 | `deployRoleArn` | ○ | | The role the deployment command assumes. Points to the role for deploying infrastructure in the target account ([iam.md](iam.md#role-for-deploying-infrastructure)) |
 | `domain` | ○ | | Host name for web and email (for example `redmine.example.com`) |
 | `dns.mode` | | `route53` | `route53` (put records in a Route 53 hosted zone) or `external` (put the displayed records in another DNS yourself) ([mail.md](mail.md#receiving-domain)) |
+| `dns.hostedZoneId` | With `route53` | | The Route 53 hosted zone of the domain |
+| `account.*` | | | The account's roles, used only by `bin/deploy --account`: `ssoPermissionSet` (default `AdministratorAccess`), `githubRepository` (`owner/repository`; without it, no GitHub Actions roles), `githubInfraEnvironment` (default `infrastructure`), `githubCodeEnvironment` (default `production`), `githubOidcProviderArn` (when the account already has the GitHub OIDC provider) ([iam.md](iam.md#account-roles)) |
 | `network.mode` | | `endpoints` | The route out of the VPC: `endpoints` (VPC endpoints; no way out to the internet) or `nat` (a NAT instance; webhooks and external APIs can be reached) ([rds.md](rds.md#which-to-choose)) |
-| `network.shared` | | `true` | Whether to use the shared base's network or create one per instance |
-| `database.instanceClass` | | `db.t4g.micro` | RDS instance class ([rds.md](rds.md#database)) |
+| `network.shared` | | `true` | Whether to use the shared base's network. Only `true` for now; a VPC per instance is not built |
+| `database.majorVersion` | ○ | | The PostgreSQL major version, for example `"17"`. Checked against the versions RDS offers when the instance is created ([rds.md](rds.md#database)) |
+| `database.instanceClass` | | `db.t4g.micro` | RDS instance class |
 | `database.storageGb` | | 20 | RDS storage (gp3) |
 | `lambda.webMemoryMb` | | 2048 | Memory of `redmine-web` |
 | `lambda.webReservedConcurrency` | | 10 | Reserved concurrency of `redmine-web` |
 | `lambda.workerReservedConcurrency` | | 3 | Reserved concurrency of `redmine-worker`. `redmine-task` is fixed at 2 ([tasks.md](tasks.md#kinds-of-events)) |
-| `lambda.warmup` | | `false` | Whether to send warm-up invocations during business hours ([lambda.md](lambda.md#waiting-for-start-up)) |
+| `lambda.warmup` | | `false` | Whether to send warm-up invocations during business hours ([lambda.md](lambda.md#waiting-for-start-up)). Only `false` for now |
+| `uploads.maxBytes` | | 104857600 (100 MB) | The largest attachment. The CloudFront Function on `/incoming/*` rejects larger uploads with 413 |
 | `mail.receive` | | `true` | Whether to receive email |
 | `mail.perProjectAddresses` | | `false` | Whether to use addresses per project. If `false`, the same as standard Redmine ([mail.md](mail.md#addresses-per-project)) |
 | `mail.globalLocalPart` | | `redmine` | The part before `@` of the global address |
 | `webhooks` | | `false` | Initial value of Redmine's webhook setting (`webhooks_enabled`). Webhooks work only with `network.mode` set to `nat` ([lambda.md](lambda.md#background-jobs)) |
 | `cloudfront.plan` | | `free` | CloudFront pricing plan. `free`, `pro` or `payg` (pay-per-use) ([security.md](security.md#plan-and-cost)) |
+| `cloudfront.webAclArn` | | none | To use a web ACL you prepared yourself (in us-east-1). If set, `waf.*` is not used |
 | `waf.loginRateLimit` | | 20 | WAF login rate limit (per 5 minutes; [security.md](security.md#rules)) |
 | `waf.rateLimit` | | 1000 | WAF overall rate limit (per 5 minutes) |
 | `waf.commonRuleSet` | | `count` | Whether the WAF Common Rule Set is `count` (count only) or `block` |
-| `waf.commonRuleSetCountOnly` | | `["SizeRestrictions_BODY"]` | Rules that only count even with `block` |
-| `cloudfront.webAclArn` | | none | To use a web ACL you prepared yourself. If set, `waf.*` is not used |
-| `redmine.version` | | The version in `redmine.lock` | The Redmine version to use. How to check before upgrading is in [upgrade.md](upgrade.md) |
-| `image` | | This project's image | To use a derived image built by the adopter (with added themes or plugins), its location and digest (`image.repository`, `image.digest`). How to build a derived image is in [architecture.md](architecture.md#derived-images) |
+| `waf.commonRuleSetCountOnly` | | `["SizeRestrictions_BODY"]` | The rule that only counts even with `block` (one rule) |
+| `image.repository` | | `ghcr.io/redmine-kit/serverless` | The image to use. A derived image built by the adopter (with added themes or plugins) is set here ([architecture.md](architecture.md#derived-images)). The image decides the Redmine version; how to check before upgrading is in [upgrade.md](upgrade.md) |
+| `image.digest` | With `image` | The digest of `main` at that moment | The image's digest (`sha256:…`). Without it, `bin/deploy` uses the current digest of the `main` tag and shows it so that it can be pinned |
 | `redmine.settings` | | none | Values of Redmine administration settings (`host_name`, `default_language`, `mail_from`, etc.) |
-| `redmine.settingsMode` | | `initial` | `initial` (set only when first set up; can be changed on the page afterwards) or `enforce` (set again on every deployment) |
-| `redmine.pluginSettings` | | none | Setting values for the plugins, by plugin name (`redmine_serverless`, `redmine_serverless_s3`, `redmine_serverless_ses`, `redmine_serverless_sqs`) |
+| `redmine.settingsMode` | | `initial` | `initial` (set only the settings not stored yet; can be changed on the page afterwards) or `enforce` (set again on every deployment) |
+| `redmine.pluginSettings` | | none | Setting values for the plugins, by plugin name (`redmine_serverless`, `redmine_serverless_s3`, `redmine_serverless_ses`, `redmine_serverless_sqs`). They are merged into the plugin's stored settings |
+| `schedule.timezone` | | `UTC` | The time zone of the scheduled rake ([tasks.md](tasks.md#scheduled-runs)) |
+| `schedule.sendReminders` | | `false` | Whether to send the reminder mails (`redmine:send_reminders`) on weekday mornings |
 | `logs.retentionDays` | | 90 | CloudWatch Logs retention in days (including Lambda@Edge log groups) |
 | `retention.recordsDays` | | 90 | Days to keep the plugin's records (received email, failed jobs) |
 | `retention.mailDays` | | 30 | Days to keep email in the mail bucket (`processed/` and `inbound/`) |
 | `retention.noncurrentVersionDays` | | 30 | Days to keep old versions of attachments |
 | `retention.backupDays` | | 7 | Days to keep RDS automated backups (up to 35). Backups up to the provisioned storage are free ([rds.md](rds.md#settings)) |
 | `alarms.snsTopicArn` | | none | SNS topic to send alarms to |
-| `tags` | | none | Tags added to every resource |
+| `tags` | | none | Tags added to every stack, and so to the resources |
+
+- **Fields that the stacks do not use yet:** `mail.perProjectAddresses`, `mail.globalLocalPart`, `webhooks`, `cloudfront.plan` and `retention.recordsDays` are checked by the schema; they take effect with the plugins' settings and the CloudFront plan, which come later.
 
 The list of retention periods is in [security.md](security.md#retention-periods).
 
@@ -108,47 +116,70 @@ The shape of the configuration file is defined by a JSON Schema (`schema/redmine
 
 ## Deployment commands
 
+`bin/deploy` needs only Docker. It builds a tools image (`deploy/Dockerfile`: the AWS CLI, jq, OpenSSL, crane and check-jsonschema, at pinned versions; the Python packages with hashes) and runs `deploy/deploy.sh` in it. AWS credentials come from the `AWS_*` environment variables or from `~/.aws` (read-only).
+
 ```sh
-bin/deploy path/to/redmine.json --dry-run   # only show what will change
-bin/deploy path/to/redmine.json             # set up or update
+bin/deploy path/to/redmine.json --account    # once per account, as an administrator
+bin/deploy path/to/redmine.json --dry-run    # only show what will change
+bin/deploy path/to/redmine.json              # set up or update
+bin/deploy path/to/redmine.json --code-only  # update only the image
 ```
 
 | Step | What it does |
 | --- | --- |
-| 1 | Check the configuration file against the JSON Schema |
-| 2 | Create the shared base stacks (`redmine-shared` and `redmine-shared-edge` in us-east-1) if they do not exist, or update them if they do |
-| 3 | Create the secrets in SSM if they do not exist (leave them unchanged if they do), including the private key of the CloudFront key pair for attachment URLs; its public key goes into the instance stack. This comes before the instance stack, because RDS reads the database password from SSM when it is created |
-| 4 | Create or update the instance stacks (`<instance>` and `<instance>-edge` in us-east-1). Reapply the retention period to the log groups Lambda@Edge created in each Region ([security.md](security.md#retention-periods)) |
-| 5 | Put the image of the version to use into that account's ECR (Lambda can use only images in ECR in the same Region) |
-| 6 | Sync assets to S3 |
-| 7 | Update the image of `redmine-task` and run `db:migrate` and `redmine:plugins:migrate`. On the first setup, they create the schema in the empty database |
-| 8 | When setting up for the first time, load the initial data in `redmine-task` (`redmine:load_default_data`; the language is `redmine.settings.default_language`, English if not set) |
-| 9 | Update the images of `redmine-web` and `redmine-worker` |
-| 10 | Apply Redmine and plugin settings (according to `redmine.settingsMode`; rake task `redmine_serverless:apply_settings`) |
-| 11 | Checks after deployment ([testing.md](testing.md#checks-after-deployment)) |
+| 1 | Check the configuration file against the JSON Schema, then assume `deployRoleArn` (unless the credentials are already that role's) |
+| 2 | Create or update the shared base stacks (`redmine-shared`, and `redmine-shared-edge` in us-east-1). With `mail.receive`, make the shared receipt rule set the active one |
+| 3 | Create the secrets in SSM if they do not exist; existing ones are left unchanged ("Secrets" below). This comes before the instance stack, because RDS reads the database password from SSM when it is created |
+| 4 | Create or update `<instance>-edge` in us-east-1 (the certificate and the web ACL). Apply `logs.retentionDays` to the log groups that Lambda@Edge has created in each Region ([security.md](security.md#retention-periods)) |
+| 5 | Copy the image by digest into the account's ECR with crane (Lambda can use only images in ECR in the same Region). The repository's tags are immutable, so the tag is made from the digest (`sha256-<hex>`). An image already there is not copied again |
+| 6 | Sync the assets from the image to S3 (`/assets/`), with the maintenance page (`deploy/maintenance.html`). Old files stay for pages still open in browsers |
+| 7 | The first time, create the instance stack `<instance>` with the image. Later, update the stack keeping the image `redmine-task` runs now, then give `redmine-task` the new image. Then run `db:migrate` and `redmine:plugins:migrate` in `redmine-task` |
+| 8 | The first time, load the default data in `redmine-task` (`redmine:load_default_data`; the language is `redmine.settings.default_language`, English if not set) |
+| 9 | Give `redmine-web` and `redmine-worker` the new image, through the stack so that the stack holds it |
+| 10 | Apply Redmine and plugin settings (according to `redmine.settingsMode`) with `rails runner` in `redmine-task`. The values go in as hex-encoded JSON, so no quoting reaches Ruby |
+| 11 | Checks after deployment: `/login` returns 200 with `Strict-Transport-Security`, and `/files/` without a signature returns 403. The requests go to the distribution's own name with the domain's host name, so they do not wait for DNS ([testing.md](testing.md#checks-after-deployment)). With `dns.mode` `external`, show the records to add |
 
-- **Two ways to run it:** All steps run with the role for deploying infrastructure (an SSO administrator, or a GitHub Environment that requires approval). To update only the Redmine image, `bin/deploy --code-only` runs only steps 5–7, 9 and 11 with the GitHub Actions role for deploying code ([iam.md](iam.md)).
-- **Maintenance page:** Writes can be stopped by setting the reserved concurrency of `redmine-web` and `redmine-worker` to 0 (for example, during an incident; [security.md](security.md)). While the reserved concurrency of `redmine-web` is 0, the function URL rejects requests. CloudFront's custom error response settings return the maintenance page from S3 in that case.
-- **No changes for the same configuration:** If the configuration file and the image have not changed, nothing is changed.
+- **Order of the image:** Web and worker get the new image only after the migrations, so they never run code newer than the database. When a migration fails, the deployment stops there and web and worker keep their image.
+- **`--dry-run`:** Steps 1–4 and the instance stack make change sets, show them, and delete them; a stack that would be created is deleted again. Nothing else is changed: no secrets, image, assets or invocations.
+- **`--code-only`:** Steps 5–7, 9 and 11, without stack changes, with the credentials given (for example, the role for deploying code in GitHub Actions; [iam.md](iam.md#role-for-deploying-code-github-actions)). The functions are updated directly. It needs a deployed instance.
+- **`--account`:** Applies `infra/account.yaml` (the stack `redmine-account`) with the administrator's own credentials, because the role for deploying and the CloudFormation service role do not exist before it. Once per account, before the first deployment.
+- **CloudFormation's role:** Every stack is applied through change sets with the service role `redmine-cfn-exec`; the role for deploying cannot create resources itself ([iam.md](iam.md#role-for-deploying-infrastructure)).
+- **Maintenance page:** Writes can be stopped by setting the reserved concurrency of `redmine-web` and `redmine-worker` to 0 (for example, during an incident; [security.md](security.md)). CloudFront returns the maintenance page from S3 (`/assets/maintenance.html`) for 502, 503 and 504 from the function URL. While the reserved concurrency of `redmine-web` is 0, the function URL answers 429, which CloudFront's custom error responses cannot replace (they do not take 429), so browsers get that 429 ("To verify" below).
+- **No changes for the same configuration:** A change set without changes is deleted and the stack is left as it is. The image is not copied again, and the migrations do nothing.
 - **When setting up many instances:** Repeat the same command for each instance. The order (starting with a small instance used for trying things first) is decided by the adopter.
-- **Images:** This project's CI builds an image for each Redmine version and publishes it to the GitHub Packages container registry (`ghcr.io`) (proposal; [architecture.md](architecture.md#distribution)). The deployment command pulls that image by digest and puts it in the target account's ECR.
+- **Images:** This project's CI publishes the image to the GitHub Packages container registry (`ghcr.io`) ([architecture.md](architecture.md#distribution)). The deployment command copies it by digest, so the image in ECR has the same digest.
+
+### Secrets
+
+CloudFormation cannot create SecureString parameters, so `bin/deploy` creates them in step 3. A value is never printed and never passed on a command line: it goes to the AWS CLI as JSON on standard input.
+
+| Parameter | Type | Value |
+| --- | --- | --- |
+| `/<instance>/env/SECRET_KEY_BASE` | SecureString | 64 random bytes in hex |
+| `/<instance>/env/REDMINE_DB_PASSWORD` | SecureString | 32 random bytes in hex (no characters that RDS refuses). RDS takes it with a dynamic reference (`{{resolve:ssm-secure:…}}`) |
+| `/<instance>/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | The private key (RSA 2048) of the key pair for signed attachment URLs |
+| `/<instance>/deploy/CLOUDFRONT_PUBLIC_KEY` | String | Its public key, which the instance stack registers in CloudFront (the key group `<instance>-attachments`). It is not under `env/`, so the functions do not load it |
 
 ### Templates
 
 The stacks are written in CloudFormation in `infra/`. `bin/lint` checks them with cfn-lint.
 
-| File | Stack | Contents now |
+| File | Stack | Contents |
 | --- | --- | --- |
-| `infra/shared.yaml` | `redmine-shared` | The ECR repository, the VPC with two private subnets in two AZs (no internet gateway), the S3 gateway endpoint, and the SSM and SQS interface endpoints in one AZ with `network.mode` `endpoints` |
-| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL (TLS required by the parameter group, encrypted, deletion protection, automated backups), the `REDMINE_DB_HOST` parameter in SSM, the job queue and its dead-letter queue, `redmine-web` with its function URL (IAM authentication) and `redmine-task` in the private subnets, their execution roles and log groups |
+| `infra/account.yaml` | `redmine-account` | The permissions boundary `redmine-boundary`, the CloudFormation service role `redmine-cfn-exec`, the roles `redmine-infra-deploy` and `redmine-github-deploy`, and the GitHub OIDC provider if needed ([iam.md](iam.md#account-roles)) |
+| `infra/shared.yaml` | `redmine-shared` | The ECR repository, the VPC with two private subnets in two AZs, the S3 gateway endpoint, the shared SES receipt rule set, and the route out: the SSM, SQS and SES interface endpoints in one AZ (`network.mode` `endpoints`), or a NAT instance (`nat`: an internet gateway, a public subnet, and an Auto Scaling group of one instance that takes over an Elastic IP and the route at start; [rds.md](rds.md#setup-2-nat-instance)) |
+| `infra/shared-edge.yaml` | `redmine-shared-edge` (us-east-1) | The Lambda@Edge function `redmine-body-hash` (Node.js 24, code inline from `edge/body-hash/index.js`) and its version; a new version is made when the code changes |
+| `infra/instance-edge.yaml` | `<instance>-edge` (us-east-1) | The ACM certificate of the domain (DNS validation), and the AWS WAF web ACL unless `cloudfront.webAclArn` is set ([security.md](security.md#rules)) |
+| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL; the attachment, assets and mail buckets; the job queue, its dead-letter queue and the queue of failed task invocations; the three functions, their roles and log groups; the worker's SQS event source; CloudFront with OAC, the body-hash function, the attachment behaviors with signed URLs, the CloudFront Function `<instance>-incoming-size` and the maintenance page; DNS records; the SES identity and receipt rule; the EventBridge Scheduler schedules; alarms |
 
-- **Secrets:** CloudFormation cannot create SecureString parameters. `bin/deploy` creates `SECRET_KEY_BASE` and `REDMINE_DB_PASSWORD` (step 3), and the RDS instance takes the password with a dynamic reference (`{{resolve:ssm-secure:/<instance>/env/REDMINE_DB_PASSWORD}}`).
 - **The image:** The instance stack takes the image in the account's ECR by digest (`ImageUri`).
-- **The PostgreSQL version:** `DbMajorVersion` has no default. The major version is checked against the versions RDS offers when the instance is created ([rds.md](rds.md#database)).
-- **Added in later stages:** `redmine-worker` and its SQS event source (jobs and mail sending), CloudFront, the S3 buckets and Lambda@Edge, SES, the NAT instance (`network.mode` `nat`), alarms, the us-east-1 stacks and `bin/deploy` itself ([architecture.md](architecture.md#order-of-work)).
+- **The PostgreSQL version:** `DbMajorVersion` has no default ([rds.md](rds.md#database)).
+- **Roles:** Every role the stacks create has the path `/redmine/` and the permissions boundary `redmine-boundary` ([iam.md](iam.md#account-roles)).
 
 ## To verify
 
 - Whether CloudFormation can build the layout where the SES receipt rule set is in the shared base and instance stacks add rules to it
 - Whether the RDS instance accepts the password through the `ssm-secure` dynamic reference on creation and on updates (it is a property that supports it in the CloudFormation documentation; not tried yet)
-- How to copy an image from `ghcr.io` to the target account's ECR without changing its digest (including whether ECR pull through cache can be used with `ghcr.io`)
+- Whether Lambda runs the image that crane copied from `ghcr.io` (the same digest), and how long the first copy takes
+- The whole of `bin/deploy` on a real account: it is tested only against a fake AWS CLI and LocalStack ([testing.md](testing.md#deployment-tests))
+- What browsers see while the reserved concurrency of `redmine-web` is 0 (the function URL's 429 through CloudFront), and whether another way to show the maintenance page is needed

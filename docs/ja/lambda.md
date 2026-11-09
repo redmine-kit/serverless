@@ -357,7 +357,7 @@ flowchart LR
 | 項目 | 値 | 理由 |
 | --- | --- | --- |
 | 関数 | `redmine-body-hash`。既定のビヘイビアの、オリジンへの要求(origin request)に付ける。本文を含める(`IncludeBody`) | 本文を読めるのは Lambda@Edge だけ。オリジンへの要求のところなら、本文を 1 MB まで読める(ビューアーからの要求のところでは 40 KB まで) |
-| ランタイム | Node.js(Lambda@Edge が対応する最新のもの)。依存の npm のパッケージは使わず、`node:crypto` だけで書く | Lambda@Edge は Node.js と Python だけで、コンテナイメージと arm64 には対応しない |
+| ランタイム | Node.js 24(`nodejs24.x`。Lambda@Edge が対応する最新のもの)、x86_64、128 MB、5 秒。依存の npm のパッケージは使わず、`node:crypto` だけで書く。コードは `infra/shared-edge.yaml` に埋め込み、`bin/test-edge` でテストする([testing.md](testing.md#edge-function-tests)) | Lambda@Edge は Node.js と Python だけで、コンテナイメージと arm64 には対応しない |
 | アーキテクチャ、メモリ、タイムアウト | x86_64、128 MB、5 秒 | ハッシュの計算だけ |
 | リージョン | us-east-1(バージニア北部) | Lambda@Edge の関数は us-east-1 に作る決まり |
 | 置き場所 | このリポジトリの `edge/body-hash/` | Redmine の外で動くので、プラグインにしない |

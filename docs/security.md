@@ -217,5 +217,5 @@ Risks this design cannot fully prevent, covered by operations.
 - Which rules in the WAF Common Rule Set block legitimate Redmine requests (body size, XSS patterns, etc.)
 - Whether Rails' `remote_ip` is the user's IP address for requests that pass through CloudFront
 - The cost of GuardDuty and S3 malware scanning
-- How to apply the retention setting to Lambda@Edge log groups in all Regions (including the permissions `bin/deploy` needs to apply it)
+- Whether `bin/deploy` can apply the retention setting to the Lambda@Edge log groups in every Region with the role for deploying (`logs:PutRetentionPolicy` on that log group, `logs:DescribeLogGroups` and `ec2:DescribeRegions`; [iam.md](iam.md#role-for-deploying-infrastructure))
 - How long WAF sampled requests can be viewed

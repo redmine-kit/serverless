@@ -200,17 +200,20 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 
 メールの送信(`aws-actionmailer-ses`)とジョブ(`aws-activejob-sqs`)は、AWS の公式の gem を使い、送信の仕組みやキューのアダプターは書きません。ジョブの設定は `redmine_serverless_sqs` が持ちます。
 
-<a id="repository-layout-planned"></a>
+<a id="repository-layout"></a>
 
-## リポジトリの構成(予定)
+## リポジトリの構成
 
 ```text
 serverless/
   image/          コンテナイメージ(Dockerfile、設定ファイル、起動のスクリプト、拡張機能のスクリプト、タスクのハンドラー)
-  edge/           Lambda@Edge の関数(本文のハッシュを入れる redmine-body-hash)
-  bin/            手元で使うコマンド(rake、rails は本番に向けて。test、check-migrations は手元と CI で)
-  infra/          CloudFormation(VPC、データベース、S3、SQS、Lambda、CloudFront、SES。us-east-1 の Lambda@Edge と CloudFront の証明書)
-  .github/        ビルドとデプロイのワークフロー
+  edge/           CloudFront で動く関数。redmine-body-hash(Lambda@Edge。本文のハッシュを入れる)と、アップロードの大きさを制限する CloudFront Function、そのテスト
+  infra/          CloudFormation(アカウントのロール。共有の土台。インスタンスごとの VPC の利用、データベース、S3、SQS、Lambda、CloudFront、WAF、SES、スケジュール、アラーム。us-east-1 の Lambda@Edge、証明書、Web ACL)
+  deploy/         bin/deploy の段と、その道具のイメージ
+  schema/         redmine.json の JSON Schema
+  bin/            コマンド。ビルド、検査、テスト、update-gems、デプロイ
+  test/           プラグインの外のテスト(イメージ、デプロイ、LocalStack の上の Lambda)と、それが使うサービス
+  .github/        CI とほかのワークフロー
   docs/           資料
 ```
 

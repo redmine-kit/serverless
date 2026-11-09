@@ -44,7 +44,9 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 | Redmine 本体のテスト | プラグインを入れても、本体の動きが壊れていないか | Redmine のテスト(ユニット、機能、統合) | コミットのたび |
 | システムのテスト | ブラウザーでのアップロード、ダウンロード、サムネイル | Capybara、Selenium(ヘッドレスの Chrome)、moto | コミットのたび |
 | イメージのテスト | 読み取り専用のファイルシステムと権限の少ないユーザーで、3 つの役割が起動するか | Docker、Lambda のランタイムインターフェイスエミュレーター | イメージを作るたび |
-| Lambda の結合のテスト | 同じイメージを 3 つの関数として作り、関数 URL、SQS からのジョブ、`redmine-task` の呼び出しが、S3、SQS、SSM と一緒に動くか | LocalStack(Hobby) | イメージを作るたび |
+| CloudFront の関数のテスト | Lambda@Edge の関数と CloudFront Function、テンプレートが同じコードを持つこと | node:test(Node.js の標準) | コミットのたび |
+| デプロイのテスト | 設定のスキーマ、スタックのパラメーター、`bin/deploy` の段 | check-jsonschema、偽の AWS CLI、Minitest | コミットのたび |
+| Lambda の結合のテスト | 同じイメージを 3 つの関数として作り、関数 URL、SQS からのジョブ、`redmine-task` の呼び出しが、SQS、SSM と一緒に動くか | LocalStack(Hobby) | イメージを作るたび |
 | デプロイしたあとの確認 | 本物の AWS の上での動き | `bin/smoke-test`(自前) | デプロイのたび |
 | 計測 | 起動にかかる時間、メモリ、要求の時間 | CloudWatch のログとメトリクス | 初めのデプロイと、Redmine を上げたとき |
 
@@ -142,7 +144,7 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | --- | --- | --- |
 | SDK の `stub_responses` | ユニットと機能のテスト。SES のエラーを 1 つずつ起こすテスト | — |
 | moto | プラグインの統合のテストとシステムのテスト(S3、SQS、SSM)。SES v2 の `SendEmail` は、moto が再現できるかを確認してから使い、それまでは SDK の `stub_responses` で代える | — |
-| LocalStack(Hobby) | Lambda の結合のテスト。同じイメージの 3 つの関数、関数 URL、SQS のイベントソースマッピング | SES v2、CloudFront、RDS は Hobby にない。SES v2 は moto、CloudFront はデプロイしたあとの確認で確認し、データベースは PostgreSQL のコンテナにする |
+| LocalStack(Hobby) | Lambda の結合のテスト。同じイメージの 3 つの関数、関数 URL、SQS のイベントソースマッピング | SES v2、ECR、CloudFront、RDS は Hobby にない。SES v2 は moto、CloudFront はデプロイしたあとの確認で確認し、データベースは PostgreSQL のコンテナにする。イメージは、ECR を通さず、手元の Docker から LocalStack の Lambda に渡す |
 
 <a id="administration-pages"></a>
 
@@ -184,6 +186,39 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 - **`worker`:** 同じくエミュレーターで、SQS の形のイベントを渡し、ジョブが実行されること(プロジェクトが消え、その通知のメールが SQS に積まれる)と、許可していないジョブのクラスが実行されないことを確認します。gem は、ジョブが成功したあと、イベントの ARN から組み立てたキューの URL(`https://sqs.<region>.amazonaws.com/...`)でメッセージを消します。この URL は moto に向けられないので、ここではその削除の失敗だけを認め、削除は Lambda の結合のテストで確認します。
 - **中身:** ImageMagick の `convert`、Ghostscript、Pandoc(3.8.3 以上)が動くこと、`/var/task` と `/opt` のすべてを権限の少ないユーザーが読めること、ビルドしたアセットがあることを確認します。タスクのハンドラーの単体テストも、イメージの中で動かします。push したマニフェストが arm64 だけで、インデックスの形になっていないかは、イメージを push するときに確認します。
 
+<a id="edge-function-tests"></a>
+
+## CloudFront の関数のテスト
+
+`bin/test-edge` が、Node.js のイメージの中で、`node:test` で `edge/` のテストを実行します。npm のパッケージは使いません。
+
+- **`redmine-body-hash`(Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ(フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文(1 MB を超えるもの)に 413 を返すこと、要求のほかの項目を変えないこと。
+- **`<instance>-incoming-size`(CloudFront Function):** CloudFront と同じく、上限を書き込んだただのスクリプトとして実行します。上限までの PUT は通り、超えると 413、正しい `Content-Length` がないと 411、ほかのメソッドは通ること。
+- **テンプレート:** コードはテンプレート(`infra/shared-edge.yaml`、`infra/instance.yaml`)に埋め込むので、テンプレートがファイルと同じ行を持つことも確認します。
+
+<a id="deployment-tests"></a>
+
+## デプロイのテスト
+
+`bin/test-deploy` が、AWS を使わずに、`bin/deploy` の道具のイメージの中で `bin/deploy` をテストします。
+
+- **スキーマ:** [deploy-config.md](deploy-config.md#example) の例と、`test/deploy/valid/` のファイルが通ること。`test/deploy/invalid/` のファイルが、どれも通らないこと(項目がない、`route53` なのにホストゾーンがない、digest のないイメージ、知らない項目など)。
+- **スタックのパラメーター:** 正しい設定のそれぞれで、`deploy/params.jq` がテンプレートごとに作るパラメーターが、そのテンプレートのパラメーターであり、既定の値のないパラメーターがすべて渡されること。既定の値と、渡した値も比べます。
+- **段:** すべての呼び出しを記録する偽の `aws`、`crane`、`curl`(`test/deploy/fake/`)に対して、`deploy/deploy.sh` を動かします。初めてのときと 2 回目からの段の順番(Web と worker が新しいイメージになる前に、タスクがマイグレーションをする)、`--dry-run`(何も実行せず、書かず、呼ばない)、`--code-only`、`--account`、変更のないスタック、デプロイを止めるマイグレーションの失敗、確認の失敗、どの呼び出しより前に止まる正しくない設定。秘密の値は、形、SecureString であること、スタックの公開鍵が秘密鍵と合うこと、コマンドラインにも出力にも出ないことを確認します。
+- **設定のコード:** 設定を入れる Ruby のコードを、Redmine の `Setting` の代わりの物に対して Ruby で実行します(`initial` と `enforce`、プラグインの設定を足し合わせること)。
+
+<a id="lambda-integration-tests"></a>
+
+## Lambda の結合のテスト
+
+`bin/test-lambda` が、LocalStack の上で、イメージを Lambda として動かします(専用の Compose のプロジェクト、`test/lambda/compose.yml`)。`LOCALSTACK_AUTH_TOKEN` が要り、なければ飛ばします。CI では、Redmine のリリースのイメージのジョブで実行します。
+
+- **イメージ:** ライセンスに含まれていれば LocalStack の ECR に置きます。含まれていなければ、手元で ECR の名前のタグを付け、LocalStack の Lambda が同じ Docker から起動します。
+- **秘密の値:** `deploy/lib.sh` の `create_secrets` が SSM に秘密の値を作り、2 回目は変えないこと。
+- **`redmine-task`:** `bin/deploy` と同じく、`deploy/lib.sh` の `task` で呼びます。`db:migrate`、`redmine:load_default_data`、`SECRET_KEY_BASE` を SSM から読むこと、失敗したコマンドが失敗になること、設定のコード。
+- **`redmine-worker`:** SQS のイベントソースマッピングから動かします。タスクが `DestroyProjectJob` を積み、worker が実行し、可視性タイムアウトのあとも、ジョブが 1 回しか実行されないことで、メッセージが消えたことを確認します(イメージのテストでは、moto のためにこれを確認できません)。通知のメールは、ライセンスに SES v2 が含まれるときに確認します。
+- **`redmine-web`:** 関数 URL を通した `/login`。Lambda Web Adapter を通る経路です。
+
 <a id="infrastructure-checks"></a>
 
 ## インフラの検査
@@ -199,7 +234,7 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 
 ## デプロイしたあとの確認
 
-デプロイのたびに、`bin/smoke-test` で、本物の AWS の上の動きを確認します。確認用のプロジェクトとユーザーを用意し、ふだんのデータに触れないようにします。
+デプロイのたびに、`bin/smoke-test` で、本物の AWS の上の動きを確認します。確認用のプロジェクトとユーザーを用意し、ふだんのデータに触れないようにします。`bin/smoke-test` はまだ作っていません。今は、`bin/deploy` の最後の段が、ログインの画面(`Strict-Transport-Security` 付きの 200)と、署名のない `/files/` が断られることを確認します([deploy-config.md](deploy-config.md#deployment-commands))。
 
 | 確認すること | 期待する結果 |
 | --- | --- |
@@ -244,19 +279,21 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 
 ## CI の順番
 
-GitHub Actions で、次の順に実行します。arm64 のイメージは、arm64 のランナーで作ります。
+GitHub Actions(`.github/workflows/ci.yml`)で、次の順にジョブを実行します。arm64 のイメージは、arm64 のランナーで作ります。プラグインのテストは、それぞれのリポジトリで実行します。
 
 ```mermaid
 flowchart TD
-  a["静的な検査"] --> b["プラグインの<br>テスト"]
-  b --> c["Redmine 本体の<br>テスト"]
-  c --> d["システムの<br>テスト"]
-  d --> e["イメージを<br>作る"]
-  e --> f["イメージの<br>テスト"]
-  f --> f2["Lambda の<br>結合のテスト<br>(LocalStack)"]
-  f2 --> g["デプロイ"]
-  g --> h["デプロイ<br>したあとの確認"]
+  a["静的な検査<br>(bin/lint)"] --> e["CloudFront の関数<br>(bin/test-edge)"]
+  a --> d["デプロイ<br>(bin/test-deploy)"]
+  a --> s["サービス<br>(bin/test-services)"]
+  a --> c["Redmine 本体のテスト<br>(bin/test-core)"]
+  a --> i["イメージ: 作る、イメージのテスト、<br>Lambda のテスト<br>(bin/test-image、bin/test-lambda)"]
+  s --> p["イメージの公開<br>(main だけ)"]
+  c --> p
+  i --> p
 ```
+
+デプロイは CI に含めません。`bin/deploy` は、管理者がデプロイを決めたときに動かします([deploy-config.md](deploy-config.md#deployment-commands))。
 
 - **Redmine のバージョン(matrix):** イメージのテストと Redmine 本体のテストは、2 通りで実行します。イメージが使う Redmine のリリース(今は 7.0.3。SHA256 を確認したリリースの tar.gz と `image/Gemfile.lock`)と、次のリリース(7.1)になる Redmine の `master` のブランチです(`7.1-stable` のブランチはまだない。2026-11-09 に確認)。`master` は GitHub から固定せずに取り(`bin/build-image` と `bin/test-core` に `REDMINE_BRANCH=master`)、gem は lock を使わずに解決し、そのジョブは失敗しても実行全体を失敗にしません(`continue-on-error`)。次のリリースで壊れるところを、早めに見るためです。そのために、CI は毎週も動かします。`master` から作ったイメージは、デプロイしません。7.1 が出たら、matrix を 7.1(固定)と次の `master` に移します。
 - **更新:** Dependabot が、Actions(`.github/workflows/actions.lock` も)、Docker のイメージ、検査用の gem について、公開から 3 日(パッチ)か 7 日(ほか)たったバージョンへの更新の PR を毎週作ります。`image/Gemfile.lock` は、Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージの中で解決するためです。毎週のワークフロー(`.github/workflows/update-gems.yml`)が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作り、そのブランチで CI を動かします。lock をコミットしておくのは、どの組み立ても、確認済みの同じバージョンの gem を、チェックサムと一緒に入れるためです。

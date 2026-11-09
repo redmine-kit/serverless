@@ -38,16 +38,16 @@ flowchart LR
 
 | ロール | 引き受けるもの | 役目 |
 | --- | --- | --- |
-| `redmine-web-execution` | Lambda(`redmine-web`) | 画面、添付ファイル、ジョブを積む、管理画面 |
-| `redmine-worker-execution` | Lambda(`redmine-worker`) | ジョブの実行(メールの送信、プロジェクトの削除など) |
-| `redmine-task-execution` | Lambda(`redmine-task`) | rake、`rails runner`、メールの取り込み |
+| `redmine-web` | Lambda(`redmine-web`) | 画面、添付ファイル、ジョブを積む、管理画面 |
+| `redmine-worker` | Lambda(`redmine-worker`) | ジョブの実行(メールの送信、プロジェクトの削除など) |
+| `redmine-task` | Lambda(`redmine-task`) | rake、`rails runner`、メールの取り込み |
 | `redmine-scheduler` | EventBridge Scheduler | 定期の rake と、業務時間の温めの呼び出し |
-| `redmine-body-hash-execution` | Lambda と Lambda@Edge(`redmine-body-hash`) | 要求の本文のハッシュを入れる([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge))。ログを書くだけ |
+| `redmine-body-hash` | Lambda と Lambda@Edge(`redmine-body-hash`) | 要求の本文のハッシュを入れる([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge))。ログを書くだけ |
 | `redmine-github-deploy` | GitHub Actions(OIDC) | コードのデプロイ。イメージの push、アセットの同期、関数の更新、migration |
 | `redmine-infra-deploy` | SSO の管理者、承認が要る GitHub の Environment(OIDC) | `bin/deploy` でスタックを当てる。設定のファイルの `deployRoleArn` が指すロール |
 | `redmine-cfn-exec` | CloudFormation | スタックのリソースを作る(CloudFormation のサービスロール) |
 
-ロールの名前は仮です。
+スタックが作るロールは、パス `/redmine/` の下に置き(たとえば `arn:aws:iam::<account>:role/redmine/redmine-web`)、権限の境界 `redmine-boundary` を付けます。最後の 3 つと権限の境界は、`infra/account.yaml` にあります(下の「アカウントのロール」)。
 
 <a id="permissions-common-to-the-three-functions"></a>
 
@@ -158,10 +158,12 @@ flowchart LR
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
 | `ecr:GetAuthorizationToken` | `*`(対象を絞れない) | ECR へのログイン |
-| `ecr:BatchCheckLayerAvailability`、`ecr:InitiateLayerUpload`、`ecr:UploadLayerPart`、`ecr:CompleteLayerUpload`、`ecr:PutImage`、`ecr:BatchGetImage` | Redmine のリポジトリ | イメージの push |
-| `s3:PutObject`、`s3:GetObject`、`s3:ListBucket` | アセットのバケット | アセットの同期([lambda.md](lambda.md#serving-assets)) |
-| `lambda:UpdateFunctionCode`、`lambda:GetFunction`、`lambda:GetFunctionConfiguration` | 3 つの関数 | イメージの更新と、更新が終わるのを待つ |
-| `lambda:InvokeFunction` | `redmine-task` | デプロイのときの migration([tasks.md](tasks.md#migrations-during-deployment)) |
+| `ecr:DescribeImages`、`ecr:BatchCheckLayerAvailability`、`ecr:InitiateLayerUpload`、`ecr:UploadLayerPart`、`ecr:CompleteLayerUpload`、`ecr:PutImage`、`ecr:BatchGetImage`、`ecr:GetDownloadUrlForLayer` | Redmine のリポジトリ | イメージを写す(すでにあるイメージは写さない) |
+| `s3:PutObject`、`s3:GetObject`、`s3:ListBucket` | アセットのバケット(`*-assets-<account>-*` と、その `assets/` の下のオブジェクト) | アセットの同期([lambda.md](lambda.md#serving-assets)) |
+| `lambda:UpdateFunctionCode`、`lambda:GetFunction`、`lambda:GetFunctionConfiguration`、`lambda:InvokeFunction` | タグ `redmine:instance` を持つ関数 | イメージの更新、更新が終わるのを待つこと、`redmine-task` での migration([tasks.md](tasks.md#migrations-during-deployment)) |
+| `cloudformation:DescribeStacks` | アカウントのスタック | 出力(リポジトリ、バケット、ディストリビューション)を読む |
+
+- **すべてのインスタンスに 1 つのポリシー:** 権限は、管理ポリシー `redmine-code-deploy`(`infra/account.yaml`)に置き、インフラのデプロイ用のロールと共有します。インスタンスの名前は自由なので、関数は、どのスタックもリソースに付けるタグ `redmine:instance` で、バケットは名前で絞ります。
 
 - **持たせないもの:** ほかの `iam:*` と `iam:PassRole`、`lambda:UpdateFunctionConfiguration`(実行ロールや環境変数を変えられるため)、CloudFormation、SSM のデータベースのパスワード。これらは、インフラのデプロイ用のロールで変えます。
 - **アセットを消さない:** 古いアセットを残すので、`s3:DeleteObject` は持たせません。古いアセットは、ライフサイクルで消します。
@@ -175,12 +177,28 @@ flowchart LR
 | 項目 | 内容 |
 | --- | --- |
 | 引き受けるもの | SSO の管理者の権限のセット。GitHub Actions では、承認する人を決めた Environment のワークフローだけ(`sub` をその Environment に絞る) |
-| 権限 | CloudFormation のスタックの作成と更新(`redmine-*` と `<instance>*` のスタック)、Lambda@Edge のロググループへの保持の期間の設定(すべてのリージョンの `logs:PutRetentionPolicy`。対象は `/aws/lambda/us-east-1.redmine-body-hash` だけ)、`iam:PassRole`(CloudFormation のサービスロール `redmine-cfn-exec` だけ)、SSM のパラメーターの作成(秘密の値を初めて作るとき。`/<instance>/env/*` だけ)、ECR へのイメージの写し、コードのデプロイ用のロールと同じ権限 |
+| 権限 | サービスロール `redmine-cfn-exec` を付けた変更セットだけを作る権限(条件 `cloudformation:RoleArn` 付きの `cloudformation:CreateChangeSet`)と、その表示、実行、削除。CloudFormation への `redmine-cfn-exec` だけの `iam:PassRole`。Lambda@Edge のロググループへの保持の期間の設定(すべてのリージョンの `logs:PutRetentionPolicy`。対象は `/aws/lambda/us-east-1.redmine-body-hash` だけ。`logs:DescribeLogGroups` と `ec2:DescribeRegions` も)。`/<instance>/env/` と `/<instance>/deploy/` の下の SSM のパラメーターを読むことと作ること(SSM を通した `kms:Encrypt` も)。SES の受信のルールのセットを有効にすること。コードのデプロイ用のロールの管理ポリシー `redmine-code-deploy` |
 | リソースを作る権限 | 持たない。リソースは、CloudFormation が `redmine-cfn-exec` の権限で作る |
 
 - **CloudFormation のサービスロール:** `redmine-cfn-exec` は、この設計のリソース(Lambda、RDS、VPC とそのエンドポイント、NAT インスタンス、S3、SQS、SES、CloudFront、AWS WAF の Web ACL、ACM、IAM のロール、ログ、アラーム)を作れます。作る IAM のロールには、権限の境界 `redmine-boundary` を付けることを条件にします(`iam:PermissionsBoundary`)。
 - **us-east-1:** Lambda@Edge の関数と CloudFront の証明書のスタックも、同じロールで us-east-1 に当てます([deploy-config.md](deploy-config.md#shared-base-and-per-instance-resources))。
 - **関数を CloudFront に付ける権限:** Lambda@Edge の関数のバージョンを CloudFront に付けるための `lambda:EnableReplication*` と `iam:CreateServiceLinkedRole` も、`redmine-cfn-exec` に持たせます。
+
+<a id="account-roles"></a>
+
+## アカウントのロール
+
+`infra/account.yaml`(スタック `redmine-account`)が、上のロールのうち、インスタンスごとではないものを作ります。管理者が、自分の認証情報で、アカウントごとに 1 回当てます(`bin/deploy --account`。[deploy-config.md](deploy-config.md#deployment-commands))。
+
+| リソース | 中身 |
+| --- | --- |
+| `redmine-boundary`(管理ポリシー) | スタックが作るすべてのロールの権限の境界。このページのロールの操作だけを許す。ログを書く、SSM のパラメーターを読む、`kms:Decrypt`、VPC の中の Lambda のネットワークインターフェースと NAT インスタンスの操作、S3 のオブジェクト、SQS、SES、`lambda:InvokeFunction`、`AmazonSSMManagedInstanceCore` の操作。IAM の操作は何も許さない |
+| `redmine-cfn-exec` | CloudFormation(`cloudformation.amazonaws.com`。`aws:SourceAccount` はこのアカウント)。スタックのサービスの操作と、パス `/redmine/` の下だけの IAM の操作。ロールを作ることと、ポリシーを入れることや付けることは、権限の境界があるときだけ(`iam:PermissionsBoundary`)。`/redmine/` の下のロール、インスタンスプロファイル、ポリシーの管理。`/redmine/` の下のロールを Lambda、Lambda@Edge、EventBridge Scheduler、EC2 に渡す `iam:PassRole`。`iam:CreateServiceLinkedRole` と `lambda:EnableReplication*`。`iam:DeleteRolePermissionsBoundary` は拒否する。アカウントのロールと権限の境界は `/redmine/` の外にあるので、変えられない |
+| `redmine-infra-deploy` | IAM Identity Center の権限のセット(`account.ssoPermissionSet`。既定は `AdministratorAccess`。その `AWSReservedSSO_…` のロールの `aws:PrincipalArn` で絞る)の利用者と、`account.githubRepository` があれば、Environment `account.githubInfraEnvironment`(既定は `infrastructure`)の GitHub Actions。権限は、上の「インフラのデプロイ用のロール」。セッションは 2 時間まで |
+| `redmine-github-deploy` | `account.githubRepository` があるときだけ。Environment `account.githubCodeEnvironment`(既定は `production`)の GitHub Actions。audience は `sts.amazonaws.com`。管理ポリシー `redmine-code-deploy` |
+| GitHub の OIDC のプロバイダー | `account.githubRepository` があるときに作る。アカウントにすでにあるときは、`account.githubOidcProviderArn` でそれを指す(1 つのアカウントに、URL ごとに 1 つ) |
+
+- **GitHub の Environment:** インフラの Environment の承認する人は、GitHub の側で決めます。ロールは、その Environment の `sub`(`repo:<owner>/<repository>:environment:<name>`)だけを信頼します。
 
 <a id="permissions-of-people"></a>
 
@@ -240,4 +258,8 @@ flowchart LR
 - SES v2 の `SendEmail` で全文(raw)を送るときに、`ses:SendRawEmail` が要るか
 - `ssm:GetParametersByPath` の対象に、パスの ARN と、その下(`/*`)の両方が要るか
 - 権限の境界と CloudFormation のサービスロールで、Lambda@Edge の複製に要るサービスリンクロールを作れるか
+- 作るスタックの変更セットでも、`cloudformation:CreateChangeSet` が条件 `cloudformation:RoleArn` を見るか。実行にほかの権限が要るか
+- `redmine-code-deploy` の Lambda の操作(`UpdateFunctionCode`、`InvokeFunction`、`GetFunction`)を、タグ `aws:ResourceTag/redmine:instance` で絞れるか
+- `aws/ssm` の鍵で SecureString を書くのに、呼ぶ側のポリシーに `kms:Encrypt` が要るか
+- パスと権限の境界を持つ実行ロールで、Lambda@Edge の複製が動くか
 - SES の ID に対する権限(`ses:SendEmail`、`ses:GetEmailIdentity`)の ARN の形と、構成セットを使う場合に要る権限

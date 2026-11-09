@@ -161,7 +161,7 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 
 | もの | 置き場所 | 使い方 |
 | --- | --- | --- |
-| Redmine の Lambda 用のイメージ | `ghcr.io/redmine-kit/serverless`。タグは `sha-<コミット>` と `main`(arm64 の 1 つのアーキテクチャで、index にしない)。main のコミットで、リリースのバージョンのテストが通ったものを、CI が push する(`.github/workflows/ci.yml` の `publish` のジョブ)。バージョンのタグ(`<Redmine のバージョン>-<このプロジェクトのバージョン>`)は、このプロジェクトのリリースができたら足す | `bin/deploy` が digest で取り、立てるアカウントの ECR にコピーする([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR のイメージしか使えない |
+| Redmine の Lambda 用のイメージ | `ghcr.io/redmine-kit/serverless`(arm64 の 1 つのアーキテクチャで、index にしない)。main のコミットで、リリースのバージョンのテストが通ったものを、CI が push する(`.github/workflows/ci.yml` の `publish` のジョブ。バージョンは `bin/redmine-version` で読む)。タグは、Redmine のバージョン(`7.0.3`)、Redmine のマイナーバージョン(`7.0`)、`main`、`sha-<コミット>`。基本は Redmine のバージョンのタグを使う。そのバージョンの新しいビルド(gem とプラグインの更新)に付け替わり、`bin/deploy` も既定でこれを使う。`7.0` は Redmine のパッチリリースにも付いていき、`sha-<コミット>` は 1 つのビルドのまま | `bin/deploy` が digest で取り、立てるアカウントの ECR にコピーする([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR のイメージしか使えない |
 | プラグイン | GitHub Packages の gem `redmine_serverless_x`。プラグインごとに 1 つで、それぞれのリポジトリのワークフローが、バージョンのタグごとに公開する。プラグインの動かすためのファイルを持つ | `Gemfile.local` で GitHub Packages の source から足し、`bundle install` を実行して、入れた gem を `plugins/` にリンクする(各プラグインの準備のページ) |
 | プラグイン(gem を使わない人) | リポジトリのチェックアウト | `plugins/` に clone する |
 

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Prints the Redmine version (MAJOR.MINOR.TINY) in an image, read from
+# Redmine's lib/redmine/version.rb. CI tags the published image with it.
+#
+#   bin/redmine-version <image>
+set -euo pipefail
+
+image=${1:?usage: bin/redmine-version <image>}
+source=$(docker run --rm --entrypoint cat "$image" /var/task/redmine/lib/redmine/version.rb)
+version=$(awk '$1 == "MAJOR" { a = $3 } $1 == "MINOR" { b = $3 } $1 == "TINY" { c = $3 }
+  END { print a "." b "." c }' <<<"$source")
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "bin/redmine-version: no version in $image ($version)" >&2
+  exit 1
+fi
+echo "$version"

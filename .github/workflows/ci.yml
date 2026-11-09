@@ -160,8 +160,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          docker tag "$IMAGE:sha-${GITHUB_SHA::7}" "$IMAGE:main"
-          docker push "$IMAGE:sha-${GITHUB_SHA::7}"
-          docker push "$IMAGE:main"
+          version=$(bin/redmine-version "$IMAGE:sha-${GITHUB_SHA::7}")
+          for tag in main "$version" "${version%.*}"; do
+            docker tag "$IMAGE:sha-${GITHUB_SHA::7}" "$IMAGE:$tag"
+          done
+          for tag in "sha-${GITHUB_SHA::7}" main "$version" "${version%.*}"; do
+            docker push "$IMAGE:$tag"
+          done
           docker buildx imagetools inspect "$IMAGE:sha-${GITHUB_SHA::7}" --format '{{json .Manifest}}' |
             jq -r '"pushed \(.digest) \(.mediaType)"'

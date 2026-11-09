@@ -82,7 +82,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | `waf.commonRuleSet` | | `count` | WAF の Common Rule Set を、`count`(数えるだけ)にするか `block`(止める)にするか |
 | `waf.commonRuleSetCountOnly` | | `["SizeRestrictions_BODY"]` | `block` のときも、数えるだけにするルール(1 つ) |
 | `image.repository` | | `ghcr.io/redmine-kit/serverless` | 使うイメージ。使う側が作った派生のイメージ(テーマやプラグインを足したもの)は、ここで指定する([architecture.md](architecture.md#derived-images))。Redmine のバージョンはイメージで決まる。バージョンアップの前の確認の方法は [upgrade.md](upgrade.md) |
-| `image.digest` | `image` を書くとき | その時点の `main` の digest | イメージの digest(`sha256:…`)。書かないと、`bin/deploy` はその時点の `main` のタグの digest を使い、固定できるように表示する |
+| `image.digest` | `image` を書くとき | その時点の、Redmine のバージョンのタグの digest | イメージの digest(`sha256:…`)。書かないと、`bin/deploy` は、このチェックアウトがビルドする Redmine のバージョンのタグ(たとえば `7.0.3`。`image/Dockerfile` の `ARG REDMINE_VERSION`)の、その時点の digest を使い、固定できるように表示する |
 | `redmine.settings` | | なし | Redmine の管理画面の設定の値(`host_name`、`default_language`、`mail_from` など) |
 | `redmine.settingsMode` | | `initial` | `initial`(まだ保存されていない設定だけ入れる。あとは画面で変えられる)か `enforce`(デプロイのたびに入れ直す) |
 | `redmine.pluginSettings` | | なし | プラグインの設定の値。プラグインの名前(`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`)ごとに書く。保存されている設定に足し合わせる。たとえば `{"redmine_serverless_ses": {"import_spam": "0", "import_without_dmarc_pass": "0"}}` で、迷惑メールと DMARC が通らないメールを取り込まない(既定の値。[receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#spoofing-and-spam)) |

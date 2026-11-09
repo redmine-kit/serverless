@@ -103,8 +103,11 @@ fi
 image_repository=$(cfg '.image.repository // "ghcr.io/redmine-kit/serverless"')
 image_digest=$(cfg '.image.digest // ""')
 if [[ -z "$image_digest" ]]; then
-  image_digest=$(crane digest "$image_repository:main")
-  note "image.digest is not set: $image_repository:main is $image_digest now; pin it in redmine.json"
+  # The image tagged with the Redmine version this checkout builds.
+  redmine_version=$(sed -n 's/^ARG REDMINE_VERSION=//p' "$root/image/Dockerfile")
+  [[ -n "$redmine_version" ]] || fail "no ARG REDMINE_VERSION in image/Dockerfile"
+  image_digest=$(crane digest "$image_repository:$redmine_version")
+  note "image.digest is not set: $image_repository:$redmine_version is $image_digest now; pin it in redmine.json"
 fi
 
 first_time=false

@@ -119,6 +119,7 @@ TEMPLATE_BODY_LIMIT=$(($(wc -c <infra/instance.yaml) - 1))
 export TEMPLATE_BODY_LIMIT
 check "first deployment succeeds" run_deploy "$state" "$config"
 check "first deployment: the steps in order" in_order "$state" \
+  "crane digest ghcr.io/redmine-kit/serverless:$(sed -n 's/^ARG REDMINE_VERSION=//p' image/Dockerfile)$" \
   "create-change-set .*--stack-name redmine-shared " \
   "create-change-set .*--stack-name redmine-shared-edge " \
   "ssm put-parameter" \

@@ -120,7 +120,7 @@ Resources:
               - sqs:*
               - ses:*
               - lambda:InvokeFunction
-              # redmine_serverless_cost
+              # redmine_serverless_costexplorer
               - ce:GetCostAndUsage
               - ce:GetCostForecast
             Resource: "*"

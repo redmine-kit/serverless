@@ -96,9 +96,9 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 | `sqs:SendMessage` | The job queue | Jobs enqueued within rake |
 | `sqs:SendMessage` | The failure destination queue (`redmine-task-failures`) | The destination for failed asynchronous invocations from SES. Lambda sends to destinations with the execution role's permissions |
 
-## Cost Explorer (only with `cost.enabled`)
+## Cost Explorer (only with `costExplorer.enabled`)
 
-The plugin [Redmine Serverless Cost](https://redmine-kit.github.io/redmine_serverless_cost/) reads the account's costs. The policy `cost-explorer` gives `redmine-task` (the daily refresh) and `redmine-worker` (the refresh that the plugin's button queues as a job) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`. The two actions take a billing view as their resource (the AWS service reference, checked 2026-11-10) and the plugin uses the primary billing view; whether the policy can be narrowed to its ARN is unverified. `redmine-web` does not call Cost Explorer. The boundary `redmine-boundary` allows these two actions.
+For an image that adds the plugin [Redmine Serverless Cost Explorer](https://redmine-kit.github.io/redmine_serverless_costexplorer/) (a derived image; Serverless's image does not include it), the plugin reads the account's costs. The policy `costexplorer` gives `redmine-task` (the daily refresh) and `redmine-worker` (the refreshes that opening the plugin's tab or its button queue as a job) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`. The two actions take a billing view as their resource (the AWS service reference, checked 2026-11-10) and the plugin uses the primary billing view; whether the policy can be narrowed to its ARN is unverified. `redmine-web` does not call Cost Explorer. The boundary `redmine-boundary` allows these two actions.
 
 ## Resource-based policies
 

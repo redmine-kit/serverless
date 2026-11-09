@@ -108,17 +108,18 @@ Parameters:
       uploads.malwareScan in redmine.json: GuardDuty Malware Protection for S3
       on incoming/ and imports/ of the attachment bucket
       (docs/aws-security.md#guardduty).
-  CostEnabled:
+  CostExplorerEnabled:
     Type: String
     Default: "false"
     AllowedValues: ["true", "false"]
     Description: >-
-      cost.enabled in redmine.json: the plugin redmine_serverless_cost reads
-      the account's costs from Cost Explorer.
-  CostTagKey:
+      costExplorer.enabled in redmine.json, for an image that adds the plugin
+      redmine_serverless_costexplorer (a derived image): it reads the
+      account's costs from Cost Explorer. Off by default.
+  CostExplorerTagKey:
     Type: String
     Default: ""
-    Description: cost.allocationTag in redmine.json, a cost allocation tag such as redmine:instance.
+    Description: costExplorer.allocationTag in redmine.json, a cost allocation tag such as redmine:instance.
   ReceiveMail:
     Type: String
     Default: "true"
@@ -146,7 +147,7 @@ Conditions:
   HasHostedZone: !Not [!Equals [!Ref HostedZoneId, ""]]
   ReceivesMail: !Equals [!Ref ReceiveMail, "true"]
   ScansMalware: !Equals [!Ref MalwareScan, "true"]
-  ShowsCost: !Equals [!Ref CostEnabled, "true"]
+  ShowsCostExplorer: !Equals [!Ref CostExplorerEnabled, "true"]
   ReceivesMailInZone: !And [!Condition ReceivesMail, !Condition HasHostedZone]
   SendsReminders: !Equals [!Ref SendReminders, "true"]
   HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, ""]]
@@ -782,8 +783,8 @@ Resources:
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
-          REDMINE_COST_ENABLED: !Ref CostEnabled
-          REDMINE_COST_TAG_KEY: !Ref CostTagKey
+          REDMINE_COSTEXPLORER_ENABLED: !Ref CostExplorerEnabled
+          REDMINE_COSTEXPLORER_TAG_KEY: !Ref CostExplorerTagKey
           REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_MAIL_BUCKET: !Ref MailBucket
@@ -845,8 +846,8 @@ Resources:
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
-          REDMINE_COST_ENABLED: !Ref CostEnabled
-          REDMINE_COST_TAG_KEY: !Ref CostTagKey
+          REDMINE_COSTEXPLORER_ENABLED: !Ref CostExplorerEnabled
+          REDMINE_COSTEXPLORER_TAG_KEY: !Ref CostExplorerTagKey
           REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_MAIL_BUCKET: !Ref MailBucket
@@ -860,14 +861,14 @@ Resources:
       BatchSize: 1
       Enabled: true
 
-  # Cost Explorer for redmine_serverless_cost: the refresh runs in the task
-  # and in jobs. The actions take the billing view as resource; narrowing to
+  # Cost Explorer for redmine_serverless_costexplorer (in a derived image):
+  # the refresh runs in the task and in jobs. The actions take the billing view as resource; narrowing to
   # the primary billing view's ARN is unverified, so the resource is "*".
-  CostPolicy:
+  CostExplorerPolicy:
     Type: AWS::IAM::Policy
-    Condition: ShowsCost
+    Condition: ShowsCostExplorer
     Properties:
-      PolicyName: cost-explorer
+      PolicyName: costexplorer
       Roles: [!Ref TaskRole, !Ref WorkerRole]
       PolicyDocument:
         Version: "2012-10-17"
@@ -911,8 +912,8 @@ Resources:
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
-          REDMINE_COST_ENABLED: !Ref CostEnabled
-          REDMINE_COST_TAG_KEY: !Ref CostTagKey
+          REDMINE_COSTEXPLORER_ENABLED: !Ref CostExplorerEnabled
+          REDMINE_COSTEXPLORER_TAG_KEY: !Ref CostExplorerTagKey
           REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_MAIL_BUCKET: !Ref MailBucket
@@ -1296,13 +1297,13 @@ Resources:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: '{"command": "rake", "args": ["redmine:attachments:prune"]}'
-  # The costs of the account, daily (redmine_serverless_cost; one Cost
+  # The costs of the account, daily (redmine_serverless_costexplorer; one Cost
   # Explorer request costs USD 0.01).
-  CostRefreshSchedule:
+  CostExplorerRefreshSchedule:
     Type: AWS::Scheduler::Schedule
-    Condition: ShowsCost
+    Condition: ShowsCostExplorer
     Properties:
-      Name: !Sub ${InstanceName}-cost-refresh
+      Name: !Sub ${InstanceName}-costexplorer-refresh
       ScheduleExpression: cron(15 4 * * ? *)
       ScheduleExpressionTimezone: !Ref ScheduleTimezone
       FlexibleTimeWindow:
@@ -1310,7 +1311,7 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: '{"command": "rake", "args": ["redmine_serverless_cost:refresh"]}'
+        Input: '{"command": "rake", "args": ["redmine_serverless_costexplorer:refresh"]}'
   SendRemindersSchedule:
     Type: AWS::Scheduler::Schedule
     Condition: SendsReminders

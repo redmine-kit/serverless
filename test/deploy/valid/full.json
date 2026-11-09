@@ -19,7 +19,7 @@
     "settingsMode": "enforce",
     "pluginSettings": { "redmine_serverless_s3": { "download_url_expiry": "600" } }
   },
-  "cost": { "enabled": true, "allocationTag": "redmine:instance" },
+  "costExplorer": { "enabled": true, "allocationTag": "redmine:instance" },
   "schedule": { "timezone": "Asia/Tokyo", "sendReminders": true },
   "logs": { "retentionDays": 365 },
   "retention": { "recordsDays": 60, "mailDays": 14, "noncurrentVersionDays": 60, "backupDays": 14 },

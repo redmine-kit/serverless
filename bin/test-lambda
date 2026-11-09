@@ -172,11 +172,21 @@ check "the worker ran the job" project_deleted
 # A message that the worker does not delete comes back after the visibility
 # timeout and runs the job again.
 sleep 75
-runs() {
-  aws logs filter-log-events --log-group-name "/aws/lambda/$instance-worker" \
-    --filter-pattern '"Running job" "DestroyProjectJob"' --query 'length(events)' --output text
+worker_log() {
+  aws logs filter-log-events --log-group-name "/aws/lambda/$instance-worker" --query 'events[].message' --output text
 }
-check "the message is deleted after the job (the job ran once)" test "$(runs)" == 1
+# The gem's own line for each run; its "job_handler running for" line also
+# names the job, so the lines are matched exactly here.
+runs() { worker_log | grep -cE 'Running job: [^ ]+\[DestroyProjectJob\]' || true; }
+ran_once() {
+  local count
+  count=$(runs)
+  [[ "$count" == 1 ]] && return 0
+  echo "the job ran $count time(s); the worker's log:" >&2
+  worker_log | tr '\t' '\n' | grep -vE '^\s*$' | tail -40 >&2
+  return 1
+}
+check "the message is deleted after the job (the job ran once)" ran_once
 mail_sent() { curl -fsS http://127.0.0.1:4566/_aws/ses | grep -q 'redmine@example.net'; }
 check "the worker sent the notification mail through SES" mail_sent
 

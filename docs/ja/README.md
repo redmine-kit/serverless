@@ -54,3 +54,7 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | [upgrade.md](upgrade.md) | Redmine のバージョンアップの確認の方法(増えた migration の読み分け、試験用のデータベースでの実行、記録) |
 | [migration.md](migration.md) | 古い Redmine(ほかの環境で動いているもの)からの移行。MySQL からの移し方 |
 | [sources.md](sources.md) | 参照した情報と確認日 |
+
+## スポンサー
+
+<Sponsors><a href="https://localstack.cloud">LocalStack</a></Sponsors>

@@ -50,3 +50,7 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | [upgrade.md](upgrade.md) | How to check a Redmine upgrade (sorting the new migrations, running them on a test database, keeping records) |
 | [migration.md](migration.md) | Migrating from an older Redmine running elsewhere. How to move from MySQL |
 | [sources.md](sources.md) | Sources consulted and the dates they were checked |
+
+## Sponsors
+
+<Sponsors><a href="https://localstack.cloud">LocalStack</a></Sponsors>

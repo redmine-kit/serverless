@@ -2,8 +2,9 @@
 # Image tests (docs/testing.md#image-tests). Starts the image under the same
 # conditions as Lambda: a read-only file system with only /tmp writable, and
 # a user that is not root. The database is the PostgreSQL of
-# bin/test-services, and AWS is moto. worker and task run on the Runtime
-# Interface Emulator in the base image.
+# bin/test-services. AWS (SSM and SQS) is LocalStack when LOCALSTACK_AUTH_TOKEN
+# is set, and moto otherwise (pull requests from forks); nothing is mocked.
+# worker and task run on the Runtime Interface Emulator in the base image.
 #   bin/test-image [image]          # default: serverless:test (bin/build-image)
 #   KEEP=1 bin/test-image [image]   # leave the containers for inspection
 # Commands that run inside containers are in single quotes on purpose.
@@ -11,20 +12,28 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 image="${1:-serverless:test}"
-# An internal network: the containers reach PostgreSQL and moto, but not AWS.
+# An internal network: the containers reach PostgreSQL and the AWS backend,
+# but not AWS.
 network=serverless-image-test
 prefix=serverless-image-test
-queue_url=http://moto:5000/123456789012/redmine-jobs
+if [[ -n "${LOCALSTACK_AUTH_TOKEN:-}" ]]; then
+  backend=localstack port=4566 account=000000000000
+else
+  backend=moto port=5000 account=123456789012
+fi
+endpoint="http://$backend:$port"
+queue_url="$endpoint/$account/redmine-jobs"
 ssm_path=/image-test/env/
 secret_key_base='image-test-only-secret-key-base'
 
 bin/test-services >/dev/null 2>&1 || bin/test-services
 compose=(docker compose -f test/compose.yml -p serverless-test)
 
-# moto chooses the service from the credential scope of the Authorization
-# header; the signature itself is not checked.
+echo "AWS for the image tests: $backend"
+# The backend chooses the service from the credential scope of the
+# Authorization header; the signature itself is not checked.
 sqs() {
-  curl -fsS -X POST http://127.0.0.1:5000/ \
+  curl -fsS -X POST "http://127.0.0.1:$port/" \
     -H 'Authorization: AWS4-HMAC-SHA256 Credential=test/20260101/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0' \
     "$@"
 }
@@ -37,7 +46,7 @@ check() { local name="$1"; shift; if "$@"; then pass "$name"; else fail "$name";
 
 cleanup() {
   docker rm -f "$prefix-web" "$prefix-worker" "$prefix-task" >/dev/null 2>&1 || true
-  for service in postgres moto; do
+  for service in postgres "$backend"; do
     docker network disconnect "$network" "serverless-test-$service-1" >/dev/null 2>&1 || true
   done
   docker network rm "$network" >/dev/null 2>&1 || true
@@ -45,14 +54,14 @@ cleanup() {
 trap '[[ -n "${KEEP:-}" ]] || cleanup' EXIT
 cleanup
 docker network create --internal "$network" >/dev/null
-for service in postgres moto; do
+for service in postgres "$backend"; do
   docker network connect --alias "$service" "$network" "serverless-test-$service-1"
 done
 
-# Same conditions as Lambda. The secrets come from SSM (moto) as on Lambda;
-# the other settings go in as environment variables.
+# Same conditions as Lambda. The secrets come from SSM as on Lambda; the other
+# settings go in as environment variables.
 aws_env=(-e AWS_REGION=us-east-1 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test
-  -e AWS_ENDPOINT_URL=http://moto:5000)
+  -e AWS_ENDPOINT_URL="$endpoint")
 run() {
   local role="$1"; shift
   docker run -d --name "$prefix-$role" --network "$network" \
@@ -209,11 +218,11 @@ job=$(task '{"command":"runner","args":["p = Project.create!(name: \"Worker prob
 sqs -d Action=SendMessage -d QueueUrl="$queue_url" --data-urlencode MessageBody="$job" >/dev/null
 received=$(sqs -d Action=ReceiveMessage -d QueueUrl="$queue_url" -d VisibilityTimeout=300)
 handle=$(sed -n 's:.*<ReceiptHandle>\([^<]*\)</ReceiptHandle>.*:\1:p' <<<"$received")
-event=$(jq -nc --arg body "$job" --arg handle "$handle" '{Records: [{messageId: "image-test", receiptHandle: $handle,
+event=$(jq -nc --arg body "$job" --arg handle "$handle" --arg account "$account" '{Records: [{messageId: "image-test", receiptHandle: $handle,
   body: $body, md5OfBody: "", messageAttributes: {}, eventSource: "aws:sqs",
-  eventSourceARN: "arn:aws:sqs:us-east-1:123456789012:redmine-jobs", awsRegion: "us-east-1"}]}')
+  eventSourceARN: "arn:aws:sqs:us-east-1:\($account):redmine-jobs", awsRegion: "us-east-1"}]}')
 # After the job, redmine_serverless_sqs deletes the message at
-# REDMINE_JOBS_QUEUE_URL (moto here), not at the public host the gem builds
+# REDMINE_JOBS_QUEUE_URL (the backend here), not at the public host the gem builds
 # from the ARN. The runtime may write the job's log after the invocation
 # returns, so the log is read for a few seconds.
 job_logged() {

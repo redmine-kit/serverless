@@ -154,10 +154,10 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 
 イメージを作るたびに、本番と同じ条件の Docker で起動します。
 
-- **条件:** arm64、読み取り専用のファイルシステム(`--read-only`)、書けるのは `/tmp` だけ(`--tmpfs /tmp`)、権限の少ないユーザー(`--user` で、root でない任意の番号)。データベースは、RDS と同じメジャーバージョンの PostgreSQL のコンテナ、AWS は moto です。コンテナは、PostgreSQL と moto にしか届かない Docker の内部のネットワークで動かすので、テストから AWS には届きません。
+- **条件:** arm64、読み取り専用のファイルシステム(`--read-only`)、書けるのは `/tmp` だけ(`--tmpfs /tmp`)、権限の少ないユーザー(`--user` で、root でない任意の番号)。データベースは、RDS と同じメジャーバージョンの PostgreSQL のコンテナです。AWS(SSM と SQS)は、CI のように `LOCALSTACK_AUTH_TOKEN` があれば LocalStack、なければ moto です(フォークからのプルリクエストや、トークンのない手元)。トークンがあるのに LocalStack が起動しなければ、テストは失敗します。モックはしません。テストが使う API は、LocalStack にも moto にもすべてあります。コンテナは、PostgreSQL とその AWS の代わりにしか届かない Docker の内部のネットワークで動かすので、テストから AWS には届きません。
 - **`web`:** Puma が起動し、ログインの画面が 200 を返し、セッションの Cookie に `Secure` が付くこと([session.md](session.md#the-secure-attribute-of-the-session-cookie))、アセットの `.manifest.json` があること、起動のあとに `/tmp` の外に書いていないことを確認します。Puma は `127.0.0.1` でだけ待ち受けるので、画面はコンテナの中から開きます。エミュレーターは要求を Lambda Web Adapter に通さないので、その経路は Lambda の結合のテストで確認します。
 - **`task`:** 土台のイメージにあるランタイムインターフェイスエミュレーター(`aws-lambda-rie`)でハンドラーを呼び、`rake db:migrate`、`redmine:load_default_data`、`rake -T`、`rails runner` が動くこと、失敗したタスクが終了コードを返すこと、許可していないコマンドと `env` の名前を拒否することを確認します。メールの取り込みは、プラグインと一緒に足します。
-- **`worker`:** 同じくエミュレーターで、SQS の形のイベントを渡し、ジョブが実行されること(プロジェクトが消え、その通知のメールが SQS に積まれる)と、許可していないジョブのクラスが実行されないことを確認します。gem は、ジョブが成功したあと、イベントの ARN から組み立てたキューの URL(`https://sqs.<region>.amazonaws.com/...`)でメッセージを消します。この URL は moto に向けられないので、ここではその削除の失敗だけを認め、削除は Lambda の結合のテストで確認します。
+- **`worker`:** 同じくエミュレーターで動かします。ジョブをキューに送って受け取り、そのメッセージの受信ハンドルを付けた SQS の形のイベントで worker に渡します。呼び出しが成功すること、ジョブが実行されること(プロジェクトが消え、その通知のメールが SQS に積まれる)、worker がメッセージを消すこと(処理中のものが残らない。`redmine_serverless_sqs` は `REDMINE_JOBS_QUEUE_URL` で消す。[setup.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/setup.html))、許可していないジョブのクラスが実行されないことを確認します。
 - **中身:** ImageMagick の `convert`、Ghostscript、Pandoc(3.8.3 以上)が動くこと、`/var/task` と `/opt` のすべてを権限の少ないユーザーが読めること、ビルドしたアセットがあることを確認します。タスクのハンドラーの単体テストも、イメージの中で動かします。push したマニフェストが arm64 だけで、インデックスの形になっていないかは、イメージを push するときに確認します。
 
 <a id="edge-function-tests"></a>
@@ -187,7 +187,7 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 
 `bin/test-lambda` が、LocalStack の上で、イメージを Lambda として動かします(専用の Compose のプロジェクト、`test/lambda/compose.yml`)。`LOCALSTACK_AUTH_TOKEN` が要り、なければ飛ばします。CI では、Redmine のリリースのイメージのジョブで実行します。
 
-- **ライセンス:** テストには、ECR、コンテナイメージの関数、SES v2 が要ります。CI の組織の Ultimate のライセンスには含まれます。トークンはあるのにライセンスにどれかがないときは、`bin/test-lambda` は飛ばさずに失敗します。飛ばすのは、トークンがないときだけです。
+- **ライセンス:** テストには、ECR、コンテナイメージの関数、SES v2 が要ります。CI の組織の Ultimate のライセンスには含まれます。トークンはあるのにライセンスにどれかがないときは、`bin/test-lambda` は飛ばさずに失敗します。飛ばすのは、トークンがないときだけです。モックはしません。テストが使う API は、すべて LocalStack にあります。
 - **イメージ:** LocalStack の ECR に置き、LocalStack の Lambda がそこから動かします。
 - **秘密の値:** `deploy/lib.sh` の `create_secrets` が SSM に秘密の値を作り、2 回目は変えないこと。
 - **`redmine-task`:** `bin/deploy` と同じく、`deploy/lib.sh` の `task` で呼びます。`db:migrate`、`redmine:load_default_data`、`SECRET_KEY_BASE` を SSM から読むこと、失敗したコマンドが失敗になること、設定のコード。

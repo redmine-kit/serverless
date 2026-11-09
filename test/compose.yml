@@ -21,7 +21,7 @@ services:
       interval: 2s
       retries: 30
 
-  # LocalStack (Hobby) needs an auth token, so it starts only with the
+  # LocalStack needs an auth token, so it starts only with the
   # "localstack" profile, which bin/test-services turns on when
   # LOCALSTACK_AUTH_TOKEN is set. The token is never written to the repository.
   localstack:

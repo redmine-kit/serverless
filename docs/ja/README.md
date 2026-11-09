@@ -65,4 +65,4 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 
 ## ライセンス
 
-Serverless は、GNU General Public License バージョン 2 またはそれ以降のバージョンで公開しています。[LICENSE](../../LICENSE) を参照してください。Redmine projectとは関係ありません。
+Serverless は、GNU General Public License バージョン 2 またはそれ以降のバージョンで公開しています。[LICENSE](../../LICENSE) を参照してください。Redmine の非公式のプロジェクトです。

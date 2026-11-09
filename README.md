@@ -41,4 +41,4 @@ Start with [docs/architecture.md](docs/architecture.md). The plugins' designs ar
 
 ## License
 
-Serverless is released under the GNU General Public License, version 2 or (at your option) any later version. See [LICENSE](LICENSE). Not affiliated with the Redmine project.
+Serverless is released under the GNU General Public License, version 2 or (at your option) any later version. See [LICENSE](LICENSE). An unofficial project for Redmine.

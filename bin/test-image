@@ -172,6 +172,13 @@ web_up() {
 check "Puma starts and /login returns 200" web_up
 login_page() { docker exec "$prefix-web" curl -fsS http://127.0.0.1:3000/login | grep -q '<title>Redmine'; }
 check "login page is Redmine's" login_page
+# Requests reach Redmine as HTTPS behind CloudFront and the function URL; Rails
+# writes a Secure cookie only on HTTPS requests.
+secure_cookie() {
+  docker exec "$prefix-web" curl -fsS -D - -o /dev/null -H 'X-Forwarded-Proto: https' http://127.0.0.1:3000/login |
+    grep -i '^set-cookie: _redmine_session=' | grep -qi '; secure'
+}
+check "the session cookie is Secure" secure_cookie
 
 echo "== worker"
 run worker

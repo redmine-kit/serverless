@@ -34,17 +34,20 @@ Changes to the first two are sent to administrators as security notifications by
 
 ## The `Secure` attribute of the session cookie
 
-The session cookie has no `Secure` attribute, even over HTTPS (checked in the image on 2026-11-09: a request with `X-Forwarded-Proto: https` gets `_redmine_session` with only `path`, `httponly` and `samesite=lax`). Redmine's `session_store` does not set `secure`, and `config.force_ssl` is commented out in Redmine's `production.rb`.
+Redmine's session cookie has no `Secure` attribute, even over HTTPS (checked in the image on 2026-11-09: a request with `X-Forwarded-Proto: https` got `_redmine_session` with only `path`, `httponly` and `samesite=lax`). Redmine's `session_store` does not set `secure`, and `config.force_ssl` is commented out in Redmine's `production.rb`.
 
-- **Effect here:** CloudFront redirects HTTP to HTTPS and sends `Strict-Transport-Security` ([security.md](security.md)), so the browser does not send the cookie over plain HTTP to this domain after the first visit. The attribute is still the usual protection against a cookie leaking over HTTP.
-- **How to add it:** Set the same `session_store` as Redmine's, with `secure: true` added, in `additional_environment.rb` (it is evaluated after Redmine's setting, so it replaces it). `config.force_ssl` is not suitable: with `hsts: false` in `ssl_options`, Rails sends `Strict-Transport-Security: max-age=0`, which would undo the header CloudFront adds. Not decided yet.
+The image adds it: `image/config/additional_environment.rb` sets the same `session_store` as Redmine's, with `secure: true` added. It is evaluated after Redmine's setting, so it replaces it. The image tests check that `_redmine_session` has `Secure` ([testing.md](testing.md#image-tests)).
 
 ```ruby
 config.session_store :cookie_store, key: '_redmine_session', path: config.relative_url_root || '/',
                                     same_site: :lax, secure: true
 ```
 
+- **Why:** CloudFront redirects HTTP to HTTPS and sends `Strict-Transport-Security` ([security.md](security.md)), so after the first visit the browser does not send the cookie over plain HTTP anyway. `Secure` is the usual protection for the first visit and for anything outside that path.
+- **Why not `config.force_ssl`:** With `hsts: false` in `ssl_options`, Rails sends `Strict-Transport-Security: max-age=0`, which would undo the header CloudFront adds.
+- **Locally:** Rails writes a `Secure` cookie only on HTTPS requests (behind CloudFront and the function URL, requests arrive as HTTPS), and a browser does not send one over plain HTTP, so signing in to the image over `http://` does not work. The image tests send `X-Forwarded-Proto: https`.
+
 ## To verify
 
-- That the session cookie and the autologin cookie get `Secure` behind CloudFront and the function URL once the setting above is added
+- That the session cookie and the autologin cookie have `Secure` behind CloudFront and the function URL after deployment
 - How many writes "Session inactivity timeout" adds with many users

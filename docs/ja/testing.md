@@ -179,7 +179,7 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 イメージを作るたびに、本番と同じ条件の Docker で起動します。
 
 - **条件:** arm64、読み取り専用のファイルシステム(`--read-only`)、書けるのは `/tmp` だけ(`--tmpfs /tmp`)、権限の少ないユーザー(`--user` で、root でない任意の番号)。データベースは、RDS と同じメジャーバージョンの PostgreSQL のコンテナ、AWS は moto です。コンテナは、PostgreSQL と moto にしか届かない Docker の内部のネットワークで動かすので、テストから AWS には届きません。
-- **`web`:** Puma が起動し、ログインの画面が 200 を返すこと、アセットの `.manifest.json` があること、起動のあとに `/tmp` の外に書いていないことを確認します。Puma は `127.0.0.1` でだけ待ち受けるので、画面はコンテナの中から開きます。エミュレーターは要求を Lambda Web Adapter に通さないので、その経路は Lambda の結合のテストで確認します。
+- **`web`:** Puma が起動し、ログインの画面が 200 を返し、セッションの Cookie に `Secure` が付くこと([session.md](session.md#the-secure-attribute-of-the-session-cookie))、アセットの `.manifest.json` があること、起動のあとに `/tmp` の外に書いていないことを確認します。Puma は `127.0.0.1` でだけ待ち受けるので、画面はコンテナの中から開きます。エミュレーターは要求を Lambda Web Adapter に通さないので、その経路は Lambda の結合のテストで確認します。
 - **`task`:** 土台のイメージにあるランタイムインターフェイスエミュレーター(`aws-lambda-rie`)でハンドラーを呼び、`rake db:migrate`、`redmine:load_default_data`、`rake -T`、`rails runner` が動くこと、失敗したタスクが終了コードを返すこと、許可していないコマンドと `env` の名前を拒否することを確認します。メールの取り込みは、プラグインと一緒に足します。
 - **`worker`:** 同じくエミュレーターで、SQS の形のイベントを渡し、ジョブが実行されること(プロジェクトが消え、その通知のメールが SQS に積まれる)と、許可していないジョブのクラスが実行されないことを確認します。gem は、ジョブが成功したあと、イベントの ARN から組み立てたキューの URL(`https://sqs.<region>.amazonaws.com/...`)でメッセージを消します。この URL は moto に向けられないので、ここではその削除の失敗だけを認め、削除は Lambda の結合のテストで確認します。
 - **中身:** ImageMagick の `convert`、Ghostscript、Pandoc(3.8.3 以上)が動くこと、`/var/task` と `/opt` のすべてを権限の少ないユーザーが読めること、ビルドしたアセットがあることを確認します。タスクのハンドラーの単体テストも、イメージの中で動かします。push したマニフェストが arm64 だけで、インデックスの形になっていないかは、イメージを push するときに確認します。
@@ -245,6 +245,7 @@ flowchart TD
 ```
 
 - **Redmine のバージョン(matrix):** イメージのテストと Redmine 本体のテストは、2 通りで実行します。イメージが使う Redmine のリリース(今は 7.0.3。SHA256 を確認したリリースの tar.gz と `image/Gemfile.lock`)と、次のリリース(7.1)になる Redmine の `master` のブランチです(`7.1-stable` のブランチはまだない。2026-11-09 に確認)。`master` は GitHub から固定せずに取り(`bin/build-image` と `bin/test-core` に `REDMINE_BRANCH=master`)、gem は lock を使わずに解決し、そのジョブは失敗しても実行全体を失敗にしません(`continue-on-error`)。次のリリースで壊れるところを、早めに見るためです。そのために、CI は毎週も動かします。`master` から作ったイメージは、デプロイしません。7.1 が出たら、matrix を 7.1(固定)と次の `master` に移します。
+- **更新:** Dependabot が、Actions(`.github/workflows/actions.lock` も)、Docker のイメージ、検査用の gem について、公開から 3 日(パッチ)か 7 日(ほか)たったバージョンへの更新の PR を毎週作ります。`image/Gemfile.lock` は、Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージの中で解決するためです。毎週のワークフロー(`.github/workflows/update-gems.yml`)が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作り、そのブランチで CI を動かします。lock をコミットしておくのは、どの組み立ても、確認済みの同じバージョンの gem を、チェックサムと一緒に入れるためです。
 - **データベース:** プラグイン、Redmine 本体、イメージのテストは、RDS と同じメジャーバージョンの PostgreSQL のコンテナで実行します(バージョンは作るときに確認する。[rds.md](rds.md#database))。
 - **Redmine を上げるとき:** 増えた migration の読み分けと、試験用のデータベースでの実行を、別のワークフローで行います([upgrade.md](upgrade.md))。
 - **AWS:** コミットのたびのテストは、AWS の認証情報を使いません。AWS に接続するのは、デプロイとデプロイしたあとの確認だけで、本番のアカウントのロールを OIDC で引き受けます([iam.md](iam.md#role-for-deploying-code-github-actions))。

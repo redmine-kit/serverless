@@ -42,19 +42,22 @@ Redmine は、セッションを暗号化した Cookie に入れ、データベ�
 
 ## セッションの Cookie の `Secure` の属性
 
-セッションの Cookie には、HTTPS でも `Secure` の属性が付きません(2026-11-09 にイメージで確認。`X-Forwarded-Proto: https` を付けた要求で、`_redmine_session` には `path`、`httponly`、`samesite=lax` だけが付いた)。Redmine の `session_store` は `secure` を指定せず、Redmine の `production.rb` では `config.force_ssl` がコメントになっています。
+Redmine のセッションの Cookie には、HTTPS でも `Secure` の属性が付きません(2026-11-09 にイメージで確認。`X-Forwarded-Proto: https` を付けた要求で、`_redmine_session` には `path`、`httponly`、`samesite=lax` だけが付いた)。Redmine の `session_store` は `secure` を指定せず、Redmine の `production.rb` では `config.force_ssl` がコメントになっています。
 
-- **ここでの影響:** CloudFront は HTTP を HTTPS に送り直し、`Strict-Transport-Security` を付けるので([security.md](security.md))、初めて訪れたあとは、ブラウザーがこのドメインに暗号化なしの HTTP で Cookie を送ることはありません。それでも、HTTP で Cookie が漏れるのを防ぐ、ふつうの守りとして付けたい属性です。
-- **付け方:** `additional_environment.rb` で、Redmine と同じ `session_store` に `secure: true` だけを足して設定します(Redmine の設定のあとに評価されるので、置き換わります)。`config.force_ssl` は合いません。`ssl_options` で `hsts: false` にすると、Rails は `Strict-Transport-Security: max-age=0` を送り、CloudFront が付けるヘッダーを打ち消してしまいます。まだ決めていません。
+イメージで付けています。`image/config/additional_environment.rb` で、Redmine と同じ `session_store` に `secure: true` だけを足して設定します。Redmine の設定のあとに評価されるので、置き換わります。イメージのテストで、`_redmine_session` に `Secure` が付くことを確認します([testing.md](testing.md#image-tests))。
 
 ```ruby
 config.session_store :cookie_store, key: '_redmine_session', path: config.relative_url_root || '/',
                                     same_site: :lax, secure: true
 ```
 
+- **理由:** CloudFront は HTTP を HTTPS に送り直し、`Strict-Transport-Security` を付けるので([security.md](security.md))、初めて訪れたあとは、ブラウザーが暗号化なしの HTTP で Cookie を送ることはありません。`Secure` は、初めての訪問と、その経路の外に向けた、ふつうの守りです。
+- **`config.force_ssl` にしない理由:** `ssl_options` で `hsts: false` にすると、Rails は `Strict-Transport-Security: max-age=0` を送り、CloudFront が付けるヘッダーを打ち消してしまいます。
+- **手元では:** Rails は、`Secure` の Cookie を HTTPS の要求にだけ書き込み(CloudFront と関数 URL の後ろでは、要求は HTTPS として届きます)、ブラウザーも暗号化なしの HTTP では送らないので、`http://` でイメージにログインすることはできません。イメージのテストは `X-Forwarded-Proto: https` を付けて確認します。
+
 <a id="to-verify"></a>
 
 ## 確認すること
 
-- 上の設定を足したあと、CloudFront と関数 URL の後ろで、セッションと自動ログインの Cookie に `Secure` が付くか
+- デプロイのあと、CloudFront と関数 URL の後ろで、セッションと自動ログインの Cookie に `Secure` が付いているか
 - 利用者が多いときに、「無操作タイムアウト」でどれだけ書き込みが増えるか

@@ -11,3 +11,8 @@ config.cache_store = :memory_store, { size: 64 * 1024 * 1024 }
 config.active_job.queue_adapter = ENV['REDMINE_ROLE'] ? :sqs : :inline
 config.active_record.dump_schema_after_migration = false
 config.hosts << ENV['REDMINE_HOST'] if ENV['REDMINE_HOST'].present?
+
+# Redmine's session cookie (config/application.rb) with Secure added, so that
+# it is sent only over HTTPS (docs/session.md).
+config.session_store :cookie_store, key: '_redmine_session', path: config.relative_url_root || '/',
+                                    same_site: :lax, secure: true

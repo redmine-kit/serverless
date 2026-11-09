@@ -186,34 +186,37 @@ Whether a Rails setting takes effect depends on where it is written.
 - **Settings that `production.rb` sets:** `config/additional_environment.rb` is loaded inside `config/application.rb`, and `production.rb` is loaded after it. Settings that `production.rb` sets are overwritten even if written in `additional_environment.rb`.
 - **Settings used early in initialization:** Rails creates the cache before reading `config/initializers/` (`initialize_cache`). Cache settings written in `config/initializers/` have no effect.
 
-| Setting | Value | Where | Reason |
+| Item | Description | Value | Where |
 | --- | --- | --- | --- |
-| `config.cache_store` | `:memory_store` (per environment, up to 64 MB) | `additional_environment.rb` | The Rails 8.1 default is files in `tmp/cache/`. `production.rb` does not set it. What is cached, tuning and a shared cache: [cache.md](cache.md); sessions: [session.md](session.md) |
-| `config.active_job.queue_adapter` | `:inline`; `redmine_serverless_sqs` makes it `:sqs` when `REDMINE_JOBS_QUEUE_URL` is set (on Lambda) | `additional_environment.rb` and the plugin | With the default `:async`, jobs are lost when the environment shuts down (below). `production.rb` does not set it |
-| `config.active_record.dump_schema_after_migration` | `false` | `additional_environment.rb` | Stops writing `db/schema.rb` after migrations. Commented out in `production.rb` |
-| `config.hosts` | The Redmine domain | `additional_environment.rb` | — |
-| `config.filter_redirect` | The paths `/files/`, `/thumbnails/` and `/tmp/bulk/` | `additional_environment.rb` | Makes redirects to attachment signed URLs appear as `[FILTERED]` in logs ([security.md](security.md#logs)) |
-| `config.action_mailer.raise_delivery_errors` | `true` only in `redmine-worker` | The plugin `redmine_serverless_ses` | `production.rb` sets it to `false`. Sending errors fail the job so that it can be retried ([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/sending.html#raising-errors)) |
-| `config.assets.redmine_detect_update` | `false` | The plugin `redmine_serverless` ([its README](https://redmine-kit.github.io/redmine_serverless/#running-on-lambda)) | `production.rb` sets it to `true` |
-| `RAILS_ENV` | `production` | Environment variable | — |
-| `RAILS_LOG_TO_STDOUT` | `1` | Environment variable | When this variable exists, `production.rb` sends logs to standard output |
-| `SECRET_KEY_BASE` | Read from SSM Parameter Store at start-up (see "Settings and secrets" above) | Environment variable | Rails 8.1 reads it from an environment variable or credentials. `config/secrets.yml` is not read |
-| `REDMINE_DB_HOST`<br>`REDMINE_DB_PASSWORD` | Same as above | Environment variable | `config/database.yml` reads the host and the password from them |
-| `RUBY_YJIT_ENABLE` | `1` | Environment variable | The Lambda Ruby documentation recommends YJIT for Rails |
-| `attachments_storage_path` | `/tmp/redmine/files` | `configuration.yml` | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache) |
-| `email_delivery` | `:ses_v2` (the SES API) | `configuration.yml` | [mail.md](mail.md) |
-| `webhook_blocklist` | Private addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`), loopback addresses (`127.0.0.0/8`, `::1/128`), link-local addresses (`169.254.0.0/16`, `fe80::/10`) | `configuration.yml` | Prevents webhooks from being sent to internal addresses or to address ranges used by metadata services ([ai.md](ai.md#event-notifications-redmines-standard-webhooks)). In the VPC endpoint setup, all addresses are blocked ([rds.md](rds.md)) |
+| `config.cache_store` | The Rails 8.1 default is files in `tmp/cache/`. `production.rb` does not set it. What is cached, tuning and a shared cache: [cache.md](cache.md); sessions: [session.md](session.md) | `:memory_store` (per environment, up to 64 MB) | `additional_environment.rb` |
+| `config.active_job.queue_adapter` | With the default `:async`, jobs are lost when the environment shuts down (below). `production.rb` does not set it | `:inline`; `redmine_serverless_sqs` makes it `:sqs` when `REDMINE_JOBS_QUEUE_URL` is set (on Lambda) | `additional_environment.rb` and the plugin |
+| `config.active_record.dump_schema_after_migration` | Stops writing `db/schema.rb` after migrations. Commented out in `production.rb` | `false` | `additional_environment.rb` |
+| `config.hosts` | The host names Rails accepts | The Redmine domain | `additional_environment.rb` |
+| `config.filter_redirect` | Makes redirects to attachment signed URLs appear as `[FILTERED]` in logs ([security.md](security.md#logs)) | The paths `/files/`, `/thumbnails/` and `/tmp/bulk/` | `additional_environment.rb` |
+| `config.action_mailer.raise_delivery_errors` | `production.rb` sets it to `false`. Sending errors fail the job so that it can be retried ([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/sending.html#raising-errors)) | `true` only in `redmine-worker` | The plugin `redmine_serverless_ses` |
+| `config.assets.redmine_detect_update` | `production.rb` sets it to `true` | `false` | The plugin `redmine_serverless` ([its README](https://redmine-kit.github.io/redmine_serverless/#running-on-lambda)) |
+| `attachments_storage_path` | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache) | `/tmp/redmine/files` | `configuration.yml` |
+| `email_delivery` | [mail.md](mail.md) | `:ses_v2` (the SES API) | `configuration.yml` |
+| `webhook_blocklist` | Prevents webhooks from being sent to internal addresses or to address ranges used by metadata services ([ai.md](ai.md#event-notifications-redmines-standard-webhooks)). In the VPC endpoint setup, all addresses are blocked ([rds.md](rds.md)) | Private addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`), loopback addresses (`127.0.0.0/8`, `::1/128`), link-local addresses (`169.254.0.0/16`, `fe80::/10`) | `configuration.yml` |
+
+| Key | Description | Parameter |
+| --- | --- | --- |
+| `RAILS_ENV` | The Rails environment | `production` |
+| `RAILS_LOG_TO_STDOUT` | Sends logs to standard output: `production.rb` does so when this variable exists | `1` |
+| `SECRET_KEY_BASE` | The key that encrypts the session cookie and more. Rails 8.1 reads it from an environment variable or credentials. `config/secrets.yml` is not read | Read from SSM Parameter Store at start-up (see "Settings and secrets" above) |
+| `REDMINE_DB_HOST`<br>`REDMINE_DB_PASSWORD` | The database host and password, which `config/database.yml` reads | Read from SSM Parameter Store at start-up (see "Settings and secrets" above) |
+| `RUBY_YJIT_ENABLE` | Turns YJIT on. The Lambda Ruby documentation recommends YJIT for Rails | `1` |
 
 `configuration.yml` is evaluated as ERB, so values can be read from environment variables.
 
 ### Settings in Redmine's administration
 
-| Setting | Value | Reason |
+| Item | Description | Value |
 | --- | --- | --- |
-| Host name and path, protocol | The Redmine domain, HTTPS | Used for URLs in mail |
-| Maximum size for downloading all attachments (`bulk_download_max_size`) | Redmine's default (100 MB) | The zip is returned as a temporary file in S3, so it does not hit the 6 MB limit ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#downloading-all-attachments)). Measure whether creating it fits in 60 seconds |
-| Administrator password | Change it right after loading the initial data | The initial administrator is `admin`, with the password `admin` |
-| Authentication required (`login_required`) | Enabling it is recommended | Redmine is not shown to people who are not logged in. Redmine's standard `/robots.txt` also starts denying everything to search engines (`Disallow: /`) |
+| Host name and path, protocol | Used for URLs in mail | The Redmine domain, HTTPS |
+| Maximum size for downloading all attachments (`bulk_download_max_size`) | The zip is returned as a temporary file in S3, so it does not hit the 6 MB limit ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#downloading-all-attachments)). Measure whether creating it fits in 60 seconds | Redmine's default (100 MB) |
+| Administrator password | The initial administrator is `admin`, with the password `admin` | Change it right after loading the initial data |
+| Authentication required (`login_required`) | Redmine is not shown to people who are not logged in. Redmine's standard `/robots.txt` also starts denying everything to search engines (`Disallow: /`) | Enabling it is recommended |
 
 ### Background jobs
 

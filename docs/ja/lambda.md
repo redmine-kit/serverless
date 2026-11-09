@@ -214,23 +214,26 @@ Rails の設定は、どこに書くかで効くかどうかが変わります�
 - **`production.rb` が設定している項目:** `config/additional_environment.rb` は `config/application.rb` の中で読まれ、そのあとで `production.rb` が読まれます。`production.rb` が設定している項目は、`additional_environment.rb` に書いても上書きされます。
 - **初期化の早い段階で使う項目:** Rails は、`config/initializers/` を読む前にキャッシュを作ります(`initialize_cache`)。キャッシュの設定は、`config/initializers/` に書いても効きません。
 
-| 設定 | 値 | 書く場所 | 理由 |
+| 項目 | 説明 | 値 | 書く場所 |
 | --- | --- | --- | --- |
-| `config.cache_store` | `:memory_store`(環境ごと、上限 64 MB) | `additional_environment.rb` | Rails 8.1 の既定は `tmp/cache/` のファイル。`production.rb` は設定していない。キャッシュするもの、調整、共有のキャッシュは [cache.md](cache.md)、セッションは [session.md](session.md) |
-| `config.active_job.queue_adapter` | `:inline`。`REDMINE_JOBS_QUEUE_URL` があると(Lambda の上)、`redmine_serverless_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン | 既定の `:async` は、環境が止まるとジョブが失われる(下記)。`production.rb` は設定していない |
-| `config.active_record.dump_schema_after_migration` | `false` | `additional_environment.rb` | migration のあとの `db/schema.rb` の書き出しを止める。`production.rb` ではコメントアウトされている |
-| `config.hosts` | Redmine のドメイン | `additional_environment.rb` | — |
-| `config.filter_redirect` | パスの `/files/`、`/thumbnails/`、`/tmp/bulk/` | `additional_environment.rb` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と書かせる([security.md](security.md#logs)) |
-| `config.action_mailer.raise_delivery_errors` | `redmine-worker` でだけ `true` | プラグイン `redmine_serverless_ses` | `production.rb` が `false` にしている。送信のエラーでジョブを失敗させ、やり直せるようにする([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#raising-errors)) |
-| `config.assets.redmine_detect_update` | `false` | プラグイン `redmine_serverless`([その README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda)) | `production.rb` が `true` にしている |
-| `RAILS_ENV` | `production` | 環境変数 | — |
-| `RAILS_LOG_TO_STDOUT` | `1` | 環境変数 | `production.rb` が、この変数があればログを標準出力に出す |
-| `SECRET_KEY_BASE` | 起動のときに SSM Parameter Store から読む(上の「設定と秘密の値」) | 環境変数 | Rails 8.1 は環境変数か credentials から読む。`config/secrets.yml` は読まれない |
-| `REDMINE_DB_HOST`<br>`REDMINE_DB_PASSWORD` | 同上 | 環境変数 | `config/database.yml` が接続先とパスワードを読む |
-| `RUBY_YJIT_ENABLE` | `1` | 環境変数 | Lambda の Ruby の資料が、Rails には YJIT を勧めている |
-| `attachments_storage_path` | `/tmp/redmine/files` | `configuration.yml` | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache) |
-| `email_delivery` | `:ses_v2`(SES の API) | `configuration.yml` | [mail.md](mail.md) |
-| `webhook_blocklist` | プライベートのアドレス(`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`fc00::/7`)、ループバックのアドレス(`127.0.0.0/8`、`::1/128`)、リンクローカルのアドレス(`169.254.0.0/16`、`fe80::/10`) | `configuration.yml` | webhook を、内向きのアドレスや、メタデータのサービスに使われるアドレスの範囲に送らせない([ai.md](ai.md#event-notifications-redmines-standard-webhooks))。VPC のエンドポイントの形では、すべてのアドレスにする([rds.md](rds.md)) |
+| `config.cache_store` | Rails 8.1 の既定は `tmp/cache/` のファイル。`production.rb` は設定していない。キャッシュするもの、調整、共有のキャッシュは [cache.md](cache.md)、セッションは [session.md](session.md) | `:memory_store`(環境ごと、上限 64 MB) | `additional_environment.rb` |
+| `config.active_job.queue_adapter` | 既定の `:async` は、環境が止まるとジョブが失われる(下記)。`production.rb` は設定していない | `:inline`。`REDMINE_JOBS_QUEUE_URL` があると(Lambda の上)、`redmine_serverless_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン |
+| `config.active_record.dump_schema_after_migration` | migration のあとの `db/schema.rb` の書き出しを止める。`production.rb` ではコメントアウトされている | `false` | `additional_environment.rb` |
+| `config.hosts` | Rails が受け付けるホスト名 | Redmine のドメイン | `additional_environment.rb` |
+| `config.filter_redirect` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と書かせる([security.md](security.md#logs)) | パスの `/files/`、`/thumbnails/`、`/tmp/bulk/` | `additional_environment.rb` |
+| `config.action_mailer.raise_delivery_errors` | `production.rb` が `false` にしている。送信のエラーでジョブを失敗させ、やり直せるようにする([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#raising-errors)) | `redmine-worker` でだけ `true` | プラグイン `redmine_serverless_ses` |
+| `config.assets.redmine_detect_update` | `production.rb` が `true` にしている | `false` | プラグイン `redmine_serverless`([その README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda)) |
+| `attachments_storage_path` | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache) | `/tmp/redmine/files` | `configuration.yml` |
+| `email_delivery` | [mail.md](mail.md) | `:ses_v2`(SES の API) | `configuration.yml` |
+| `webhook_blocklist` | webhook を、内向きのアドレスや、メタデータのサービスに使われるアドレスの範囲に送らせない([ai.md](ai.md#event-notifications-redmines-standard-webhooks))。VPC のエンドポイントの形では、すべてのアドレスにする([rds.md](rds.md)) | プライベートのアドレス(`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`fc00::/7`)、ループバックのアドレス(`127.0.0.0/8`、`::1/128`)、リンクローカルのアドレス(`169.254.0.0/16`、`fe80::/10`) | `configuration.yml` |
+
+| キー | 説明 | パラメーター |
+| --- | --- | --- |
+| `RAILS_ENV` | Rails の環境 | `production` |
+| `RAILS_LOG_TO_STDOUT` | ログを標準出力に出す。`production.rb` が、この変数があれば出す | `1` |
+| `SECRET_KEY_BASE` | セッションの Cookie などを暗号化する鍵。Rails 8.1 は環境変数か credentials から読む。`config/secrets.yml` は読まれない | 起動のときに SSM Parameter Store から読む(上の「設定と秘密の値」) |
+| `REDMINE_DB_HOST`<br>`REDMINE_DB_PASSWORD` | データベースの接続先とパスワード。`config/database.yml` が読む | 起動のときに SSM Parameter Store から読む(上の「設定と秘密の値」) |
+| `RUBY_YJIT_ENABLE` | YJIT を有効にする。Lambda の Ruby の資料が、Rails には YJIT を勧めている | `1` |
 
 `configuration.yml` は ERB で評価されるので、値は環境変数から読めます。
 
@@ -238,12 +241,12 @@ Rails の設定は、どこに書くかで効くかどうかが変わります�
 
 ### Redmine の管理画面の設定
 
-| 設定 | 値 | 理由 |
+| 項目 | 説明 | 値 |
 | --- | --- | --- |
-| ホスト名とパス、プロトコル | Redmine のドメイン、HTTPS | メールの中の URL に使う |
-| 添付の一括のダウンロードの上限(`bulk_download_max_size`) | Redmine の既定(100 MB)のまま | zip は S3 の仮のファイルにして返すので、6 MB の制限に当たらない([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#downloading-all-attachments))。作る時間が 60 秒に収まるかを測る |
-| 管理者のパスワード | 初めのデータを入れたらすぐに変える | 初めの管理者は `admin`、パスワードも `admin` |
-| 認証が必要(`login_required`) | 有効を勧める | Redmine を、ログインしていない人に見せない。Redmine の標準の `/robots.txt` も、検索エンジンにすべてを拒む(`Disallow: /`)ようになる |
+| ホスト名とパス、プロトコル | メールの中の URL に使う | Redmine のドメイン、HTTPS |
+| 添付の一括のダウンロードの上限(`bulk_download_max_size`) | zip は S3 の仮のファイルにして返すので、6 MB の制限に当たらない([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#downloading-all-attachments))。作る時間が 60 秒に収まるかを測る | Redmine の既定(100 MB)のまま |
+| 管理者のパスワード | 初めの管理者は `admin`、パスワードも `admin` | 初めのデータを入れたらすぐに変える |
+| 認証が必要(`login_required`) | Redmine を、ログインしていない人に見せない。Redmine の標準の `/robots.txt` も、検索エンジンにすべてを拒む(`Disallow: /`)ようになる | 有効を勧める |
 
 <a id="background-jobs"></a>
 

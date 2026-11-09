@@ -54,7 +54,7 @@ production:
 ### SES
 
 - **Domain verification:** Verify Redmine's subdomain as an SES identity in the Region you use (DKIM), and request production access (leaving the sandbox) in advance. SES identities and production access are per Region ([Receiving domain](#receiving-domain)).
-- **Network path:** `redmine-web`, `redmine-worker` and `redmine-task` reach the public SES API endpoint. No VPC endpoint is needed. `redmine-web` uses the SES API for "Sending email" in the administration screen and for test email ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)). When using RDS and putting the functions in a VPC, an interface endpoint for the SES API or a NAT instance is needed ([rds.md](rds.md#routes-out-of-the-vpc)).
+- **Network path:** `redmine-web`, `redmine-worker` and `redmine-task` are in the VPC, so they reach the SES API through an interface endpoint for the SES API or the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)). `redmine-web` uses the SES API for "Sending email" in the administration screen and for test email ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)). What the plugin calls, and its permissions, are in the plugin's [setup page](https://redmine-kit.github.io/redmine_serverless_ses/setup.html#network).
 
 ### When sending fails
 

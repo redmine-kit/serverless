@@ -64,7 +64,7 @@ production:
 ### SES
 
 - **ドメインの認証:** Redmine のサブドメインを、使うリージョンの SES の ID として確認し(DKIM)、本番での利用(サンドボックスの解除)を申請しておきます。SES の ID と本番での利用は、リージョンごとです([受信のドメイン](#receiving-domain))。
-- **届く経路:** `redmine-web`、`redmine-worker`、`redmine-task` は、SES の API の公開のエンドポイントに届きます。VPC のエンドポイントは要りません。`redmine-web` は、管理画面の「メールの送信」とテストのメールで SES の API を使います([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email))。RDS にして VPC に入れるときは、SES の API 用のインターフェイスエンドポイントか NAT インスタンスが要ります([rds.md](rds.md#routes-out-of-the-vpc))。
+- **届く経路:** `redmine-web`、`redmine-worker`、`redmine-task` は VPC の中にあるので、SES の API 用のインターフェイスエンドポイントか NAT インスタンスを通って SES の API に届きます([rds.md](rds.md#routes-out-of-the-vpc))。`redmine-web` は、管理画面の「メールの送信」とテストのメールで SES の API を使います([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email))。プラグインが呼ぶものと、その権限は、プラグインの[準備のページ](https://redmine-kit.github.io/redmine_serverless_ses/ja/setup.html#network)にあります。
 
 <a id="when-sending-fails"></a>
 

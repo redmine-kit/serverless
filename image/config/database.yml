@@ -12,3 +12,7 @@ production:
   sslrootcert: /var/task/rds-global-bundle.pem
   encoding: unicode
   pool: 1
+  # db/schema.rb is not written after migrations: the file system on Lambda is
+  # read-only, and redmine:plugins:migrate dumps the schema even when
+  # dump_schema_after_migration is false.
+  schema_dump: false

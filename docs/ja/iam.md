@@ -74,7 +74,7 @@ flowchart LR
 | `s3:ListBucket` | 添付ファイルのバケット | ないオブジェクトへの `HeadObject` を、403 ではなく 404 として受け取る。サムネイルをプレフィックスで消す |
 | `sqs:SendMessage` | ジョブのキュー | ジョブを積む([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | ジョブのキューとデッドレターキュー | 管理画面の「ジョブ」 |
-| `sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks` | ジョブのデッドレターキュー | 管理画面の「ジョブ」から、デッドレターキューを元のキューに戻す |
+| `sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | ジョブのデッドレターキュー | 管理画面の「ジョブ」から、デッドレターキューをジョブのキューに戻す。ジョブのキューへの `sqs:SendMessage`(3 つの関数に共通)も使う。戻すのに要る最小の権限は、SQS のプラグインの [iam.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/iam.html#permissions) にある |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元のドメインの SES の ID | Redmine の標準のテストのメール(画面の要求の中で送る) |
 | `ses:GetEmailIdentity` | 送信元のドメインの SES の ID | 管理画面の「メールの送信」 |
 | `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*`(対象を絞れない) | 同上([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email)) |
@@ -223,7 +223,7 @@ flowchart LR
 | --- | --- |
 | `lambda:InvokeFunction`<br>`lambda:GetFunction` | `redmine-task` |
 | `logs:StartQuery`<br>`logs:GetQueryResults`<br>`logs:FilterLogEvents` | 3 つの関数のロググループ |
-| `sqs:GetQueueAttributes`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks` | ジョブのキューとデッドレターキュー |
+| `sqs:GetQueueAttributes`<br>`sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | ジョブのキューとデッドレターキュー |
 
 - **rake は強い権限:** `redmine-task` を呼べる人は、rake と `rails runner` で、データベースと S3 のすべてを読み書きできます。呼べる人を絞ります([tasks.md](tasks.md#permissions))。
 
@@ -261,7 +261,6 @@ flowchart LR
 ## 確認すること
 
 - `aws/ssm` の鍵の SecureString を読むのに、`kms:Decrypt` が要るか
-- `sqs:StartMessageMoveTask` に、元のキューとデッドレターキューのどちらにどの権限が要るか
 - `s3:ListBucket` に条件(`s3:prefix`)を付けたときに、ないオブジェクトへの `HeadObject` が 404 になるか
 - SES v2 の `SendEmail` で全文(raw)を送るときに、`ses:SendRawEmail` が要るか
 - `ssm:GetParametersByPath` の対象に、パスの ARN と、その下(`/*`)の両方が要るか

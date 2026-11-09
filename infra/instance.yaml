@@ -664,8 +664,16 @@ Resources:
               - Effect: Allow
                 Action: sqs:GetQueueAttributes
                 Resource: [!GetAtt JobQueue.Arn, !GetAtt JobDeadLetterQueue.Arn]
+              # Moving the dead-letter queue back: AWS's minimum for a redrive
+              # (redmine_serverless_sqs docs/iam.md); SendMessage on the job
+              # queue is in CommonPolicy.
               - Effect: Allow
-                Action: [sqs:StartMessageMoveTask, sqs:ListMessageMoveTasks]
+                Action:
+                  - sqs:GetQueueUrl
+                  - sqs:StartMessageMoveTask
+                  - sqs:ListMessageMoveTasks
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
                 Resource: !GetAtt JobDeadLetterQueue.Arn
               # The "Sending email" page.
               - Effect: Allow

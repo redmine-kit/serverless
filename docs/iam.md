@@ -66,7 +66,7 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 | `s3:ListBucket` | The attachments bucket | Get 404 instead of 403 for `HeadObject` on a missing object. Delete thumbnails by prefix |
 | `sqs:SendMessage` | The job queue | Enqueuing jobs ([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | The job queue and the dead-letter queue | The "Jobs" admin page |
-| `sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks` | The job dead-letter queue | Moving the dead-letter queue back to the source queue from the "Jobs" admin page |
+| `sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | The job dead-letter queue | Moving the dead-letter queue back to the job queue from the "Jobs" admin page, with `sqs:SendMessage` on the job queue (common to the three functions). The minimum for a redrive is in the SQS plugin's [iam.md](https://redmine-kit.github.io/redmine_serverless_sqs/iam.html#permissions) |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Redmine's standard test email (sent within a page request) |
 | `ses:GetEmailIdentity` | The SES identity of the sender domain | The "Sending email" admin page |
 | `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)) |
@@ -195,7 +195,7 @@ If an operations permission set is created, it has the following scope (whether 
 | --- | --- |
 | `lambda:InvokeFunction`<br>`lambda:GetFunction` | `redmine-task` |
 | `logs:StartQuery`<br>`logs:GetQueryResults`<br>`logs:FilterLogEvents` | The log groups of the three functions |
-| `sqs:GetQueueAttributes`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks` | The job queue and the dead-letter queue |
+| `sqs:GetQueueAttributes`<br>`sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | The job queue and the dead-letter queue |
 
 - **rake is a powerful permission:** Anyone who can invoke `redmine-task` can read and write everything in the database and S3 with rake and `rails runner`. Restrict who can invoke it ([tasks.md](tasks.md#permissions)).
 
@@ -225,7 +225,6 @@ If it finds a function URL, S3 bucket, SQS queue, SSM parameter or RDS snapshot,
 ## To verify
 
 - Whether reading a SecureString encrypted with the `aws/ssm` key needs `kms:Decrypt`
-- Which permissions `sqs:StartMessageMoveTask` needs on the source queue and on the dead-letter queue
 - Whether `HeadObject` on a missing object returns 404 when `s3:ListBucket` has a condition (`s3:prefix`)
 - Whether sending the full message (raw) with SES v2 `SendEmail` needs `ses:SendRawEmail`
 - Whether the resource of `ssm:GetParametersByPath` needs both the path ARN and the path below it (`/*`)

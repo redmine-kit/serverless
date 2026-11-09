@@ -439,7 +439,7 @@ GEM
       aws-actionmailer-ses (~> 1.2)
       aws-sdk-s3 (~> 1.0)
       aws-sdk-sesv2 (~> 1.0)
-    redmine_serverless_sqs (0.1.2)
+    redmine_serverless_sqs (0.1.3)
       aws-activejob-sqs (~> 1.2)
       aws-sdk-sqs (~> 1.0)
     redmine_serverless_ssm (0.1.1)
@@ -486,7 +486,7 @@ DEPENDENCIES
   redmine_serverless (>= 0.1.0)!
   redmine_serverless_s3 (>= 0.1.1)!
   redmine_serverless_ses (>= 0.1.1)!
-  redmine_serverless_sqs (>= 0.1.2)!
+  redmine_serverless_sqs (>= 0.1.3)!
   redmine_serverless_ssm (>= 0.1.1)!
   requestjs-rails (~> 0.0.13)
   roadie-rails (~> 3.4.0)
@@ -626,7 +626,7 @@ CHECKSUMS
   redmine_serverless (0.1.0) sha256=2fecb69c64d22e042e71442d75330bdc6daf3d567091248c90e49dde49b5a954
   redmine_serverless_s3 (0.1.1) sha256=49e89ba4ecb396f25f003306cd1d484e556c08519905dd005e8cf03c9a917489
   redmine_serverless_ses (0.1.1) sha256=916f1540909e23f4d63a432dced08f953a59a4fe4c0f440d26b5faf421af5e45
-  redmine_serverless_sqs (0.1.2) sha256=b18f36ed95e942aad7b5b5e08bae54fd3b2904ff8b43dd3d4c8ead2d6b5a0437
+  redmine_serverless_sqs (0.1.3) sha256=cff06a606ba4d691a8f39996e50f39f864e24b6ba5e75c152da25a3c64ffd303
   redmine_serverless_ssm (0.1.1) sha256=f5c791e06bfb480e09423d9585f22114aeffd7805079a93b627732172ab951d8
   regexp_parser (2.13.1) sha256=5aedb6b7c35688f51e86eef17a15374dfd287c83f4ca644b2c5f3ec50a33b44b
   reline (0.7.0) sha256=5b012d8e55dbf9d450f12bde2cf7d15ff546ae80b3f8f3b30e570d431815583d

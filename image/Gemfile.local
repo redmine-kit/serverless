@@ -17,7 +17,7 @@ gem 'puma'
 source 'https://rubygems.pkg.github.com/redmine-kit' do
   gem 'redmine_serverless_ssm', '>= 0.1.1'
   gem 'redmine_serverless', '>= 0.1.0'
-  gem 'redmine_serverless_sqs', '>= 0.1.2'
+  gem 'redmine_serverless_sqs', '>= 0.1.3'
   gem 'redmine_serverless_ses', '>= 0.1.1'
   gem 'redmine_serverless_s3', '>= 0.1.1', require: false
 end

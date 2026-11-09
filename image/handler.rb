@@ -60,14 +60,19 @@ module TaskHandler
 
   def ses_receipt(ses)
     receipt = ses['receipt'].is_a?(Hash) ? ses['receipt'] : {}
+    env = ses_verdicts(receipt)
+    recipients = Array(receipt['recipients']).select { |r| r.is_a?(String) && RECIPIENT.match?(r) }
+    env['SES_RECIPIENTS'] = recipients.join(',') unless recipients.empty?
+    env
+  end
+
+  def ses_verdicts(receipt)
     env = SES_VERDICTS.each_with_object({}) do |(field, name), out|
       status = receipt[field].is_a?(Hash) ? receipt[field]['status'] : nil
       out[name] = status if status.is_a?(String) && VERDICT.match?(status)
     end
     policy = receipt['dmarcPolicy']
     env['SES_DMARC_POLICY'] = policy.upcase if policy.is_a?(String) && VERDICT.match?(policy.upcase)
-    recipients = Array(receipt['recipients']).select { |r| r.is_a?(String) && RECIPIENT.match?(r) }
-    env['SES_RECIPIENTS'] = recipients.join(',') unless recipients.empty?
     env
   end
 

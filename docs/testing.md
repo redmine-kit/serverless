@@ -162,7 +162,7 @@ Every image build is started in Docker under the same conditions as production.
 `bin/test-edge` runs the tests of `edge/` with `node:test` in the Node.js image, without npm packages.
 
 - **`redmine-body-hash` (Lambda@Edge):** The hash of an empty body, of a base64 body over its raw bytes (forms, binary, multipart) and of a text body; a forged `x-amz-content-sha256` is replaced; a truncated body (over 1 MB) gets 413; other fields of the request are kept.
-- **`<instance>-incoming-size` (CloudFront Function):** Run as CloudFront runs it, a plain script with the limit written in: a PUT within the limit passes, a larger one gets 413, one without a valid `Content-Length` gets 411, and other methods pass.
+- **`<instance>-incoming-size` (CloudFront Function):** Run as CloudFront runs it, a plain script with the limit written in: a PUT under `/tmp/incoming/` within the limit passes, a larger one gets 413, one without a valid `Content-Length` gets 411, and other methods and paths (signed GETs of thumbnails and zips) pass.
 - **The templates:** The code is inline in the templates (`infra/shared-edge.yaml`, `infra/instance.yaml`), so the tests check that the templates carry the same lines as the files.
 
 ## Deployment tests

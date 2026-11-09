@@ -42,7 +42,7 @@ flowchart LR
 | `redmine-worker` | Lambda(`redmine-worker`) | ジョブの実行(メールの送信、プロジェクトの削除など) |
 | `redmine-task` | Lambda(`redmine-task`) | rake、`rails runner`、メールの取り込み |
 | `redmine-scheduler` | EventBridge Scheduler | 定期の rake と、業務時間の温めの呼び出し |
-| `redmine-malware-scan` | GuardDuty Malware Protection(`malware-protection-plan.guardduty.amazonaws.com`) | 添付ファイルのバケットの `incoming/` と `imports/` の新しいオブジェクトをスキャンし、タグを付ける([aws-security.md](aws-security.md#malware-protection-for-s3))。`uploads.malwareScan` のときだけ |
+| `redmine-malware-scan` | GuardDuty Malware Protection(`malware-protection-plan.guardduty.amazonaws.com`) | 添付ファイルのバケットの `tmp/incoming/` と `imports/` の新しいオブジェクトをスキャンし、タグを付ける([aws-security.md](aws-security.md#malware-protection-for-s3))。`uploads.malwareScan` のときだけ |
 | `redmine-body-hash` | Lambda と Lambda@Edge(`redmine-body-hash`) | 要求の本文のハッシュを入れる([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge))。ログを書くだけ |
 | `redmine-github-deploy` | GitHub Actions(OIDC) | コードのデプロイ。イメージの push、アセットの同期、関数の更新、migration |
 | `redmine-infra-deploy` | SSO の管理者、承認が要る GitHub の Environment(OIDC) | `bin/deploy` でスタックを当てる。設定のファイルの `deployRoleArn` が指すロール |
@@ -70,7 +70,7 @@ SecureString のパラメーターは、SSM の既定の鍵(`aws/ssm`)で暗号�
 
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
-| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject` | 添付ファイルのバケットの<br>`files/*`<br>`thumbnails/*`<br>`imports/*`<br>`incoming/*`<br>`tmp/*` | 添付ファイルの保存、登録のときのチェックサム付きの `HeadObject` とコピー、`/tmp` のキャッシュ、削除、一括のダウンロードの仮のファイル([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html)) |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject` | 添付ファイルのバケットの<br>`files/*`<br>`imports/*`<br>`tmp/*` | 添付ファイル、Markdown のプレビュー、サムネイルの保存、登録のときのチェックサム付きの `HeadObject` とコピー、`/tmp` のキャッシュ、削除、一括のダウンロードの仮のファイル([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html)) |
 | `s3:ListBucket` | 添付ファイルのバケット | ないオブジェクトへの `HeadObject` を、403 ではなく 404 として受け取る。サムネイルをプレフィックスで消す |
 | `sqs:SendMessage` | ジョブのキュー | ジョブを積む([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | ジョブのキューとデッドレターキュー | 管理画面の「ジョブ」 |

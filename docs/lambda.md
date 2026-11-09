@@ -194,7 +194,7 @@ Whether a Rails setting takes effect depends on where it is written.
 | `config.active_job.queue_adapter` | With the default `:async`, jobs are lost when the environment shuts down (below). `production.rb` does not set it | `:inline`; `redmine_serverless_sqs` makes it `:sqs` when `REDMINE_JOBS_QUEUE_URL` is set (on Lambda) | `additional_environment.rb` and the plugin |
 | `config.active_record.dump_schema_after_migration` | Stops writing `db/schema.rb` after migrations. Commented out in `production.rb` | `false` | `additional_environment.rb` |
 | `config.hosts` | The host names Rails accepts | The Redmine domain | `additional_environment.rb` |
-| `config.filter_redirect` | Makes redirects to attachment signed URLs appear as `[FILTERED]` in logs ([security.md](security.md#logs)) | The paths `/files/`, `/thumbnails/` and `/tmp/bulk/` | `additional_environment.rb` |
+| `config.filter_redirect` | Makes redirects to attachment signed URLs appear as `[FILTERED]` in logs ([security.md](security.md#logs)) | URLs on the CloudFront domain under `/files/` and `/tmp/` | `additional_environment.rb` |
 | `config.action_mailer.raise_delivery_errors` | `production.rb` sets it to `false`. Sending errors fail the job so that it can be retried ([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/sending.html#raising-errors)) | `true` only in `redmine-worker` | The plugin `redmine_serverless_ses` |
 | `config.assets.redmine_detect_update` | `production.rb` sets it to `true` | `false` | The plugin `redmine_serverless` ([its README](https://redmine-kit.github.io/redmine_serverless/#running-on-lambda)) |
 | `attachments_storage_path` | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache) | `/tmp/redmine/files` | `configuration.yml` |
@@ -306,7 +306,7 @@ flowchart LR
 - **Body hash:** Function URLs do not accept unsigned bodies (`UNSIGNED-PAYLOAD`), so PUT and POST must send the body's SHA256 in `x-amz-content-sha256` (CloudFront documentation). Forms in Redmine pages in the browser do not add it. So the Lambda@Edge function `redmine-body-hash`, which runs at the origin request, computes the hash from the body and adds it. OAC then signs the request.
 - **Not possible with CloudFront Functions:** The request data in CloudFront Functions has no body (only the method, URI, query string, headers and cookies). Only Lambda@Edge can read the body.
 - **`Host`:** The viewer's `Host` is not forwarded to the function URL (the origin request policy is `AllViewerExceptHostHeader`). OAC signs with the function URL's host name. The Redmine domain is passed in the origin custom header `X-Forwarded-Host`. Rails builds URLs from `X-Forwarded-Host`.
-- **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below). Attachments use the behaviors `/files/*`, `/thumbnails/*`, `/tmp/bulk/*` and `/incoming/*`, which go to the attachments bucket through OAC and require signed URLs ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)); the body hash function is not attached to them.
+- **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below). Attachments use the behaviors `/files/*` and `/tmp/*` (thumbnails, zips and uploads), which go to the attachments bucket through OAC and require signed URLs ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)); the body hash function is not attached to them.
 - **Origin response timeout:** The CloudFront default is 30 seconds, configurable from 1 to 120 seconds. It is set to 60 seconds to match the function timeout.
 
 ### Function that adds the body hash (Lambda@Edge)
@@ -363,7 +363,7 @@ By default in Rails 8.1, Rails also serves `public/` (`public_file_server.enable
 
 CloudFront uses the flat-rate Free plan ($0 per month) by default. It includes 1 million requests and 100 GB of transfer per month, which is expected to be enough at this scale. It also includes WAF rules (up to 5). The plan differences, what is not included (such as logs) and the WAF rules are in [security.md](security.md#aws-waf).
 
-Free has no custom cache rules and no origins inside a VPC; this design uses neither. It uses only the cache policies AWS provides, and its origins (the function URL and S3) are outside a VPC. The distribution has the default behavior and 5 path behaviors (`/files/*`, `/thumbnails/*`, `/tmp/bulk/*`, `/incoming/*`, `/assets/*`). Free allows 5 cache behaviors, and the documentation does not say whether the default behavior counts toward that limit (checked 2026-11-10), so this has to be confirmed in an account.
+Free has no custom cache rules and no origins inside a VPC; this design uses neither. It uses only the cache policies AWS provides, and its origins (the function URL and S3) are outside a VPC. The distribution has 4 cache behaviors: the default one and `/files/*`, `/tmp/*` and `/assets/*`. Free allows 5 (checked 2026-11-10), so it fits whether or not the default behavior counts. Thumbnails, zips and uploads share `/tmp/*` for this reason; their S3 keys follow Redmine's own `tmp/` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#bucket-layout)).
 
 ## Features that cannot be used
 
@@ -394,4 +394,3 @@ Synchronous invocations of Event Functions are limited to 6 MB each for the requ
 - Whether, after Lambda@Edge adds `x-amz-content-sha256` and OAC signs the request, the function URL accepts POST, PUT, PATCH and DELETE. Whether POST without a body and multipart forms also pass
 - Whether returning 413 on Lambda@Edge `inputTruncated` gives a response that browsers and API clients can understand
 - How many CloudFront flat-rate Free plans an account can use
-- Whether the distribution (the default behavior and 5 path behaviors) fits the Free plan's limit of 5 cache behaviors

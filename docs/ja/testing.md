@@ -202,7 +202,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 `bin/test-edge` が、Node.js のイメージの中で、`node:test` で `edge/` のテストを実行します。npm のパッケージは使いません。
 
 - **`redmine-body-hash`(Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ(フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文(1 MB を超えるもの)に 413 を返すこと、要求のほかの項目を変えないこと。
-- **`<instance>-incoming-size`(CloudFront Function):** CloudFront と同じく、上限を書き込んだただのスクリプトとして実行します。上限までの PUT は通り、超えると 413、正しい `Content-Length` がないと 411、ほかのメソッドは通ること。
+- **`<instance>-incoming-size`(CloudFront Function):** CloudFront と同じく、上限を書き込んだただのスクリプトとして実行します。`/tmp/incoming/` への上限までの PUT は通り、超えると 413、正しい `Content-Length` がないと 411、ほかのメソッドとパス(サムネイルと zip の署名付きの GET)は通ること。
 - **テンプレート:** コードはテンプレート(`infra/shared-edge.yaml`、`infra/instance.yaml`)に埋め込むので、テンプレートがファイルと同じ行を持つことも確認します。
 
 <a id="deployment-tests"></a>

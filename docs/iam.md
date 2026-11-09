@@ -38,7 +38,7 @@ flowchart LR
 | `redmine-worker` | Lambda (`redmine-worker`) | Running jobs (sending email, deleting projects, etc.) |
 | `redmine-task` | Lambda (`redmine-task`) | rake, `rails runner`, email import |
 | `redmine-scheduler` | EventBridge Scheduler | Scheduled rake and warm-up calls during business hours |
-| `redmine-malware-scan` | GuardDuty Malware Protection (`malware-protection-plan.guardduty.amazonaws.com`) | Scans and tags new objects under `incoming/` and `imports/` of the attachment bucket ([aws-security.md](aws-security.md#malware-protection-for-s3)). Only with `uploads.malwareScan` |
+| `redmine-malware-scan` | GuardDuty Malware Protection (`malware-protection-plan.guardduty.amazonaws.com`) | Scans and tags new objects under `tmp/incoming/` and `imports/` of the attachment bucket ([aws-security.md](aws-security.md#malware-protection-for-s3)). Only with `uploads.malwareScan` |
 | `redmine-body-hash` | Lambda and Lambda@Edge (`redmine-body-hash`) | Adds the hash of the request body ([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge)). Only writes logs |
 | `redmine-github-deploy` | GitHub Actions (OIDC) | Code deployment. Pushing the image, syncing assets, updating functions, migrations |
 | `redmine-infra-deploy` | SSO administrators, a GitHub Environment that requires approval (OIDC) | Applies the stacks with `bin/deploy`. The role that `deployRoleArn` in the configuration file points to |
@@ -62,7 +62,7 @@ Each row belongs to one of the plugins, and the plugin's IAM page also explains 
 
 | Permission | Resource | Use |
 | --- | --- | --- |
-| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject` | In the attachments bucket:<br>`files/*`<br>`thumbnails/*`<br>`imports/*`<br>`incoming/*`<br>`tmp/*` | Storing attachments, `HeadObject` with the checksum and copying at registration, the `/tmp` cache, deletion, temporary files for bulk download ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html)) |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject` | In the attachments bucket:<br>`files/*`<br>`imports/*`<br>`tmp/*` | Storing attachments, Markdown previews and thumbnails, `HeadObject` with the checksum and copying at registration, the `/tmp` cache, deletion, temporary files for bulk download ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html)) |
 | `s3:ListBucket` | The attachments bucket | Get 404 instead of 403 for `HeadObject` on a missing object. Delete thumbnails by prefix |
 | `sqs:SendMessage` | The job queue | Enqueuing jobs ([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | The job queue and the dead-letter queue | The "Jobs" admin page |

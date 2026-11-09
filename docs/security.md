@@ -33,7 +33,7 @@ The specifications in this page were checked against official information and th
 | Someone connects to the database from outside | RDS in private subnets without public access. The security group allows only the functions. The password is only in SSM and RDS | [rds.md](rds.md#security) |
 | Attachments are read by people without permission | Redmine checks permissions before issuing a 5-minute CloudFront signed URL. The bucket is not public and allows only CloudFront through OAC | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
 | A signed URL leaks | It expires in 5 minutes. It is not written to logs ("Logs" below) | "Logs" below |
-| Malicious code runs through an attachment (HTML, SVG) | Attachments are served from Redmine's origin, as in standard Redmine, through the CloudFront behaviors `/files/*`, `/thumbnails/*` and `/tmp/bulk/*`, with the same `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` that Redmine sets and `X-Content-Type-Options: nosniff`. A sandboxed document gets an opaque origin and runs no scripts, so it cannot read Redmine's cookies or call Redmine. Everything except PDF is returned as a download (`Content-Disposition: attachment`, the same as standard Redmine). A check after deployment confirms the header ([testing.md](testing.md#checks-after-deployment)) | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
+| Malicious code runs through an attachment (HTML, SVG) | Attachments are served from Redmine's origin, as in standard Redmine, through the CloudFront behaviors `/files/*` and `/tmp/*` (thumbnails and zips), with the same `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` that Redmine sets and `X-Content-Type-Options: nosniff`. A sandboxed document gets an opaque origin and runs no scripts, so it cannot read Redmine's cookies or call Redmine. Everything except PDF is returned as a download (`Content-Disposition: attachment`, the same as standard Redmine). A check after deployment confirms the header ([testing.md](testing.md#checks-after-deployment)) | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
 | Email with a forged sender creates issues | Drop email that fails DMARC, spam, and email with viruses. Do not accept email from unregistered addresses | [mail.md](mail.md#spoofing-and-spam) |
 | A webhook is used to send requests to internal addresses (SSRF) | `webhook_blocklist` rejects private, loopback and link-local addresses | [lambda.md](lambda.md#rails-and-redmine-settings) |
 | Malicious code gets into a dependent gem or image | Pin with digests and SHA256, scan dependencies for vulnerabilities, pin GitHub Actions by SHA | "Supply chain" below |
@@ -47,9 +47,9 @@ The specifications in this page were checked against official information and th
 | --- | --- |
 | HTTPS | Viewers are allowed HTTPS only; HTTP is redirected to HTTPS. The minimum TLS version is the CloudFront security policy `TLSv1.2_2021` |
 | Response headers | On Redmine's behaviors, attach the CloudFront AWS-managed response headers policy `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`). It adds `Strict-Transport-Security: max-age=31536000`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin` and `X-XSS-Protection: 1; mode=block`. Redmine does not enable `force_ssl` (`config/environments/production.rb`), so HSTS is added by CloudFront |
-| Attachments | The behaviors `/files/*`, `/thumbnails/*`, `/tmp/bulk/*` (GET) and `/incoming/*` (PUT) go to the attachments bucket through OAC and require CloudFront signed URLs. The download behaviors have their own response headers policy with the sandbox CSP and `nosniff` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)) |
+| Attachments | The behaviors `/files/*` (attachments, GET) and `/tmp/*` (thumbnails and zips with GET, uploads to `/tmp/incoming/` with PUT) go to the attachments bucket through OAC and require CloudFront signed URLs. Both have their own response headers policy with the sandbox CSP and `nosniff` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)) |
 | Function URLs | Requests without an OAC signature are rejected before the function is invoked ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
-| Request body | Up to 1 MB on Redmine's behaviors. Above that, Lambda@Edge returns 413. Uploads to `/incoming/*` go to S3, not to Lambda; a CloudFront Function rejects a body over the upload limit ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload)) |
+| Request body | Up to 1 MB on Redmine's behaviors. Above that, Lambda@Edge returns 413. Uploads to `/tmp/incoming/` go to S3, not to Lambda; a CloudFront Function rejects a body over the upload limit ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload)) |
 
 Policies you define yourself, such as a Content Security Policy of your own, are available only on the Business flat-rate plan and above. Free and Pro use the AWS-managed policy above.
 
@@ -155,7 +155,7 @@ How long logs, records, temporary files and backups are kept. All periods are de
 | SQS dead-letter queue | 14 days | SQS message retention (the SQS maximum) | — |
 | Old versions of attachments (deleted and overwritten) | 30 days | S3 lifecycle (delete noncurrent versions) | `retention.noncurrentVersionDays` |
 | Temporary files (`tmp/`: zip files for bulk download, read/write checks) | 1 day | S3 lifecycle | — |
-| Uploads before registration (`incoming/`) | 1 day | S3 lifecycle | — |
+| Uploads before registration (`tmp/incoming/`) | 1 day | S3 lifecycle | — |
 | CSV import files (`imports/`) | 7 days | S3 lifecycle | — |
 | Old assets | 90 days | S3 lifecycle (delete noncurrent versions) | — |
 | ECR images | The 10 newest | ECR lifecycle. Images used by functions are not deleted ([lambda.md](lambda.md#image)) | — |
@@ -195,7 +195,7 @@ Risks this design cannot fully prevent, covered by operations.
 | Login brute force | Redmine has no mechanism to lock an account after a number of failures | WAF rate limits and two-factor authentication |
 | Outbound traffic through the NAT instance | With the NAT instance setup, functions can reach the internet | Focus on not being taken over (the protections above). If outbound traffic must be blocked, use the VPC endpoint setup ([rds.md](rds.md#which-to-choose)) |
 | The database password | Unlike temporary credentials, a password does not expire by itself | It is kept only in SSM (SecureString) and RDS, and RDS is reachable only from inside the VPC. Change it in an incident (below) |
-| Viruses in attachments | Redmine does not scan attachments | GuardDuty Malware Protection for S3 on `incoming/` and `imports/`, with `REDMINE_S3_MALWARE_SCAN=true`: the plugin uses a file only after it is found clean ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#malware-scan), with the cost) |
+| Viruses in attachments | Redmine does not scan attachments | GuardDuty Malware Protection for S3 on `tmp/incoming/` and `imports/`, with `REDMINE_S3_MALWARE_SCAN=true`: the plugin uses a file only after it is found clean ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#malware-scan), with the cost) |
 | No CloudFront and WAF logs | The Free flat-rate plan does not include logs | Use Lambda logs and the security dashboard. If that is not enough, move to Pro |
 
 ## Incidents

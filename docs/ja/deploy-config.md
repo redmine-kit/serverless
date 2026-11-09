@@ -72,7 +72,7 @@ Lambda@Edge の関数のほかに、CloudFront の証明書(ACM)も us-east-1 �
 | `lambda.workerReservedConcurrency` | | 3 | `redmine-worker` の同時実行数の予約。`redmine-task` は 2 で決め打ち([tasks.md](tasks.md#kinds-of-events)) |
 | `lambda.warmup` | | `false` | 業務時間の温めの呼び出しをするか([lambda.md](lambda.md#waiting-for-start-up))。今は `false` だけ |
 | `uploads.malwareScan` | | `true` | GuardDuty Malware Protection for S3 で、Redmine が読む前に、アップロードとインポートをスキャンするか([aws-security.md](aws-security.md#malware-protection-for-s3))。`false` で止める |
-| `uploads.maxBytes` | | 104857600(100 MB) | 添付ファイルの大きさの上限。`/incoming/*` の CloudFront Function が、これより大きいアップロードを 413 で断る。段 10 で、Redmine の添付ファイルの最大の大きさ(`attachment_max_size`。KB)も、`redmine.settings` に書いていなければ同じ上限にする |
+| `uploads.maxBytes` | | 104857600(100 MB) | 添付ファイルの大きさの上限。`/tmp/*` の CloudFront Function が、これより大きいアップロード(`/tmp/incoming/`)を 413 で断る。段 10 で、Redmine の添付ファイルの最大の大きさ(`attachment_max_size`。KB)も、`redmine.settings` に書いていなければ同じ上限にする |
 | `mail.receive` | | `true` | メールの受信を使うか |
 | `mail.perProjectAddresses` | | `false` | プロジェクトごとのアドレスを使うか。`false` なら Redmine の標準と同じ([mail.md](mail.md#addresses-per-project)) |
 | `mail.globalLocalPart` | | `redmine` | 全体用のアドレスの `@` の前 |
@@ -209,7 +209,7 @@ CloudFormation は SecureString のパラメーターを作れないので、`bi
 | `infra/shared.yaml` | `redmine-shared` | ECR のリポジトリ、そのまま渡すには大きすぎるテンプレートのためのバケット、2 つの AZ のプライベートのサブネットを持つ VPC、S3 のゲートウェイのエンドポイント、共有の SES の受信のルールのセット、外への道。外への道は、1 つの AZ の SSM、SQS、SES のインターフェースのエンドポイント(`network.mode` が `endpoints`)か、NAT インスタンス(`nat`。インターネットゲートウェイ、パブリックのサブネット、起動のときに Elastic IP と経路を引き継ぐ 1 台の Auto Scaling グループ。[rds.md](rds.md#setup-2-nat-instance)) |
 | `infra/shared-edge.yaml` | `redmine-shared-edge`(us-east-1) | Lambda@Edge の関数 `redmine-body-hash`(Node.js 24。コードは `edge/body-hash/index.js` をそのまま埋め込む)と、そのバージョン。コードが変わると、新しいバージョンを作る |
 | `infra/instance-edge.yaml` | `<instance>-edge`(us-east-1) | ドメインの ACM の証明書(DNS で検証)と、`cloudfront.webAclArn` がなければ AWS WAF の Web ACL([security.md](security.md#rules)) |
-| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL。添付ファイル、アセット、メールのバケット。ジョブのキュー、そのデッドレターキュー、失敗したタスクの呼び出しのキュー。3 つの関数と、そのロールとロググループ。worker の SQS のイベントソース。CloudFront(OAC、本文のハッシュの関数、署名付き URL の添付ファイルのビヘイビア、CloudFront Function `<instance>-incoming-size`、保守の画面)。DNS のレコード。SES の ID と受信のルール。EventBridge Scheduler のスケジュール。アラーム。`incoming/` と `imports/` の GuardDuty Malware Protection for S3([aws-security.md](aws-security.md#malware-protection-for-s3)) |
+| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL。添付ファイル、アセット、メールのバケット。ジョブのキュー、そのデッドレターキュー、失敗したタスクの呼び出しのキュー。3 つの関数と、そのロールとロググループ。worker の SQS のイベントソース。CloudFront(OAC、本文のハッシュの関数、署名付き URL の添付ファイルのビヘイビア、CloudFront Function `<instance>-incoming-size`、保守の画面)。DNS のレコード。SES の ID と受信のルール。EventBridge Scheduler のスケジュール。アラーム。`tmp/incoming/` と `imports/` の GuardDuty Malware Protection for S3([aws-security.md](aws-security.md#malware-protection-for-s3)) |
 
 - **イメージ:** インスタンスのスタックは、そのアカウントの ECR のイメージを、digest で受け取ります(`ImageUri`)。
 - **PostgreSQL のバージョン:** `DbMajorVersion` には既定の値を置きません([rds.md](rds.md#database))。

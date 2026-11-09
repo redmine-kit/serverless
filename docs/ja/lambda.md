@@ -224,7 +224,7 @@ Rails の設定は、どこに書くかで効くかどうかが変わります�
 | `config.active_job.queue_adapter` | 既定の `:async` は、環境が止まるとジョブが失われる(下記)。`production.rb` は設定していない | `:inline`。`REDMINE_JOBS_QUEUE_URL` があると(Lambda の上)、`redmine_serverless_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン |
 | `config.active_record.dump_schema_after_migration` | migration のあとの `db/schema.rb` の書き出しを止める。`production.rb` ではコメントアウトされている | `false` | `additional_environment.rb` |
 | `config.hosts` | Rails が受け付けるホスト名 | Redmine のドメイン | `additional_environment.rb` |
-| `config.filter_redirect` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と書かせる([security.md](security.md#logs)) | パスの `/files/`、`/thumbnails/`、`/tmp/bulk/` | `additional_environment.rb` |
+| `config.filter_redirect` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と書かせる([security.md](security.md#logs)) | CloudFront のドメインの `/files/` と `/tmp/` の下の URL | `additional_environment.rb` |
 | `config.action_mailer.raise_delivery_errors` | `production.rb` が `false` にしている。送信のエラーでジョブを失敗させ、やり直せるようにする([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#raising-errors)) | `redmine-worker` でだけ `true` | プラグイン `redmine_serverless_ses` |
 | `config.assets.redmine_detect_update` | `production.rb` が `true` にしている | `false` | プラグイン `redmine_serverless`([その README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda)) |
 | `attachments_storage_path` | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache) | `/tmp/redmine/files` | `configuration.yml` |
@@ -352,7 +352,7 @@ flowchart LR
 - **本文のハッシュ:** 関数 URL は、署名のない本文(`UNSIGNED-PAYLOAD`)を受けないので、PUT と POST には、本文の SHA256 を `x-amz-content-sha256` に入れて送る必要があります(CloudFront の資料)。ブラウザーの Redmine の画面のフォームは、これを付けません。そこで、オリジンへの要求のところで動く Lambda@Edge の関数 `redmine-body-hash` が、本文からハッシュを計算して入れます。そのあとで、OAC が要求に署名します。
 - **CloudFront Functions では作れない:** CloudFront Functions の要求のデータには、本文がありません(メソッド、URI、クエリー、ヘッダー、Cookie だけ)。本文を読めるのは Lambda@Edge だけです。
 - **`Host`:** 関数 URL には、ビューアーの `Host` を転送しません(オリジンリクエストポリシーは `AllViewerExceptHostHeader`)。OAC は関数 URL のホスト名で署名します。Redmine のドメインは、オリジンのカスタムヘッダーの `X-Forwarded-Host` で渡します。Rails は `X-Forwarded-Host` から URL を作ります。
-- **キャッシュ:** 既定のビヘイビア(関数 URL)はキャッシュしません(`CachingDisabled`)。`/assets/*` は S3 から配り、キャッシュします(下の「アセットの配信」)。添付ファイルは、ビヘイビアの `/files/*`、`/thumbnails/*`、`/tmp/bulk/*`、`/incoming/*` を使い、OAC で添付ファイルのバケットに送り、署名付き URL を必須にします([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download))。本文のハッシュを入れる関数は付けません。
+- **キャッシュ:** 既定のビヘイビア(関数 URL)はキャッシュしません(`CachingDisabled`)。`/assets/*` は S3 から配り、キャッシュします(下の「アセットの配信」)。添付ファイルは、ビヘイビアの `/files/*` と `/tmp/*`(サムネイル、zip、アップロード)を使い、OAC で添付ファイルのバケットに送り、署名付き URL を必須にします([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download))。本文のハッシュを入れる関数は付けません。
 - **オリジンの応答の待ち時間:** CloudFront の既定は 30 秒で、1〜120 秒にできます。60 秒にして、関数のタイムアウトと合わせます。
 
 <a id="function-that-adds-the-body-hash-lambdaedge"></a>
@@ -417,7 +417,7 @@ Rails 8.1 の既定では、Rails も `public/` のファイルを配ります(`
 
 CloudFront は、定額プランの Free(月 0 ドル)を既定にします。月 100 万リクエストと 100 GB の転送の枠で、この規模なら収まる見込みです。WAF のルール(5 つまで)も含まれます。プランの違い、含まれないもの(ログなど)、WAF のルールは [security.md](security.md#aws-waf) にあります。
 
-Free には独自のキャッシュのルールと VPC の中のオリジンがありませんが、この設計はどちらも使いません。AWS が用意しているキャッシュのポリシーだけを使い、オリジン(関数 URL と S3)も VPC の外です。ディストリビューションのビヘイビアは、既定のものと、パスごとの 5 つ(`/files/*`、`/thumbnails/*`、`/tmp/bulk/*`、`/incoming/*`、`/assets/*`)です。Free のキャッシュのビヘイビアは 5 つまでで、既定のビヘイビアをその数に含めるかは資料に書かれていません(2026-11-10 に確認)。アカウントで確認が要ります。
+Free には独自のキャッシュのルールと VPC の中のオリジンがありませんが、この設計はどちらも使いません。AWS が用意しているキャッシュのポリシーだけを使い、オリジン(関数 URL と S3)も VPC の外です。ディストリビューションのキャッシュのビヘイビアは、既定のものと `/files/*`、`/tmp/*`、`/assets/*` の 4 つです。Free は 5 つまで(2026-11-10 に確認)なので、既定のビヘイビアを数に含めても含めなくても収まります。サムネイル、zip、アップロードが `/tmp/*` を共有するのは、このためです。S3 のキーは Redmine 自身の `tmp/` に合わせています([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#bucket-layout))。
 
 <a id="features-that-cannot-be-used"></a>
 
@@ -454,4 +454,3 @@ Event Functions の同期の呼び出しは、要求と応答がそれぞれ 6 M
 - Lambda@Edge で `x-amz-content-sha256` を入れたあと、OAC の署名で、関数 URL が POST、PUT、PATCH、DELETE を受けるか。本文のない POST と、マルチパートのフォームでも通るか
 - Lambda@Edge の `inputTruncated` で 413 を返したときに、ブラウザーと API のクライアントに分かる応答になるか
 - CloudFront の定額プラン Free を、アカウントでいくつ使えるか
-- ディストリビューション(既定のビヘイビアとパスごとの 5 つ)が、Free のキャッシュのビヘイビアの上限(5)に収まるか

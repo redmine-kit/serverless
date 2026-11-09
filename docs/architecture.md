@@ -38,7 +38,7 @@ flowchart LR
 
   user --> cf
   cf -- "/assets/*" --> assets
-  cf -- "/files/* /thumbnails/*<br>/tmp/bulk/* /incoming/*<br>(signed URLs)" --> files
+  cf -- "/files/* /tmp/*<br>(signed URLs)" --> files
   cf -- "everything else" --> url --> app
   app --> rds
   app --> files
@@ -231,5 +231,5 @@ Work starts with the points that decide whether it works at all. At each stage, 
 | Monthly cost | The estimate in [cost.md](cost.md) | Usage measured after deployment. [cost.md](cost.md) |
 | Domain | The name of the Redmine subdomain (for example `redmine.example.com`). Keep the parent domain's DNS or delegate to Route 53 | [mail.md](mail.md#receiving-domain) |
 | CloudFront pricing plan | Flat-rate Free plan (includes WAF) / pay-per-use | Whether the account still has room for a Free plan. [lambda.md](lambda.md#flat-rate-free-plan-and-waf) |
-| Attachment size limit | Redmine's `attachment_max_size`, enforced on `/incoming/*` by the CloudFront Function. Redmine does not read the file at registration; what limits it is what CloudFront accepts for one PUT and the time the browser takes to hash the file | Measured results. [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload) |
+| Attachment size limit | Redmine's `attachment_max_size`, enforced on uploads (`/tmp/incoming/`) by the CloudFront Function on `/tmp/*`. Redmine does not read the file at registration; what limits it is what CloudFront accepts for one PUT and the time the browser takes to hash the file | Measured results. [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload) |
 | Default project for received mail | The project used when there is no subaddress | [mail.md](mail.md#importing) |

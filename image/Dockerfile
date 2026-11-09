@@ -120,4 +120,7 @@ ENV RAILS_ENV=production \
   AWS_LWA_READINESS_CHECK_PROTOCOL=tcp \
   AWS_LWA_ASYNC_INIT=true \
   AWS_LWA_ENABLE_COMPRESSION=true
+LABEL org.opencontainers.image.source="https://github.com/redmine-kit/serverless" \
+  org.opencontainers.image.description="Redmine for AWS Lambda: web, worker and task in one image" \
+  org.opencontainers.image.licenses="GPL-2.0-or-later"
 ENTRYPOINT ["/var/task/bin/start"]

@@ -137,11 +137,11 @@ The features of each plugin and their enabling conditions are in the documentati
 
 ### Distribution
 
-The plugins are published as gems on the GitHub Packages RubyGems registry (`https://rubygems.pkg.github.com/redmine-kit`), and the Redmine image for Lambda is proposed for the GitHub Packages container registry (`ghcr.io`). The owner of both is the redmine-kit organization.
+The plugins are published as gems on the GitHub Packages RubyGems registry (`https://rubygems.pkg.github.com/redmine-kit`), and the Redmine image for Lambda is published on the GitHub Packages container registry (`ghcr.io`). The owner of both is the redmine-kit organization.
 
 | What | Location | How to use |
 | --- | --- | --- |
-| Redmine image for Lambda (proposal) | `ghcr.io/redmine-kit/serverless:<Redmine version>-<this project's version>` (arm64) | `bin/deploy` pulls it by digest and copies it to ECR in the account where the instance is deployed ([deploy-config.md](deploy-config.md#deployment-commands)). Lambda can only use images in ECR in the same Region |
+| Redmine image for Lambda | `ghcr.io/redmine-kit/serverless`, tagged `sha-<commit>` and `main` (arm64, one architecture, no index). CI pushes it for each commit on main whose release tests pass (the `publish` job in `.github/workflows/ci.yml`). Version tags (`<Redmine version>-<this project's version>`) are added when this project has releases | `bin/deploy` pulls it by digest and copies it to ECR in the account where the instance is deployed ([deploy-config.md](deploy-config.md#deployment-commands)). Lambda can only use images in ECR in the same Region |
 | Plugins | The gem `redmine_serverless_x` on GitHub Packages, one per plugin, published by each repository's workflow for every version tag. It holds the plugin's run-time files | Add it in `Gemfile.local` from the GitHub Packages source, run `bundle install`, and link the installed gem into `plugins/` (each plugin's setup page) |
 | Plugins (without the gem) | A checkout of the repository | Clone into `plugins/` |
 

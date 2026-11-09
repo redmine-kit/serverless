@@ -55,7 +55,7 @@ The role names are provisional.
 
 - **Decrypting SecureString:** Encrypt with the default SSM key (`aws/ssm`). Whether `kms:Decrypt` must be granted in IAM for this key is checked when building it.
 
-- **Where the permissions come from:** Each row belongs to one of the plugins, whose setup pages explain the permissions for use outside Serverless too: [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/setup.html#iam-permissions) (jobs and the "Jobs" page), [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#iam-permissions) (attachments), [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/setup.html#iam-permissions) (email) and [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/setup.html#iam-permissions) (settings at start-up). [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/setup.html#iam-permissions) needs none of its own. This page puts them together per function.
+- **Where the permissions come from:** Each row belongs to one of the plugins, whose IAM pages explain the permissions for use outside Serverless too: [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/iam.html) (jobs and the "Jobs" page), [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#iam-permissions) (attachments), [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/iam.html) (email) and [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/iam.html) (settings at start-up). [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/iam.html) needs none of its own. This page puts them together per function.
 
 ## Execution role of `redmine-web`
 
@@ -71,7 +71,7 @@ The role names are provisional.
 | `ses:GetAccount`, `ses:ListSuppressedDestinations`, `ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)) |
 
 - **Two sending permissions:** Email is sent by passing the full message (raw) to SES v2 `SendEmail`. The examples in the AWS SES documentation allow both `ses:SendEmail` and `ses:SendRawEmail` as sending permissions, so this design follows them. Whether `ses:SendRawEmail` is required for raw sending with v2 has not been checked (not checked yet).
-- **Signed URLs:** Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([setup.md](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#iam-permissions)). CloudFront reaches the bucket through OAC, allowed by the bucket policy ("Resource-based policies" below).
+- **Signed URLs:** Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/iam.html)). CloudFront reaches the bucket through OAC, allowed by the bucket policy ("Resource-based policies" below).
 
 ## Execution role of `redmine-worker`
 

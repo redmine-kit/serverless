@@ -100,6 +100,14 @@ Parameters:
     Default: 30
     MinValue: 1
     Description: Days to keep old versions of attachments (retention.noncurrentVersionDays).
+  MalwareScan:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      uploads.malwareScan in redmine.json: GuardDuty Malware Protection for S3
+      on incoming/ and imports/ of the attachment bucket
+      (docs/aws-security.md#guardduty).
   ReceiveMail:
     Type: String
     Default: "true"
@@ -126,6 +134,7 @@ Parameters:
 Conditions:
   HasHostedZone: !Not [!Equals [!Ref HostedZoneId, ""]]
   ReceivesMail: !Equals [!Ref ReceiveMail, "true"]
+  ScansMalware: !Equals [!Ref MalwareScan, "true"]
   ReceivesMailInZone: !And [!Condition ReceivesMail, !Condition HasHostedZone]
   SendsReminders: !Equals [!Ref SendReminders, "true"]
   HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, ""]]
@@ -229,6 +238,13 @@ Resources:
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
+      # GuardDuty Malware Protection learns of new objects through
+      # EventBridge; set here so that stack updates keep it.
+      NotificationConfiguration: !If
+        - ScansMalware
+        - EventBridgeConfiguration:
+            EventBridgeEnabled: true
+        - !Ref AWS::NoValue
       # https://redmine-kit.github.io/redmine_serverless_s3/setup.html#the-bucket
       LifecycleConfiguration:
         Rules:
@@ -289,6 +305,112 @@ Resources:
             Condition:
               StringEquals:
                 AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+          # Tag-based access control of GuardDuty Malware Protection
+          # (docs/aws-security.md#guardduty): in the scanned prefixes, only
+          # objects that GuardDuty tagged clean can be read, and only
+          # GuardDuty can write tags, also through PutObject with tags.
+          - !If
+            - ScansMalware
+            - Sid: ReadOnlyScannedClean
+              Effect: Deny
+              Principal: "*"
+              Action: [s3:GetObject, s3:GetObjectVersion]
+              Resource:
+                - !Sub ${AttachmentsBucket.Arn}/incoming/*
+                - !Sub ${AttachmentsBucket.Arn}/imports/*
+              Condition:
+                StringNotEquals:
+                  s3:ExistingObjectTag/GuardDutyMalwareScanStatus: NO_THREATS_FOUND
+                ArnNotEquals:
+                  aws:PrincipalArn: !GetAtt MalwareScanRole.Arn
+            - !Ref AWS::NoValue
+          - !If
+            - ScansMalware
+            - Sid: OnlyGuardDutyTags
+              Effect: Deny
+              Principal: "*"
+              Action: [s3:PutObjectTagging, s3:PutObjectVersionTagging, s3:DeleteObjectTagging, s3:DeleteObjectVersionTagging]
+              Resource:
+                - !Sub ${AttachmentsBucket.Arn}/incoming/*
+                - !Sub ${AttachmentsBucket.Arn}/imports/*
+              Condition:
+                ArnNotEquals:
+                  aws:PrincipalArn: !GetAtt MalwareScanRole.Arn
+            - !Ref AWS::NoValue
+
+  # GuardDuty Malware Protection for S3 on the prefixes where files arrive
+  # from users: browser uploads (incoming/) and imports (imports/). files/
+  # holds only copies of scanned objects, so it is not scanned again. The
+  # role is the one in the GuardDuty documentation for this bucket.
+  MalwareScanRole:
+    Type: AWS::IAM::Role
+    Condition: ScansMalware
+    Properties:
+      Path: /redmine/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
+      RoleName: !Sub ${InstanceName}-malware-scan
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: malware-protection-plan.guardduty.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: malware-protection
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ManagedRule
+                Effect: Allow
+                Action: [events:PutRule, events:DeleteRule, events:PutTargets, events:RemoveTargets]
+                Resource: !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*
+                Condition:
+                  StringLike:
+                    events:ManagedBy: malware-protection-plan.guardduty.amazonaws.com
+              - Sid: WatchManagedRule
+                Effect: Allow
+                Action: [events:DescribeRule, events:ListTargetsByRule]
+                Resource: !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*
+              - Sid: Tag
+                Effect: Allow
+                Action: [s3:PutObjectTagging, s3:GetObjectTagging, s3:PutObjectVersionTagging, s3:GetObjectVersionTagging]
+                Resource: !Sub ${AttachmentsBucket.Arn}/*
+              - Sid: Notifications
+                Effect: Allow
+                Action: [s3:PutBucketNotification, s3:GetBucketNotification]
+                Resource: !GetAtt AttachmentsBucket.Arn
+              - Sid: ValidationObject
+                Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub ${AttachmentsBucket.Arn}/malware-protection-resource-validation-object
+              - Sid: BucketOwnership
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt AttachmentsBucket.Arn
+              - Sid: Scan
+                Effect: Allow
+                Action: [s3:GetObject, s3:GetObjectVersion]
+                Resource: !Sub ${AttachmentsBucket.Arn}/*
+      Tags:
+        - Key: redmine:instance
+          Value: !Ref InstanceName
+
+  MalwareProtectionPlan:
+    Type: AWS::GuardDuty::MalwareProtectionPlan
+    Condition: ScansMalware
+    Properties:
+      Role: !GetAtt MalwareScanRole.Arn
+      ProtectedResource:
+        S3Bucket:
+          BucketName: !Ref AttachmentsBucket
+          ObjectPrefixes: [incoming/, imports/]
+      Actions:
+        Tagging:
+          Status: ENABLED
+      Tags:
+        - Key: redmine:instance
+          Value: !Ref InstanceName
 
   # Compiled assets and the maintenance page (bin/deploy syncs them).
   AssetsBucket:
@@ -484,6 +606,13 @@ Resources:
               - !Sub ${AttachmentsBucket.Arn}/imports/*
               - !Sub ${AttachmentsBucket.Arn}/incoming/*
               - !Sub ${AttachmentsBucket.Arn}/tmp/*
+          # The scan result that GuardDuty puts on uploads and imports.
+          - Sid: ScanResults
+            Effect: Allow
+            Action: s3:GetObjectTagging
+            Resource:
+              - !Sub ${AttachmentsBucket.Arn}/incoming/*
+              - !Sub ${AttachmentsBucket.Arn}/imports/*
           - Sid: ListAttachments
             Effect: Allow
             Action: s3:ListBucket
@@ -640,6 +769,7 @@ Resources:
           REDMINE_JOBS_DEAD_LETTER_QUEUE_URL: !Ref JobDeadLetterQueue
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
+          REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
           REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_MAIL_BUCKET: !Ref MailBucket
@@ -700,6 +830,7 @@ Resources:
           REDMINE_JOBS_QUEUE_URL: !Ref JobQueue
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
+          REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
           REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_MAIL_BUCKET: !Ref MailBucket
@@ -747,6 +878,7 @@ Resources:
           REDMINE_JOBS_QUEUE_URL: !Ref JobQueue
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
+          REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
           REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_MAIL_BUCKET: !Ref MailBucket

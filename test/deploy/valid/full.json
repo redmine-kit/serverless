@@ -8,7 +8,7 @@
   "network": { "mode": "nat", "shared": true },
   "database": { "majorVersion": "17", "instanceClass": "db.t4g.small", "storageGb": 50 },
   "lambda": { "webMemoryMb": 3008, "webReservedConcurrency": 20, "workerReservedConcurrency": 5, "warmup": false },
-  "uploads": { "maxBytes": 52428800 },
+  "uploads": { "maxBytes": 52428800, "malwareScan": false },
   "mail": { "receive": false, "perProjectAddresses": true, "globalLocalPart": "tracker" },
   "webhooks": true,
   "cloudfront": { "plan": "pro" },

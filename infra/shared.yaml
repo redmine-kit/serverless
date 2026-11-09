@@ -158,6 +158,45 @@ Resources:
       SubnetIds: [!Ref PrivateSubnet1]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
 
+  # Templates larger than CloudFormation takes inline (51,200 bytes), which
+  # bin/deploy passes by URL. Kept for a while for the stack's history.
+  TemplatesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub redmine-templates-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - Id: old-templates
+            Status: Enabled
+            ExpirationInDays: 90
+  TemplatesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TemplatesBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: TlsOnly
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt TemplatesBucket.Arn, !Sub "${TemplatesBucket.Arn}/*"]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
   # Received email: one active rule set per Region; every instance adds its
   # rule. bin/deploy makes it the active one.
   ReceiptRuleSet:
@@ -282,6 +321,13 @@ Resources:
         MetadataOptions:
           HttpTokens: required
           HttpPutResponseHopLimit: 1
+        # Encrypted whatever the account's EBS default encryption is.
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              Encrypted: true
+              VolumeType: gp3
+              DeleteOnTermination: true
         NetworkInterfaces:
           - DeviceIndex: 0
             SubnetId: !Ref PublicSubnet
@@ -326,6 +372,8 @@ Resources:
           PropagateAtLaunch: true
 
 Outputs:
+  TemplatesBucketName:
+    Value: !Ref TemplatesBucket
   RepositoryUri:
     Value: !GetAtt Repository.RepositoryUri
     Export:

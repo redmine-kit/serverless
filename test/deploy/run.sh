@@ -51,7 +51,7 @@ matches_template() { # <parameters JSON> <template>
 arn=arn:aws:acm:us-east-1:111122223333:certificate/x
 for file in test/deploy/valid/*.json; do
   name=$(basename "$file")
-  check "$name: account.yaml" matches_template "$(params account_params "$file")" infra/account.yaml
+  check "$name: account.yaml" matches_template "$(params 'account_params("true"; "true")' "$file")" infra/account.yaml
   check "$name: shared.yaml" matches_template "$(params shared_params "$file")" infra/shared.yaml
   check "$name: shared-edge.yaml" matches_template "$(params 'shared_edge_params("0")' -n)" infra/shared-edge.yaml
   check "$name: instance-edge.yaml" matches_template "$(params instance_edge_params "$file")" infra/instance-edge.yaml
@@ -61,14 +61,14 @@ done
 value() { jq -r --arg k "$2" '.[] | select(.ParameterKey == $k) | .ParameterValue' <<<"$1"; }
 minimal=$(params 'instance_params("img"; "'$arn'"; "acl"; "hash"; "key")' test/deploy/valid/minimal.json)
 full=$(params 'instance_params("img"; "'$arn'"; "acl"; "hash"; "key")' test/deploy/valid/full.json)
-check "defaults: instance redmine, 100 MB uploads, mail on, reminders off" test \
-  "$(value "$minimal" InstanceName) $(value "$minimal" MaxUploadBytes) $(value "$minimal" ReceiveMail) $(value "$minimal" SendReminders)" \
-  == "redmine 104857600 true false"
+check "defaults: instance redmine, 100 MB uploads, malware scan, mail on, reminders off" test \
+  "$(value "$minimal" InstanceName) $(value "$minimal" MaxUploadBytes) $(value "$minimal" MalwareScan) $(value "$minimal" ReceiveMail) $(value "$minimal" SendReminders)" \
+  == "redmine 104857600 true true false"
 check "values: the hosted zone only with route53" test \
   "$(value "$minimal" HostedZoneId)|$(value "$full" HostedZoneId)" == "Z0123456789ABCDEFGHIJ|"
 check "values: full.json" test \
-  "$(value "$full" InstanceName) $(value "$full" DbInstanceClass) $(value "$full" ReceiveMail) $(value "$full" ScheduleTimezone) $(value "$full" LogRetentionDays)" \
-  == "team-a db.t4g.small false Asia/Tokyo 365"
+  "$(value "$full" InstanceName) $(value "$full" MalwareScan) $(value "$full" DbInstanceClass) $(value "$full" ReceiveMail) $(value "$full" ScheduleTimezone) $(value "$full" LogRetentionDays)" \
+  == "team-a false db.t4g.small false Asia/Tokyo 365"
 check "values: the values from other stacks" test \
   "$(value "$full" ImageUri) $(value "$full" CertificateArn) $(value "$full" CloudFrontPublicKey)" == "img $arn key"
 edge=$(params instance_edge_params test/deploy/valid/full.json)
@@ -111,6 +111,9 @@ none() { ! grep -q -E -- "$2" "$1/calls"; }
 config=test/deploy/valid/minimal.json
 state=$(mktemp -d)
 
+# instance.yaml goes by URL (the other templates are smaller).
+TEMPLATE_BODY_LIMIT=$(($(wc -c <infra/instance.yaml) - 1))
+export TEMPLATE_BODY_LIMIT
 check "first deployment succeeds" run_deploy "$state" "$config"
 check "first deployment: the steps in order" in_order "$state" \
   "create-change-set .*--stack-name redmine-shared " \
@@ -126,6 +129,10 @@ check "first deployment: the steps in order" in_order "$state" \
   'event \{"command":"runner"' \
   "curl .*https://redmine.example.com/login" \
   "curl .*https://redmine.example.com/files/"
+check "first deployment: a template over the limit goes by URL" bash -c "
+  grep -q 's3 cp /work/infra/instance.yaml s3://redmine-templates-111122223333-ap-northeast-1/redmine/' '$state/calls' &&
+  grep -q 'create-change-set .*--stack-name redmine .*--template-url https://redmine-templates-111122223333-ap-northeast-1.s3.ap-northeast-1.amazonaws.com/redmine/' '$state/calls' &&
+  grep -q 'create-change-set .*--stack-name redmine-shared .*--template-body file:///work/infra/shared.yaml' '$state/calls'"
 check "first deployment: the stacks are created" test \
   "$(cat "$state"/params/{redmine-shared,redmine-shared-edge,redmine-edge,redmine}.type | tr '\n' ' ')" == "CREATE CREATE CREATE CREATE "
 check "first deployment: the receipt rule set is activated" grep -q "ses set-active-receipt-rule-set --rule-set-name redmine-shared" "$state/calls"
@@ -185,7 +192,7 @@ check "--dry-run succeeds" run_deploy "$state" "$config" --dry-run
 check "--dry-run: change sets are made and deleted" in_order "$state" \
   "create-change-set .*--stack-name redmine " "delete-change-set .*--stack-name redmine "
 check "--dry-run: nothing is executed, written or invoked" none "$state" \
-  "execute-change-set|put-parameter|crane copy|lambda (invoke|update)|s3 |set-active"
+  "execute-change-set|put-parameter|crane copy|lambda (invoke|update)|s3 sync|s3 cp /work/deploy|set-active"
 
 : >"$state/calls"
 check "--code-only succeeds" run_deploy "$state" "$config" --code-only
@@ -211,6 +218,17 @@ check "--account: only the account stack, with the caller's credentials" bash -c
   [[ \$(grep -c create-change-set '$account/calls') == 1 ]] && grep -q 'stack-name redmine-account .*CAPABILITY_NAMED_IAM' '$account/calls' &&
   ! grep -q -e assume-role -e --role-arn '$account/calls'"
 check "--account: the GitHub settings" test "$(value "$(cat "$account/params/redmine-account.json")" GitHubRepository) $(value "$(cat "$account/params/redmine-account.json")" GitHubCodeEnvironment)" == "example/redmine-deploy redmine"
+check "--account: a trail when the account has none, no second access analyzer" test \
+  "$(value "$(cat "$account/params/redmine-account.json")" CreateTrail) $(value "$(cat "$account/params/redmine-account.json")" CreateAccessAnalyzer)" == "true false"
+account2=$(mktemp -d)
+FAKE_HAS_TRAIL=1 check "--account with a trail in the account" run_deploy "$account2" test/deploy/valid/minimal.json --account
+check "--account: no second trail" test "$(value "$(cat "$account2/params/redmine-account.json")" CreateTrail)" == false
+account3=$(mktemp -d)
+cfg3="$account3/redmine.json"
+jq '.account = {cloudTrail: false, accessAnalyzer: true}' test/deploy/valid/minimal.json >"$cfg3"
+check "--account with account.cloudTrail false and accessAnalyzer true" run_deploy "$account3" "$cfg3" --account
+check "--account: as configured" test \
+  "$(value "$(cat "$account3/params/redmine-account.json")" CreateTrail) $(value "$(cat "$account3/params/redmine-account.json")" CreateAccessAnalyzer)" == "false true"
 check "--account with --code-only is refused" bash -c "! FAKE='$account' deploy/deploy.sh $config --account --code-only >/dev/null 2>&1"
 
 fresh=$(mktemp -d)

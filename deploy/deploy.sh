@@ -44,12 +44,41 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export AWS_DEFAULT_REGION="$region" AWS_PAGER=""
 
+# Whether the account stack creates a resource that an account usually has
+# one of: as configured; else kept as the stack has it; else only when the
+# account has none.
+#   account_singleton <parameter> <field> <number the account has>
+account_singleton() {
+  local configured current
+  # Not "//", which would take false as missing.
+  configured=$(cfg "if $2 == null then \"\" else $2 | tostring end")
+  if [[ -n "$configured" ]]; then
+    echo "$configured"
+    return
+  fi
+  current=$(aws cloudformation describe-stacks --stack-name redmine-account \
+    --query "Stacks[0].Parameters[?ParameterKey=='$1'].ParameterValue | [0]" --output text 2>/dev/null || true)
+  if [[ "$current" == true ]]; then
+    echo true
+  elif [[ "$3" == 0 ]]; then
+    echo true
+  else
+    echo false
+  fi
+}
+
 # The account's roles (infra/account.yaml), once per account by an
 # administrator with their own credentials, before everything else: the
 # role for deploying and the CloudFormation service role do not exist yet.
 if $account_only; then
   step "Account roles"
-  cfn_role_arn="" deploy_stack redmine-account "$region" "$root/infra/account.yaml" "$(params account_params "$config")"
+  trail=$(account_singleton CreateTrail '.account.cloudTrail' \
+    "$(aws cloudtrail describe-trails --query 'length(trailList[?IsMultiRegionTrail])' --output text)")
+  analyzer=$(account_singleton CreateAccessAnalyzer '.account.accessAnalyzer' \
+    "$(aws accessanalyzer list-analyzers --query "length(analyzers[?status=='ACTIVE' && (type=='ACCOUNT' || type=='ORGANIZATION')])" --output text)")
+  note "trail: $trail, external access analyzer: $analyzer"
+  cfn_role_arn="" deploy_stack redmine-account "$region" "$root/infra/account.yaml" \
+    "$(params 'account_params($trail; $analyzer)' --arg trail "$trail" --arg analyzer "$analyzer" "$config")"
   note "done; deployRoleArn is $(cfg '.deployRoleArn')"
   exit 0
 fi

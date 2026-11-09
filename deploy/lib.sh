@@ -21,9 +21,20 @@ deploy_stack() {
   fi
   printf '%s' "$params" >"$work/params.json"
   printf '%s' "$tags" >"$work/tags.json"
+  # CloudFormation takes up to 51,200 bytes inline; a larger template goes
+  # through the templates bucket of the shared base in the stack's Region
+  # (the tests lower the limit with TEMPLATE_BODY_LIMIT).
+  local body=(--template-body "file://$template") key bucket
+  if (($(wc -c <"$template") > ${TEMPLATE_BODY_LIMIT:-51200})); then
+    bucket=$(output redmine-shared "$region" TemplatesBucketName)
+    [[ -n "$bucket" && "$bucket" != None ]] || fail "$name: the template needs the templates bucket of redmine-shared"
+    key="$name/$(sha256sum "$template" | cut -c1-16).yaml"
+    aws s3 cp "$template" "s3://$bucket/$key" --region "$region" --only-show-errors
+    body=(--template-url "https://$bucket.s3.$region.amazonaws.com/$key")
+  fi
   local cs=(--region "$region" --stack-name "$name" --change-set-name "$change")
   aws cloudformation create-change-set "${cs[@]}" --change-set-type "$type" \
-    --template-body "file://$template" --parameters "file://$work/params.json" \
+    "${body[@]}" --parameters "file://$work/params.json" \
     --tags "file://$work/tags.json" --capabilities CAPABILITY_NAMED_IAM \
     ${cfn_role_arn:+--role-arn "$cfn_role_arn"} >/dev/null
   if ! aws cloudformation wait change-set-create-complete "${cs[@]}" 2>/dev/null; then

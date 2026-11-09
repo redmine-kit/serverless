@@ -6,8 +6,14 @@
 def instance: .instance // "redmine";
 def p($key; $value): {ParameterKey: $key, ParameterValue: ($value | tostring)};
 
-def account_params:
+# $trail and $analyzer: whether to create them ("true" or "false"), decided
+# by deploy.sh from the account's existing trails and analyzers.
+def account_params($trail; $analyzer):
   [ p("SsoPermissionSet"; .account.ssoPermissionSet // "AdministratorAccess"),
+    p("CreateTrail"; $trail),
+    p("TrailDays"; .account.trailDays // 365),
+    p("CreateAccessAnalyzer"; $analyzer),
+    p("CreateUnusedAccessAnalyzer"; if .account.unusedAccessAnalyzer == true then "true" else "false" end),
     p("GitHubRepository"; .account.githubRepository // ""),
     p("GitHubInfraEnvironment"; .account.githubInfraEnvironment // "infrastructure"),
     p("GitHubCodeEnvironment"; .account.githubCodeEnvironment // "production"),
@@ -39,6 +45,7 @@ def instance_params($image_uri; $certificate; $web_acl; $body_hash; $public_key)
     p("BodyHashFunctionArn"; $body_hash),
     p("CloudFrontPublicKey"; $public_key),
     p("MaxUploadBytes"; .uploads.maxBytes // 104857600),
+    p("MalwareScan"; if .uploads.malwareScan == false then "false" else "true" end),
     p("DbMajorVersion"; .database.majorVersion),
     p("DbInstanceClass"; .database.instanceClass // "db.t4g.micro"),
     p("DbStorageGb"; .database.storageGb // 20),

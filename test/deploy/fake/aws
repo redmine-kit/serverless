@@ -35,6 +35,7 @@ case "$service $operation" in
       case "$key" in
         RepositoryUri) echo "$account.dkr.ecr.$region.amazonaws.com/redmine" ;;
         ReceiptRuleSetName) echo redmine-shared ;;
+        TemplatesBucketName) echo "redmine-templates-$account-$region" ;;
         CertificateArn) echo "arn:aws:acm:us-east-1:$account:certificate/00000000-0000-0000-0000-000000000000" ;;
         WebAclArn) echo "arn:aws:wafv2:us-east-1:$account:global/webacl/$stack/1" ;;
         FunctionVersionArn) echo "arn:aws:lambda:us-east-1:$account:function:redmine-body-hash:3" ;;
@@ -81,6 +82,9 @@ case "$service $operation" in
     jq -r .Value <<<"$input" >"$FAKE/ssm/$(tr / _ <<<"$name")"
     jq -r .Type <<<"$input" >"$FAKE/ssm/$(tr / _ <<<"$name").type" ;;
   "ses set-active-receipt-rule-set") ;;
+  # FAKE_HAS_TRAIL=1: the account already has a multi-Region trail.
+  "cloudtrail describe-trails") echo "${FAKE_HAS_TRAIL:-0}" ;;
+  "accessanalyzer list-analyzers") echo 1 ;;
   "ec2 describe-regions") printf 'us-east-1\tap-northeast-1\teu-west-1\n' ;;
   # The function has run in two Regions.
   "logs describe-log-groups")

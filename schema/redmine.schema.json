@@ -25,6 +25,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "cloudTrail": { "type": "boolean", "description": "Create the trail. Default: only when the account has no multi-Region trail." },
+        "trailDays": { "type": "integer", "minimum": 1, "default": 365 },
+        "accessAnalyzer": { "type": "boolean", "description": "Create the external access analyzer. Default: only when the Region has none." },
+        "unusedAccessAnalyzer": { "type": "boolean", "default": false },
         "ssoPermissionSet": { "type": "string", "pattern": "^[\\w+=,.@-]+$", "default": "AdministratorAccess" },
         "githubRepository": { "type": "string", "pattern": "^[\\w.-]+/[\\w.-]+$" },
         "githubInfraEnvironment": { "type": "string", "minLength": 1, "default": "infrastructure" },
@@ -64,7 +68,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "maxBytes": { "type": "integer", "minimum": 1, "default": 104857600 }
+        "maxBytes": { "type": "integer", "minimum": 1, "default": 104857600 },
+        "malwareScan": { "type": "boolean", "default": true }
       }
     },
     "mail": {

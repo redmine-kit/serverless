@@ -30,6 +30,30 @@ Parameters:
     Type: String
     Default: production
     Description: The GitHub Environment that can assume redmine-github-deploy.
+  CreateTrail:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      A multi-Region CloudTrail trail of management events. bin/deploy
+      --account sets false when the account already has a multi-Region trail.
+  TrailDays:
+    Type: Number
+    Default: 365
+    MinValue: 1
+    Description: Days to keep the trail's log files (account.trailDays).
+  CreateAccessAnalyzer:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      An IAM Access Analyzer for external access in this Region. bin/deploy
+      --account sets false when the Region already has one.
+  CreateUnusedAccessAnalyzer:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: An IAM Access Analyzer for unused access (charged per role and user).
   GitHubOidcProviderArn:
     Type: String
     Default: ""
@@ -40,6 +64,9 @@ Parameters:
 Conditions:
   UsesGitHub: !Not [!Equals [!Ref GitHubRepository, ""]]
   CreatesOidcProvider: !And [!Condition UsesGitHub, !Equals [!Ref GitHubOidcProviderArn, ""]]
+  CreatesTrail: !Equals [!Ref CreateTrail, "true"]
+  CreatesAccessAnalyzer: !Equals [!Ref CreateAccessAnalyzer, "true"]
+  CreatesUnusedAccessAnalyzer: !Equals [!Ref CreateUnusedAccessAnalyzer, "true"]
 
 Resources:
   GitHubOidcProvider:
@@ -94,6 +121,20 @@ Resources:
               - ses:*
               - lambda:InvokeFunction
             Resource: "*"
+          # The role of GuardDuty Malware Protection for S3: the EventBridge
+          # rule it manages and the bucket's notifications.
+          - Sid: MalwareProtection
+            Effect: Allow
+            Action:
+              - events:PutRule
+              - events:DeleteRule
+              - events:PutTargets
+              - events:RemoveTargets
+              - events:DescribeRule
+              - events:ListTargetsByRule
+              - s3:PutBucketNotification
+              - s3:GetBucketNotification
+            Resource: "*"
           # AmazonSSMManagedInstanceCore, for the NAT instance.
           - Sid: SystemsManager
             Effect: Allow
@@ -145,6 +186,7 @@ Resources:
                   - cloudwatch:*
                   - ec2:*
                   - ecr:*
+                  - guardduty:*
                   - lambda:*
                   - logs:*
                   - rds:*
@@ -214,6 +256,7 @@ Resources:
                       - edgelambda.amazonaws.com
                       - scheduler.amazonaws.com
                       - ec2.amazonaws.com
+                      - malware-protection-plan.guardduty.amazonaws.com
               # Attaching the Lambda@Edge function version to CloudFront, and
               # the service-linked roles of RDS, Auto Scaling and Lambda@Edge.
               - Sid: EdgeAndServiceLinkedRoles
@@ -299,6 +342,11 @@ Resources:
                 Condition:
                   StringLike:
                     kms:ViaService: ssm.*.amazonaws.com
+              # Templates passed by URL (the bucket of the shared base).
+              - Sid: Templates
+                Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub arn:${AWS::Partition}:s3:::redmine-templates-${AWS::AccountId}-*/*
               - Sid: EdgeLogRetention
                 Effect: Allow
                 Action: logs:PutRetentionPolicy
@@ -377,6 +425,99 @@ Resources:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
                 token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepository}:environment:${GitHubCodeEnvironment}
       ManagedPolicyArns: [!Ref CodeDeployPolicy]
+
+  # The account's API calls (management events) in all Regions, with log
+  # file validation (docs/aws-security.md#cloudtrail). The first copy of
+  # management events is free; the bucket is the cost.
+  TrailBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreatesTrail
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub redmine-trail-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - Id: retention
+            Status: Enabled
+            ExpirationInDays: !Ref TrailDays
+  TrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: CreatesTrail
+    Properties:
+      Bucket: !Ref TrailBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: TlsOnly
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt TrailBucket.Arn, !Sub "${TrailBucket.Arn}/*"]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: CloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt TrailBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/redmine-trail
+          - Sid: CloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub ${TrailBucket.Arn}/AWSLogs/${AWS::AccountId}/*
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/redmine-trail
+  Trail:
+    Type: AWS::CloudTrail::Trail
+    Condition: CreatesTrail
+    DependsOn: TrailBucketPolicy
+    Properties:
+      TrailName: redmine-trail
+      S3BucketName: !Ref TrailBucket
+      IsLogging: true
+      IsMultiRegionTrail: true
+      IncludeGlobalServiceEvents: true
+      EnableLogFileValidation: true
+
+  # Findings for resources that are shared outside the account, and
+  # optionally for unused roles, keys and permissions
+  # (docs/aws-security.md#iam-access-analyzer).
+  ExternalAccessAnalyzer:
+    Type: AWS::AccessAnalyzer::Analyzer
+    Condition: CreatesAccessAnalyzer
+    Properties:
+      AnalyzerName: redmine-external-access
+      Type: ACCOUNT
+  UnusedAccessAnalyzer:
+    Type: AWS::AccessAnalyzer::Analyzer
+    Condition: CreatesUnusedAccessAnalyzer
+    Properties:
+      AnalyzerName: redmine-unused-access
+      Type: ACCOUNT_UNUSED_ACCESS
+      AnalyzerConfiguration:
+        UnusedAccessConfiguration:
+          UnusedAccessAge: 90
 
 Outputs:
   BoundaryArn:

@@ -250,5 +250,5 @@ serverless/
 | 月の費用 | [cost.md](cost.md) の見込み | デプロイしたあとに測った使用量。[cost.md](cost.md) |
 | ドメイン | Redmine のサブドメインの名前(たとえば `redmine.example.com`)。親のドメインの DNS のままにするか、Route 53 に委任するか | [mail.md](mail.md#receiving-domain) |
 | CloudFront の料金プラン | 定額プラン Free(WAF を含む) / 従量 | Free のプランの枠がアカウントに残っているか。[lambda.md](lambda.md#flat-rate-free-plan-and-waf) |
-| 添付ファイルの大きさの上限 | Redmine の `attachment_max_size`。登録のときの SHA256 の計算が 60 秒に収まる範囲 | 測った結果。[attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
+| 添付ファイルの大きさの上限 | Redmine の `attachment_max_size`。`/incoming/*` の CloudFront Functions で守る。登録のときに Redmine はファイルを読まないので、限るのは 1 回の PUT で CloudFront が受け付ける大きさと、ブラウザーでのハッシュの計算の時間 | 測った結果。[attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
 | メールで受ける既定のプロジェクト | サブアドレスがないときのプロジェクト | [mail.md](mail.md#importing) |

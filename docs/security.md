@@ -195,7 +195,7 @@ Risks this design cannot fully prevent, covered by operations.
 | Login brute force | Redmine has no mechanism to lock an account after a number of failures | WAF rate limits and two-factor authentication |
 | Outbound traffic through the NAT instance | With the NAT instance setup, functions can reach the internet | Focus on not being taken over (the protections above). If outbound traffic must be blocked, use the VPC endpoint setup ([rds.md](rds.md#which-to-choose)) |
 | The database password | Unlike temporary credentials, a password does not expire by itself | It is kept only in SSM (SecureString) and RDS, and RDS is reachable only from inside the VPC. Change it in an incident (below) |
-| Viruses in attachments | Redmine does not scan attachments | If needed, add S3 malware scanning (GuardDuty Malware Protection for S3) (decide the cost and how files are handled until the scan finishes when building) |
+| Viruses in attachments | Redmine does not scan attachments | GuardDuty Malware Protection for S3 on `incoming/` and `imports/`, with `REDMINE_S3_MALWARE_SCAN=true`: the plugin uses a file only after it is found clean ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#malware-scan), with the cost) |
 | No CloudFront and WAF logs | The Free flat-rate plan does not include logs | Use Lambda logs and the security dashboard. If that is not enough, move to Pro |
 
 ## Incidents

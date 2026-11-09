@@ -60,22 +60,7 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 
 ### S3 の添付ファイル(`redmine_serverless_s3`)
 
-S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、統合とシステムのテストでは moto で再現します。
-
-| 対象 | 確認すること |
-| --- | --- |
-| `files_to_final_location` | Lambda を通るアップロード(REST API、メール、フォーム)で、ファイルが S3 の `files/<年>/<月>/` に置かれ、digest が SHA256 になる。PutObject が失敗したら、レコードが保存されない |
-| `readable?` | S3 にあれば真、なければ偽。ローカルのファイルを取りに行かない |
-| `diskfile` | ローカルにあれば S3 を呼ばない。保存済みでローカルになければ S3 から取る。途中のファイルを読まない |
-| `delete_from_disk!` | S3 の本体とサムネイルを消す。ほかの添付が同じファイルを使っていれば消さない(Redmine の判断のまま) |
-| `reuse_existing_file_if_possible` | 同じ digest とサイズなら共有し、新しいオブジェクトを消す |
-| `thumbnail` | S3 にあればそれを使い、なければ作って置く。画像でないファイルは作らない。リダイレクトに `Cache-Control` が付く |
-| `/s3_uploads/presign` | 権限のない人、許されない拡張子、上限を超えるサイズを断る。ちょうど `/incoming/<UUID>` への PUT のための、期限の短い CloudFront の署名付き URL を返し、申告されたサイズと SHA256 を残す。CSRF のトークンがない要求を断る |
-| `/s3_uploads/complete` | オブジェクトを読まずに、`HeadObject`(`ChecksumMode=ENABLED`)で `ChecksumSHA256` と `ContentLength` を読み、申告の SHA256 とサイズに等しく、チェックサムが `FULL_OBJECT` のときだけ登録する。そうでなければオブジェクトを消す。`incoming/` 以外のキーを断る。ほかの人が送ったキーを登録できない |
-| `download` | 権限を確認してから、`/files/` の下の CloudFront の署名付き URL にリダイレクトする。権限がなければ署名付き URL を出さない。`response-content-disposition` に日本語のファイル名が正しく入る。PDF だけが inline |
-| `show`(テキストと差分) | 差し替えずに、Redmine の標準の表示が `/tmp` のキャッシュで動く。上限(`file_max_size_displayed`)を超えたら表示しない |
-| CSV のインポート | 別の環境(`/tmp` が空)でも、S3 から取ってインポートを続けられる |
-| 添付の一括のダウンロード | 権限と合計の大きさの確認を Redmine の標準のまま通し、zip を `/tmp` に書いて S3 の `tmp/bulk/` に置き、CloudFront の署名付き URL にリダイレクトする。メモリにすべてを読まない。同じ組み合わせなら作り直さない |
+プラグインは、置き換えるコードと AWS への呼び出しを、すべて自分のリポジトリと CI でテストします。S3 の答えごとのスタブ、要求のための moto、テストが付ける GuardDuty のタグ、公開鍵で検証する CloudFront の署名付き URL を使います。テストで確認すること、手元で再現できないこと(CloudFront、GuardDuty、合わないチェックサムを S3 が断ること)は、プラグインの [setup.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/setup.html#what-the-tests-check) にあります。Serverless は、デプロイしたあとの動きを確認します(下記)。
 
 <a id="running-on-lambda-redmine_serverless"></a>
 

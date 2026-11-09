@@ -52,22 +52,7 @@ Tests are written per feature of the plugins: `redmine_serverless` for running o
 
 ### Attachments in S3 (`redmine_serverless_s3`)
 
-S3 is reproduced with SDK `stub_responses` in unit and functional tests, and with moto in integration and system tests.
-
-| Target | What to check |
-| --- | --- |
-| `files_to_final_location` | For uploads through Lambda (REST API, mail, forms), the file is placed in `files/<year>/<month>/` in S3 and the digest is SHA256. If PutObject fails, the record is not saved |
-| `readable?` | True if the object is in S3, false otherwise. Does not fetch the local file |
-| `diskfile` | Does not call S3 if the file is local. Fetches from S3 if the record is saved and the file is not local. Never reads a partial file |
-| `delete_from_disk!` | Deletes the file and its thumbnails in S3. Does not delete if another attachment uses the same file (Redmine's decision is kept) |
-| `reuse_existing_file_if_possible` | Shares the file if digest and size match, and deletes the new object |
-| `thumbnail` | Uses the one in S3 if it exists; otherwise creates and stores it. Does not create one for non-image files. The redirect has `Cache-Control` |
-| `/s3_uploads/presign` | Rejects users without permission, disallowed extensions and sizes over the limit. Returns a CloudFront signed URL for a PUT to exactly `/incoming/<UUID>` with a short expiry, and keeps the declared size and SHA256. Rejects requests without a CSRF token |
-| `/s3_uploads/complete` | Reads `ChecksumSHA256` and `ContentLength` with `HeadObject` (`ChecksumMode=ENABLED`) without reading the object, and registers only if they equal the declared SHA256 and size and the checksum is `FULL_OBJECT`; otherwise deletes the object. Rejects keys outside `incoming/`. A key uploaded by someone else cannot be registered |
-| `download` | Redirects to a CloudFront signed URL under `/files/` after checking permissions. Without permission, no signed URL is exposed. Japanese file names are set correctly in `response-content-disposition`. Only PDFs are inline |
-| `show` (text and diffs) | Not replaced; Redmine's standard view works with the `/tmp` cache. Not shown above the limit (`file_max_size_displayed`) |
-| CSV import | The import can continue in another environment (with an empty `/tmp`) by fetching from S3 |
-| Downloading all attachments | Applies the standard Redmine checks for permissions and total size, writes the zip to `/tmp`, puts it in `tmp/bulk/` in S3, and redirects to a CloudFront signed URL. Does not read everything into memory. Does not rebuild for the same set |
+The plugin tests every piece of replaced code and every call to AWS in its own repository and CI: stubs for each S3 answer, moto for the requests, GuardDuty's tags set by the tests, and CloudFront signed URLs verified with the public key. What the tests check, and what they cannot reproduce locally (CloudFront, GuardDuty, S3 rejecting a checksum that does not match), is in its [setup.md](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#what-the-tests-check). Serverless checks the deployed behaviors after deployment (below).
 
 ### Running on Lambda (`redmine_serverless`)
 

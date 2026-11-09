@@ -227,7 +227,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 | ログインの総当たり | Redmine に、失敗の回数でアカウントを止める仕組みがない | WAF の回数の制限と、二要素認証 |
 | NAT インスタンスを通る外への通信 | NAT インスタンスの形では、関数がインターネットに出られる | 乗っ取られないことに力を入れる(上の守り)。外への通信を止める必要があれば、VPC のエンドポイントの形にする([rds.md](rds.md#which-to-choose)) |
 | データベースのパスワード | 一時的な認証情報と違い、パスワードはひとりでには切れない | SSM(SecureString)と RDS にだけ置き、RDS には VPC の中からしか届かない。事故のときは変える(下記) |
-| 添付ファイルのウイルス | Redmine は添付ファイルを検査しない | 必要なら、S3 のマルウェアの検査(GuardDuty Malware Protection for S3)を足す(費用と、検査が終わるまでの扱いは、作るときに決める) |
+| 添付ファイルのウイルス | Redmine は添付ファイルを検査しない | `incoming/` と `imports/` に GuardDuty Malware Protection for S3 を使い、`REDMINE_S3_MALWARE_SCAN=true` にする。プラグインは、問題がないとわかったファイルだけを使う([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#malware-scan)、費用も) |
 | CloudFront と WAF のログがない | 定額プラン Free に、ログが含まれない | Lambda のログと、セキュリティのダッシュボードで見る。足りなければ Pro にする |
 
 <a id="incidents"></a>

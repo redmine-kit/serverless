@@ -3,9 +3,9 @@
 # functions run as Lambda from the local image: the task through the
 # deployment's own functions (deploy/lib.sh), the worker from its SQS event
 # source, including the deletion of the message, and web through a function
-# URL. Needs LOCALSTACK_AUTH_TOKEN; without it, the tests are skipped. Running
-# the functions needs a license with container image functions (Pro); with
-# Hobby, only the secrets in SSM are checked.
+# URL. Needs LOCALSTACK_AUTH_TOKEN; without it, the tests are skipped. With a
+# token, the license must include ECR and container image functions; if it
+# does not, the tests fail.
 #   bin/test-lambda [image]   # default: serverless:test (bin/build-image)
 #   bin/test-lambda --down    # stop LocalStack and PostgreSQL
 #   KEEP=1 bin/test-lambda    # leave them running for inspection
@@ -65,27 +65,18 @@ aws() { in_tools 'aws "$@"' aws "$@"; }
 # Runs a function of deploy/lib.sh.
 lib() { in_tools 'set -euo pipefail; source deploy/lib.sh; "$@"' lib "$@"; }
 
-echo "== Image"
-# LocalStack's ECR when the license includes it. Otherwise the image is only
-# tagged in the local Docker under an ECR name, which LocalStack's Lambda
-# starts from the same Docker.
-local_registry=000000000000.dkr.ecr.us-east-1.localhost.localstack.cloud:4566
-if repository=$(aws ecr create-repository --repository-name "$instance" --query repository.repositoryUri \
+echo "== Image in ECR"
+if ! repository=$(aws ecr create-repository --repository-name "$instance" --query repository.repositoryUri \
   --output text 2>"$tmp/ecr.err"); then
-  image_uri="$repository:test"
-  docker tag "$image" "$image_uri"
-  push() { docker push --quiet "$image_uri" >/dev/null; }
-  check "the image is pushed to LocalStack's ECR" push
-  docker rmi "$image_uri" >/dev/null
-elif grep -q 'not included within your LocalStack license' "$tmp/ecr.err"; then
-  echo "LocalStack's ECR is not in the license: the image is tagged locally"
-  image_uri="$local_registry/$instance:test"
-  docker tag "$image" "$image_uri"
-  local_tag=$image_uri
-else
   cat "$tmp/ecr.err" >&2
+  echo "FAILED: LocalStack's ECR (is it in the license?)" >&2
   exit 1
 fi
+image_uri="$repository:test"
+docker tag "$image" "$image_uri"
+local_tag=$image_uri
+push() { docker push --quiet "$image_uri" >/dev/null; }
+check "the image is pushed to LocalStack's ECR" push
 case "$(docker image inspect -f '{{.Architecture}}' "$image")" in
   arm64) architecture=arm64 ;;
   *) architecture=x86_64 ;;
@@ -111,12 +102,9 @@ queue_url=$(aws sqs create-queue --queue-name "$instance-jobs" --attributes "$(j
   '{VisibilityTimeout: "60", RedrivePolicy: ({deadLetterTargetArn: $dlq, maxReceiveCount: 3} | tojson)}')" \
   --query QueueUrl --output text)
 queue_arn=$(aws sqs get-queue-attributes --queue-url "$queue_url" --attribute-names QueueArn --query Attributes.QueueArn --output text)
-# Redmine's default sender (Setting.mail_from), when the license includes
-# SES v2 (Hobby does not).
-ses=false
-if aws sesv2 create-email-identity --email-identity redmine@example.net >/dev/null 2>&1; then
-  ses=true
-fi
+# Redmine's default sender (Setting.mail_from).
+ses_identity() { aws sesv2 create-email-identity --email-identity redmine@example.net >/dev/null; }
+check "the sender's SES identity is created" ses_identity
 
 echo "== Functions"
 create() { # <role> <timeout>
@@ -142,17 +130,10 @@ fi
 
 echo "== task (deploy/lib.sh)"
 task() { lib task "$1" 2>&1; }
-# The Hobby license does not run functions from container images (a Pro
-# feature): then only the checks above count.
 if ! task '{"command": "rake", "args": ["-T"]}' >/dev/null &&
   "${compose[@]}" logs localstack 2>&1 | grep -q 'Container images are a Pro feature'; then
-  echo "skipped: the functions (container images are not in the LocalStack license)"
-  if ((failures)); then
-    echo "$failures check(s) failed" >&2
-    exit 1
-  fi
-  echo "all Lambda checks that the license allows passed"
-  exit 0
+  echo "FAILED: container image functions are not in the LocalStack license" >&2
+  exit 1
 fi
 check "db:migrate" quiet task '{"command": "rake", "args": ["db:migrate"]}'
 check "redmine:plugins:migrate" quiet task '{"command": "rake", "args": ["redmine:plugins:migrate"]}'
@@ -187,20 +168,15 @@ project_deleted() {
 }
 check "the worker ran the job" project_deleted
 # A message that the worker does not delete comes back after the visibility
-# timeout and runs the job again. The job's notification mail is a job of its
-# own, which fails without SES, so the queues are not checked as a whole.
+# timeout and runs the job again.
 sleep 75
 runs() {
   aws logs filter-log-events --log-group-name "/aws/lambda/$instance-worker" \
     --filter-pattern '"Running job" "DestroyProjectJob"' --query 'length(events)' --output text
 }
 check "the message is deleted after the job (the job ran once)" test "$(runs)" == 1
-if $ses; then
-  mail_sent() { curl -fsS http://127.0.0.1:4566/_aws/ses | grep -q 'redmine@example.net'; }
-  check "the worker sent the notification mail through SES" mail_sent
-else
-  echo "skipped: the notification mail (SES v2 is not in the LocalStack license)"
-fi
+mail_sent() { curl -fsS http://127.0.0.1:4566/_aws/ses | grep -q 'redmine@example.net'; }
+check "the worker sent the notification mail through SES" mail_sent
 
 echo "== web through a function URL"
 url=$(aws lambda create-function-url-config --function-name "$instance-web" --auth-type NONE \

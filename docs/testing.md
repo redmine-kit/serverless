@@ -9,7 +9,7 @@ The specifications in this document were checked against official information as
 - **Every piece of replaced code has tests:** Write at least one test for each row of the table in [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#replaced-code). The table and the tests are changed in the same commit.
 - **Use Redmine's standard test framework:** Redmine has unit, functional, integration and system (Capybara and Selenium) tests built on Rails Minitest and mocha. The plugins' tests are written the same way and run with `rake redmine:plugins:test`.
 - **Use substitutes for AWS locally:** Tests do not connect to real AWS. They use AWS SDK response stubs (`stub_responses`), and moto (Apache-2.0) and LocalStack, which reproduce AWS APIs locally (see "Which substitute to use" below).
-- **LocalStack is used only in this project:** Serverless is published as a non-commercial open-source project of the redmine-kit organization. LocalStack's free Hobby plan is limited to non-commercial use, so it is used in this project's tests and CI. Tests by adopters of Serverless (such as a company's business Redmine) count as commercial use, so they do not use Hobby LocalStack. Adopters rely on this project's CI results and their own checks after deployment (checked on LocalStack's pricing page on 2026-11-09).
+- **LocalStack in this project:** This project's CI uses the redmine-kit organization's LocalStack license (Ultimate, from 2026-11-09), given to the jobs as the secret `LOCALSTACK_AUTH_TOKEN`. Adopters of Serverless who run the tests need a LocalStack license of their own that allows their use; otherwise they rely on this project's CI results and their own checks after deployment.
 - **Real AWS is checked after deployment:** Things that cannot be reproduced locally, such as Lambda, CloudFront and SES receiving, are checked after deployment.
 - **Until `bin/test` is put together:** The stages built so far are separate scripts: `bin/lint` (static checks), `bin/test-services` (starts PostgreSQL, moto and LocalStack and checks that each answers), `bin/build-image`, `bin/test-image` (image tests), `bin/test-core` (Redmine's own tests) and `bin/update-gems` (writes `image/Gemfile.lock`).
 - **Working on the plugin at the same time:** The image installs the plugins as gems from GitHub Packages at the versions in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)). With `REDMINE_SERVERLESS_SSM_DIR` or `REDMINE_SERVERLESS_S3_DIR` set to a checkout of the plugin, the scripts that build the image replace the installed gem with its working tree (`bin/lib/plugin.sh`), for example `REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image`. The scripts take Bundler's credential for GitHub Packages from the `gh` login, or from `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (CI sets it from `GITHUB_TOKEN`).
@@ -42,7 +42,7 @@ bin/test plugin test/unit/attachment_patch_test.rb   # Run a specific file
 | Image tests | Whether the three roles start with a read-only file system and a low-privilege user | Docker, Lambda Runtime Interface Emulator | Every image build |
 | Edge function tests | The Lambda@Edge function and the CloudFront Function, and that the templates carry the same code | node:test (Node.js's own) | Every commit |
 | Deployment tests | The configuration schema, the stack parameters, and the steps of `bin/deploy` | check-jsonschema, a fake AWS CLI, Minitest | Every commit |
-| Lambda integration tests | Whether the same image, deployed as three functions, works with SQS and SSM for the function URL, jobs from SQS and invocations of `redmine-task` | LocalStack (Hobby) | Every image build |
+| Lambda integration tests | Whether the same image, deployed as three functions, works with SQS and SSM for the function URL, jobs from SQS and invocations of `redmine-task` | LocalStack | Every image build |
 | Checks after deployment | Behavior on real AWS | `bin/smoke-test` (the project's own) | Every deployment |
 | Measurements | Startup time, memory, request time | CloudWatch logs and metrics | First deployment, and on Redmine upgrades |
 
@@ -92,7 +92,7 @@ The plugins replace Redmine code with `prepend`. Redmine's tests check that Redm
 | --- | --- | --- |
 | SDK `stub_responses` | Unit and functional tests. Tests that raise SES errors one by one | — |
 | moto | Plugin integration tests and system tests (S3, SQS, SSM). SES v2 `SendEmail` is used only after checking that moto reproduces it; until then, SDK `stub_responses` is used instead | — |
-| LocalStack (Hobby) | Lambda integration tests. Three functions from the same image, function URLs, SQS event source mappings | SES v2, ECR, CloudFront and RDS are not in Hobby. SES v2 is checked with moto, CloudFront in the checks after deployment, and the database is a PostgreSQL container. The image goes to LocalStack's Lambda from the local Docker, without ECR |
+| LocalStack (the organization's Ultimate license in CI) | Lambda integration tests. Three functions from the same image in LocalStack's ECR, function URLs, SQS event source mappings, SES v2 for the jobs' mail | CloudFront and RDS are not used: CloudFront is checked after deployment, and the database is a PostgreSQL container |
 
 ## Administration pages
 
@@ -149,11 +149,11 @@ Every image build is started in Docker under the same conditions as production.
 
 `bin/test-lambda` runs the image as Lambda on LocalStack (its own Compose project, `test/lambda/compose.yml`). It needs `LOCALSTACK_AUTH_TOKEN` and is skipped without it. In CI it runs in the image job of the Redmine release.
 
-- **License:** LocalStack runs functions from container images only with a Pro license. The Hobby license in CI answers "Container images are a Pro feature" (2026-11-09), so `bin/test-lambda` checks the secrets in SSM and reports the function checks as skipped. Until a Pro license or a real account runs them, the worker's deletion of its message is not checked anywhere.
-- **Image:** In LocalStack's ECR when the license includes it; otherwise the image is tagged locally under an ECR name, and LocalStack's Lambda starts it from the same Docker.
+- **License:** The tests need ECR, container image functions and SES v2, which the organization's Ultimate license in CI includes. With a token whose license lacks one of them, `bin/test-lambda` fails instead of skipping; only without a token does it skip.
+- **Image:** Pushed to LocalStack's ECR, from where LocalStack's Lambda runs it.
 - **Secrets:** `create_secrets` of `deploy/lib.sh` creates the secrets in SSM, and keeps them on a second run.
 - **`redmine-task`:** Invoked through `task` of `deploy/lib.sh`, as `bin/deploy` does: `db:migrate`, `redmine:load_default_data`, reading `SECRET_KEY_BASE` from SSM, a failed command failing, and the settings code.
-- **`redmine-worker`:** From an SQS event source mapping. The task queues a `DestroyProjectJob`; the worker runs it, and the job runs only once after the visibility timeout, which shows that the message was deleted (the image tests cannot check this with moto). The notification mail is checked when the license includes SES v2.
+- **`redmine-worker`:** From an SQS event source mapping. The task queues a `DestroyProjectJob`; the worker runs it, and the job runs only once after the visibility timeout, which shows that the message was deleted (the image tests cannot check this with moto). The job's notification mail is sent by the worker through SES v2.
 - **`redmine-web`:** `/login` through a function URL, which goes through Lambda Web Adapter.
 
 ## Infrastructure checks
@@ -234,7 +234,5 @@ Deployment is not part of CI: `bin/deploy` runs when an administrator decides to
 
 - Whether moto stores and returns `ChecksumSHA256` for a PUT with `x-amz-checksum-sha256`, and rejects a mismatch
 - Whether moto reproduces SES v2 `SendEmail` (sending the full message)
-- The function checks of `bin/test-lambda` (container image functions, function URLs, the SQS event source mapping and the deletion of the message) with a LocalStack Pro license or on a real account; Hobby does not run container image functions (2026-11-09)
-- The Hobby usage rules (Fair Use) for CI, and whether a CI Auth Token is available on Hobby
 - Whether Lambda Web Adapter can run on the Runtime Interface Emulator
 - How many of Redmine's attachment tests can pass with S3

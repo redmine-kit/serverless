@@ -11,7 +11,7 @@ Serverless のテストの計画です。自前のプラグイン、Redmine 本�
 - **差し替えた処理には、すべてテストを付ける:** [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#replaced-code) の表の 1 行ごとに、テストを 1 つ以上書きます。表とテストは、同じコミットで直します。
 - **Redmine の標準のテストの仕組みを使う:** Redmine は Rails の Minitest と mocha で、ユニット、機能、統合、システム(Capybara と Selenium)のテストを持っています。プラグインのテストも、同じ仕組みで書き、`rake redmine:plugins:test` で実行します。
 - **AWS は手元で代わりのものを使う:** テストの中では、本物の AWS に接続しません。AWS の SDK の応答の差し替え(`stub_responses`)、AWS の API を手元で再現する moto(Apache-2.0)と LocalStack を使います(下の「代わりの道具の使い分け」)。
-- **LocalStack はこのプロジェクトでだけ使う:** Serverless は、redmine-kit の組織の非商用のオープンソースのプロジェクトとして公開しています。LocalStack の無料の Hobby のプランは、非商用の利用に限って使えるので、このプロジェクトのテストと CI で使います。Serverless を使う側(会社の業務の Redmine など)のテストは商用の利用に当たるので、Hobby の LocalStack は使いません。使う側は、このプロジェクトの CI の結果と、自分のデプロイしたあとの確認で確認します(2026-11-09 に LocalStack の料金のページで確認)。
+- **このプロジェクトの LocalStack:** このプロジェクトの CI は、redmine-kit の組織の LocalStack のライセンス(2026-11-09 から Ultimate)を使い、シークレット `LOCALSTACK_AUTH_TOKEN` でジョブに渡します。Serverless を使う側がテストを動かすときは、その使い方を認める自分の LocalStack のライセンスが要ります。なければ、このプロジェクトの CI の結果と、自分のデプロイしたあとの確認で確認します。
 - **本物の AWS では、デプロイしたあとに確認する:** Lambda、CloudFront、SES の受信など、手元で再現できないものは、デプロイしたあとの確認で確認します。
 - **`bin/test` にまとめるまで:** ここまでに作った段は、別々のスクリプトです。`bin/lint`(静的な検査)、`bin/test-services`(PostgreSQL、moto、LocalStack を立て、それぞれ応答するか確認する)、`bin/build-image`、`bin/test-image`(イメージのテスト)、`bin/test-core`(Redmine 本体のテスト)、`bin/update-gems`(`image/Gemfile.lock` を書く)です。
 - **プラグインも同時に直すとき:** イメージは、プラグインを、`image/Gemfile.lock` のバージョンの gem として、GitHub Packages から入れます([architecture.md](architecture.md#distribution))。`REDMINE_SERVERLESS_SSM_DIR` か `REDMINE_SERVERLESS_S3_DIR` にプラグインのチェックアウトを指定すると、イメージを作るスクリプトは、入れた gem を、その作業ツリーで置き換えます(`bin/lib/plugin.sh`)。たとえば `REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image` です。スクリプトは、GitHub Packages のための Bundler の認証情報を、`gh` のログインか、`BUNDLE_RUBYGEMS__PKG__GITHUB__COM` から取ります(CI はそれを `GITHUB_TOKEN` から設定します)。
@@ -46,7 +46,7 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 | イメージのテスト | 読み取り専用のファイルシステムと権限の少ないユーザーで、3 つの役割が起動するか | Docker、Lambda のランタイムインターフェイスエミュレーター | イメージを作るたび |
 | CloudFront の関数のテスト | Lambda@Edge の関数と CloudFront Function、テンプレートが同じコードを持つこと | node:test(Node.js の標準) | コミットのたび |
 | デプロイのテスト | 設定のスキーマ、スタックのパラメーター、`bin/deploy` の段 | check-jsonschema、偽の AWS CLI、Minitest | コミットのたび |
-| Lambda の結合のテスト | 同じイメージを 3 つの関数として作り、関数 URL、SQS からのジョブ、`redmine-task` の呼び出しが、SQS、SSM と一緒に動くか | LocalStack(Hobby) | イメージを作るたび |
+| Lambda の結合のテスト | 同じイメージを 3 つの関数として作り、関数 URL、SQS からのジョブ、`redmine-task` の呼び出しが、SQS、SSM と一緒に動くか | LocalStack | イメージを作るたび |
 | デプロイしたあとの確認 | 本物の AWS の上での動き | `bin/smoke-test`(自前) | デプロイのたび |
 | 計測 | 起動にかかる時間、メモリ、要求の時間 | CloudWatch のログとメトリクス | 初めのデプロイと、Redmine のバージョンアップのとき |
 
@@ -112,7 +112,7 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 | --- | --- | --- |
 | SDK の `stub_responses` | ユニットと機能のテスト。SES のエラーを 1 つずつ起こすテスト | — |
 | moto | プラグインの統合のテストとシステムのテスト(S3、SQS、SSM)。SES v2 の `SendEmail` は、moto が再現できるかを確認してから使い、それまでは SDK の `stub_responses` で代える | — |
-| LocalStack(Hobby) | Lambda の結合のテスト。同じイメージの 3 つの関数、関数 URL、SQS のイベントソースマッピング | SES v2、ECR、CloudFront、RDS は Hobby にない。SES v2 は moto、CloudFront はデプロイしたあとの確認で確認し、データベースは PostgreSQL のコンテナにする。イメージは、ECR を通さず、手元の Docker から LocalStack の Lambda に渡す |
+| LocalStack(CI では組織の Ultimate のライセンス) | Lambda の結合のテスト。LocalStack の ECR の、同じイメージの 3 つの関数、関数 URL、SQS のイベントソースマッピング、ジョブのメールのための SES v2 | CloudFront と RDS は使わない。CloudFront はデプロイしたあとの確認で確認し、データベースは PostgreSQL のコンテナにする |
 
 <a id="administration-pages"></a>
 
@@ -181,11 +181,11 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 
 `bin/test-lambda` が、LocalStack の上で、イメージを Lambda として動かします(専用の Compose のプロジェクト、`test/lambda/compose.yml`)。`LOCALSTACK_AUTH_TOKEN` が要り、なければ飛ばします。CI では、Redmine のリリースのイメージのジョブで実行します。
 
-- **ライセンス:** LocalStack は、コンテナイメージの関数を Pro のライセンスでだけ動かします。CI の Hobby のライセンスは「Container images are a Pro feature」と答えるので(2026-11-09)、`bin/test-lambda` は SSM の秘密の値を確認し、関数の確認は飛ばしたと表示します。Pro のライセンスか本物のアカウントで動かすまで、worker がメッセージを消すことは、どこでも確認できていません。
-- **イメージ:** ライセンスに含まれていれば LocalStack の ECR に置きます。含まれていなければ、手元で ECR の名前のタグを付け、LocalStack の Lambda が同じ Docker から起動します。
+- **ライセンス:** テストには、ECR、コンテナイメージの関数、SES v2 が要ります。CI の組織の Ultimate のライセンスには含まれます。トークンはあるのにライセンスにどれかがないときは、`bin/test-lambda` は飛ばさずに失敗します。飛ばすのは、トークンがないときだけです。
+- **イメージ:** LocalStack の ECR に置き、LocalStack の Lambda がそこから動かします。
 - **秘密の値:** `deploy/lib.sh` の `create_secrets` が SSM に秘密の値を作り、2 回目は変えないこと。
 - **`redmine-task`:** `bin/deploy` と同じく、`deploy/lib.sh` の `task` で呼びます。`db:migrate`、`redmine:load_default_data`、`SECRET_KEY_BASE` を SSM から読むこと、失敗したコマンドが失敗になること、設定のコード。
-- **`redmine-worker`:** SQS のイベントソースマッピングから動かします。タスクが `DestroyProjectJob` を積み、worker が実行し、可視性タイムアウトのあとも、ジョブが 1 回しか実行されないことで、メッセージが消えたことを確認します(イメージのテストでは、moto のためにこれを確認できません)。通知のメールは、ライセンスに SES v2 が含まれるときに確認します。
+- **`redmine-worker`:** SQS のイベントソースマッピングから動かします。タスクが `DestroyProjectJob` を積み、worker が実行し、可視性タイムアウトのあとも、ジョブが 1 回しか実行されないことで、メッセージが消えたことを確認します(イメージのテストでは、moto のためにこれを確認できません)。ジョブの通知のメールは、worker が SES v2 で送ります。
 - **`redmine-web`:** 関数 URL を通した `/login`。Lambda Web Adapter を通る経路です。
 
 <a id="infrastructure-checks"></a>
@@ -277,7 +277,5 @@ flowchart TD
 
 - moto が、`x-amz-checksum-sha256` を付けた PUT で `ChecksumSHA256` を保存して返し、合わない中身を断るか
 - moto が、SES v2 の `SendEmail`(全文での送信)を再現できるか
-- Pro のライセンスの LocalStack か本物のアカウントでの、`bin/test-lambda` の関数の確認(コンテナイメージの関数、関数 URL、SQS のイベントソースマッピング、メッセージを消すこと)。Hobby はコンテナイメージの関数を動かさない(2026-11-09)
-- CI での Hobby の利用の決まり(Fair Use)と、Hobby で CI Auth Token を使えるか
 - Lambda Web Adapter を、ランタイムインターフェイスエミュレーターの上で動かせるか
 - Redmine の添付ファイルのテストのうち、S3 の形で通せるものの数

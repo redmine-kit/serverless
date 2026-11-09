@@ -4,11 +4,11 @@
 
 <a id="to-check-before-migrating"></a>
 
-## 移す前に確認すること
+## 移行前に確認すること
 
 | 項目 | 確認すること | 影響 |
 | --- | --- | --- |
-| Redmine のバージョン | 移す元のバージョン | migration の長さ。3 系からだと長くなる |
+| Redmine のバージョン | 移行元のバージョン | migration の長さ。3 系からだと長くなる |
 | データベース | エンジン(MySQL、PostgreSQL など)とバージョン、大きさ | 移す先は RDS for PostgreSQL([rds.md](rds.md))。MySQL からなら変換が要る(下の「MySQL から移すとき」) |
 | 添付ファイル | 置き場所(ディスクか S3 のプラグインか)、件数と大きさ、キーの形 | S3 へのコピーの手順 |
 | プラグイン | 入れているプラグインと、そのテーブル | 移したあとに使えなくなる機能 |
@@ -20,7 +20,7 @@
 
 ```mermaid
 flowchart TD
-  a["移す元の DB の<br>ダンプ"] --> b["一時の DB に戻す<br>(PostgreSQL。<br>MySQL なら MySQL 8)"]
+  a["移行元の DB の<br>ダンプ"] --> b["一時の DB に戻す<br>(PostgreSQL。<br>MySQL なら MySQL 8)"]
   b --> c["7.0.3 で<br>migrate"]
   c --> x["RDS に<br>戻す"]
   x --> d["添付を<br>files/ に<br>コピー"]
@@ -29,10 +29,10 @@ flowchart TD
   f --> g["DNS を<br>切り替える"]
 ```
 
-1. **データベース:** 移す元のデータベースのダンプから、一時の PostgreSQL に戻します。移す元が PostgreSQL なら、変換は要りません。MySQL なら、下の「MySQL から移すとき」の手順で変換します。
+1. **データベース:** 移行元のデータベースのダンプから、一時の PostgreSQL に戻します。移行元が PostgreSQL なら、変換は要りません。MySQL なら、下の「MySQL から移すとき」の手順で変換します。
 2. **migration:** 一時の PostgreSQL の上で、Redmine 7.0.3 の `db:migrate` と `redmine:plugins:migrate` を実行します。古いバージョンから 7.0 まで、まとめて進めることになります。途中のバージョンを経る必要があるかは、Redmine の更新の手順(RedmineUpgrade の wiki)で確認します。一時の PostgreSQL は Lambda の外なので、`redmine-task` の 15 分には当たりません。
 3. **RDS に戻す:** migration を当てたデータベースを書き出し(`pg_dump`)、空の RDS のデータベースに戻します(`pg_restore`)。RDS には VPC の中からしか届かないので、Session Manager のポートフォワーディングを通して行います([rds.md](rds.md#managing-it-with-systems-manager))。
-4. **添付ファイル:** 移す元のファイル(ディスクの `files/` か、S3 のプラグインのバケット)を、新しいバケットの `files/` の下に、Redmine の `disk_directory` と `disk_filename` に合う形でコピーします。新しい設計のキーは `files/<disk_directory>/<disk_filename>` の形で、`disk_directory` が空の古い添付は `files/<disk_filename>` になります([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#bucket-layout))。
+4. **添付ファイル:** 移行元のファイル(ディスクの `files/` か、S3 のプラグインのバケット)を、新しいバケットの `files/` の下に、Redmine の `disk_directory` と `disk_filename` に合う形でコピーします。新しい設計のキーは `files/<disk_directory>/<disk_filename>` の形で、`disk_directory` が空の古い添付は `files/<disk_filename>` になります([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#bucket-layout))。
 5. **突き合わせ:** 管理画面の「添付ファイルの S3」で、データベースと S3 を突き合わせ、漏れがないかを確認します([admin.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/admin.html#attachments-in-s3))。サムネイルは、画面で開いたときに作られるので、移すときに作らなくてもかまいません。
 6. **digest:** 古い Redmine の添付の digest は MD5 のことがあります。Redmine には、SHA256 に作り直す rake のタスク(`redmine:attachments:update_digests`)があります。実行するかは、件数を見て決めます。
 
@@ -40,7 +40,7 @@ flowchart TD
 
 ## MySQL から移すとき
 
-移す元の Redmine が MySQL で動いているときの進め方です。下の 1〜6 のあと、一時の PostgreSQL の書き出しを RDS に戻します(上の「手順」の 3)。
+移行元の Redmine が MySQL で動いているときの進め方です。下の 1〜6 のあと、一時の PostgreSQL の書き出しを RDS に戻します(上の「手順」の 3)。
 
 MySQL のまま移す先(RDS for MySQL、Aurora MySQL)は、この設計では使いません([rds.md](rds.md#why-not-other-databases))。
 
@@ -53,14 +53,14 @@ flowchart TD
   e --> f["6. 確認する"]
 ```
 
-1. **止めて書き出す:** 移す元の Redmine を止め(書き込みを止める)、データベースを書き出します(`mysqldump` に `--single-transaction`、`--default-character-set=utf8mb4`、`--hex-blob` を付ける)。止めたあとに入った変更は移らないので、止めてから書き出します。
-2. **一時の MySQL 8 に戻す:** 書き出したものを、一時の MySQL 8.0 か 8.4(Docker か、スナップショットから作った一時の RDS for MySQL)に戻します。移す元が MySQL 5.7 なら、ここで 8 に上がります。文字コードが `utf8`(3 バイト)のテーブルは、`utf8mb4` に替えます。
+1. **止めて書き出す:** 移行元の Redmine を止め(書き込みを止める)、データベースを書き出します(`mysqldump` に `--single-transaction`、`--default-character-set=utf8mb4`、`--hex-blob` を付ける)。止めたあとに入った変更は移らないので、止めてから書き出します。
+2. **一時の MySQL 8 に戻す:** 書き出したものを、一時の MySQL 8.0 か 8.4(Docker か、スナップショットから作った一時の RDS for MySQL)に戻します。移行元が MySQL 5.7 なら、ここで 8 に上がります。文字コードが `utf8`(3 バイト)のテーブルは、`utf8mb4` に替えます。
 3. **MySQL のまま 7.0.3 に上げる:** 一時の MySQL の上で、Redmine 7.0.3 の `db:migrate` を実行します。Redmine 7.0 は MySQL 8.0〜8.4 に対応しているので、古い Redmine を動かさずに、新しい Redmine で上げられます。古いバージョンから一気に上げてよいかは、Redmine の更新の手順(RedmineUpgrade の wiki)で確認します。
 4. **一時の PostgreSQL に空のスキーマ:** 一時の PostgreSQL に、Redmine 7.0.3 の標準の `db:migrate` と `redmine:plugins:migrate` で、空のスキーマを作ります(初めのデータは入れない)。スキーマは、変換のツールに作らせず、Redmine の migration で作ります。
 5. **データだけを写す:** 一時の MySQL(7.0.3 のスキーマ)から、一時の PostgreSQL の空のスキーマに、データだけを写します(下の「写し方」)。
 6. **確認する:** 下の「確認すること」を通します。
 
-写す前に、一時の MySQL で、ログイン名が大文字と小文字だけ違う利用者がいないかを調べます(`SELECT LOWER(login), COUNT(*) FROM users GROUP BY LOWER(login) HAVING COUNT(*) > 1`)。Redmine 7.0 は、PostgreSQL に `lower(login)` の一意の索引を作る(migration `20260319062845`)ので、そういう利用者がいると、写すときに失敗します。いれば、移す前に、どちらかのログイン名を変えるか、片方をまとめます。
+写す前に、一時の MySQL で、ログイン名が大文字と小文字だけ違う利用者がいないかを調べます(`SELECT LOWER(login), COUNT(*) FROM users GROUP BY LOWER(login) HAVING COUNT(*) > 1`)。Redmine 7.0 は、PostgreSQL に `lower(login)` の一意の索引を作る(migration `20260319062845`)ので、そういう利用者がいると、写すときに失敗します。いれば、移行前に、どちらかのログイン名を変えるか、片方をまとめます。
 
 <a id="how-to-copy"></a>
 
@@ -96,7 +96,7 @@ Redmine 6.1 を MySQL 8.0 から PostgreSQL 18 に移した記録があります
 
 ## プラグインとテーマ
 
-- **プラグイン:** 外部のプラグインは入れません。PostgreSQL から移すときは、移す元のデータベースをそのまま戻すので、プラグインのテーブルが残りますが、画面には出ません。MySQL から移すときは、新しく作ったスキーマにデータだけを入れるので、プラグインのテーブルとデータは移りません(移す元の書き出しに残ります)。どちらでも、そのプラグインの機能はなくなります。
+- **プラグイン:** 外部のプラグインは入れません。PostgreSQL から移すときは、移行元のデータベースをそのまま戻すので、プラグインのテーブルが残りますが、画面には出ません。MySQL から移すときは、新しく作ったスキーマにデータだけを入れるので、プラグインのテーブルとデータは移りません(移行元の書き出しに残ります)。どちらでも、そのプラグインの機能はなくなります。
 - **テーマ:** 標準のテーマになります。
 
 <a id="to-verify-1"></a>

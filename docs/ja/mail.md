@@ -36,7 +36,7 @@ sequenceDiagram
 | --- | --- |
 | gem | `aws-actionmailer-ses` 1.2.0(2026-05-21)。AWS の公式(aws/aws-actionmailer-ses-ruby) |
 | 依存 | `actionmailer` 7.1 以上、`aws-sdk-sesv2` |
-| 入れ方 | Redmine の `Gemfile.local` に書き、イメージのビルドのときに入れる |
+| インストール | Redmine の `Gemfile.local` に書き、イメージのビルドのときに入れる |
 | 送信方法 | `:ses_v2`(SES v2 の API)。`:ses`(SES v1 の API)もあるが使わない |
 | Bcc | gem が、メールの Bcc を SES の `bcc_addresses` に渡す。Bcc の宛先は、メールの本文には出ない |
 

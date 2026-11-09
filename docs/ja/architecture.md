@@ -1,6 +1,6 @@
 # 全体の構成
 
-最新の Redmine(7.0.3)を、AWS Lambda の Event Functions で動かす設計です。添付ファイルとアセットは S3 に置きます。データベースは、VPC の中の RDS for PostgreSQL です。外部のプラグインは入れず、テーマは標準のままにします。Lambda、S3、SES のための拡張は、自前のプラグインにします。
+最新の Redmine(7.0.3)を、AWS Lambda Event Functions で動かす設計です。添付ファイルとアセットは S3 に置きます。データベースは、VPC の中の RDS for PostgreSQL です。外部のプラグインは入れず、テーマは標準のままにします。Lambda、S3、SES のための拡張は、自前のプラグインにします。
 
 この資料の仕様は、2026-11-08 時点の公式の情報で確認したものです。出典は [sources.md](sources.md) にあります。
 
@@ -240,7 +240,7 @@ serverless/
 
 | 項目 | 選択肢 | 決めるのに要るもの |
 | --- | --- | --- |
-| 古い Redmine のデータを移すか | 移す / 新しく始める | 移す元の構成(バージョン、データベース、添付ファイルの置き場所)。[migration.md](migration.md) |
+| 古い Redmine のデータを移すか | 移す / 新しく始める | 移行元の構成(バージョン、データベース、添付ファイルの置き場所)。[migration.md](migration.md) |
 | VPC の外への道 | VPC のエンドポイント / NAT インスタンス(`network.mode`) | webhook や外の API が要るか、それぞれの月の費用。[rds.md](rds.md#which-to-choose) |
 | 月の費用 | [cost.md](cost.md) の見込み | デプロイしたあとに測った使用量。[cost.md](cost.md) |
 | ドメイン | Redmine のサブドメインの名前(たとえば `redmine.example.com`)。親のドメインの DNS のままにするか、Route 53 に委任するか | [mail.md](mail.md#receiving-domain) |

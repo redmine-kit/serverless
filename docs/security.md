@@ -51,7 +51,7 @@ The specifications in this page were checked against official information and th
 | Function URLs | Requests without an OAC signature are rejected before the function is invoked ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
 | Request body | Up to 1 MB on Redmine's behaviors. Above that, Lambda@Edge returns 413. Uploads to `/incoming/*` go to S3, not to Lambda; a CloudFront Function rejects a body over the upload limit ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload)) |
 
-- **Custom response headers:** Policies you define yourself, such as a Content Security Policy, are available only on the Business flat-rate plan and above. Free and Pro use the AWS-managed policy above.
+Policies you define yourself, such as a Content Security Policy of your own, are available only on the Business flat-rate plan and above. Free and Pro use the AWS-managed policy above.
 
 ## AWS WAF
 
@@ -65,10 +65,11 @@ An AWS WAF web ACL is attached to CloudFront to stop common attacks and excessiv
 | Flat-rate plan Pro | USD 15 per month (includes CloudFront and WAF) | 25 | CloudFront access logs and WAF logs can be sent to CloudWatch Logs (ingestion is included; storage and queries are charged separately) | When you want to keep logs. When you want CAPTCHA, header-based rules, or custom responses for blocked requests |
 | Pay-per-use | USD 5 per month per web ACL, USD 1 per month per rule or managed rule group, USD 0.60 per million requests. About USD 10 per month for the 5 rules below | No limit | Can be sent (charged separately) | When the flat-rate plan's rules (below) do not fit |
 
-- **Flat-rate plan rules:** On a flat-rate plan, the web ACL cannot be removed (to remove it, go back to pay-per-use). Custom rule groups cannot be used; rules are placed one by one. An account can have up to 3 Free plans, and this limit cannot be raised. Free allows up to 5 cache behaviors (this design uses 2).
-- **Not available on Free:** CAPTCHA, JavaScript challenges, rules that match on headers, rules that match on regular expressions, custom responses for blocked requests, and Bot Control.
-- **Inspected body:** On Free and Pro, WAF inspects only the first 16 KB of the body. It does not inspect anything after that.
-- **Location:** The CloudFront web ACL is created in us-east-1. It goes in the instance's us-east-1 stack (`<instance>-edge`) ([deploy-config.md](deploy-config.md)).
+A flat-rate plan comes with some rules. The web ACL cannot be removed (to remove it, go back to pay-per-use), and custom rule groups cannot be used, so rules are placed one by one. An account can have up to 3 Free plans, and this limit cannot be raised. Free allows up to 5 cache behaviors; this design uses 2.
+
+Free does not offer CAPTCHA, JavaScript challenges, rules that match on headers or on regular expressions, custom responses for blocked requests, or Bot Control. On Free and Pro, WAF inspects only the first 16 KB of a body.
+
+The CloudFront web ACL is created in us-east-1, in the instance's us-east-1 stack (`<instance>-edge`) ([deploy-config.md](deploy-config.md)).
 
 ### Rules
 
@@ -82,13 +83,15 @@ There are 5 rules (the Free limit). They are applied from the top. The default a
 | 4 | AWS managed rules: Known Bad Inputs | Known bad inputs (Log4j patterns, etc.) | — | Block |
 | 5 | AWS managed rules: Common Rule Set | Common attacks (SQL injection, typical XSS, path traversal, etc.) | — | Count only at first. Block after checking (below) |
 
-- **Login rate limit:** Redmine has no mechanism to lock an account after a number of failed logins (checked in the Redmine 7.0.3 source). Brute force is prevented by this rule and two-factor authentication. Redmine limits two-factor code attempts to 3 per password entry.
-- **Rate limit rules:** The counting window can be 1, 2, 5 or 10 minutes, and the minimum count is 10. WAF blocks near the configured count but does not guarantee the exact count (WAF documentation). Because requests pass through CloudFront, the counted IP address is the user's IP address.
-- **Overall count:** 1,000 is a starting value. One Redmine page is a few requests, excluding assets (assets also pass through CloudFront and are counted). Measure actual use and decide. When requests from inside an organization are combined into one IP address (NAT, etc.), raise it.
-- **Why the Common Rule Set only counts at first:** Some of its rules block legitimate Redmine requests. `SizeRestrictions_BODY` (blocks bodies over 8 KB) blocks long wiki pages and issue descriptions. `CrossSiteScripting_BODY` and others can block code examples written in the wiki. For about the first 2 weeks, the whole group only counts. Look at the requests that would have been blocked on the dashboard, keep only the matching rules at count, and set the others to block.
-- **Blocking by country:** Available on Free too. To use it, replace the overall rate limit so the number of rules does not exceed 5, or move to Pro. It is not used by default (some people use Redmine from places such as business trips).
-- **Response when blocked:** On Free, WAF's default 403.
-- **Before Lambda@Edge:** WAF applies before the request to the origin. For requests WAF blocks, neither Lambda@Edge nor Lambda is invoked. Requests blocked by WAF also do not count toward flat-rate plan usage (CloudFront documentation).
+Redmine has no mechanism to lock an account after a number of failed logins (checked in the Redmine 7.0.3 source). Brute force is therefore prevented by the login rate limit and two-factor authentication; Redmine itself limits two-factor code attempts to 3 per password entry.
+
+A rate limit rule counts over 1, 2, 5 or 10 minutes, with a minimum count of 10. WAF blocks near the configured count but does not guarantee the exact count (WAF documentation). Because requests pass through CloudFront, the counted IP address is the user's. The overall count of 1,000 is a starting value: one Redmine page is a few requests, excluding assets, which also pass through CloudFront and are counted. Measure actual use and decide, and raise the count when requests from inside an organization are combined into one IP address (NAT and so on).
+
+The Common Rule Set only counts at first, because some of its rules block legitimate Redmine requests. `SizeRestrictions_BODY` (bodies over 8 KB) blocks long wiki pages and issue descriptions, and `CrossSiteScripting_BODY` and others can block code examples written in the wiki. For about the first 2 weeks the whole group only counts. Then look at the requests that would have been blocked on the dashboard, keep only the matching rules at count, and set the others to block.
+
+Blocking by country is available on Free too, but it is not used by default, because some people use Redmine from places such as business trips. To use it, replace the overall rate limit so that there are no more than 5 rules, or move to Pro. When WAF blocks a request on Free, it returns its default 403.
+
+WAF applies before the request reaches the origin. For a request WAF blocks, neither Lambda@Edge nor Lambda is invoked, and the request does not count toward the flat-rate plan's usage (CloudFront documentation).
 
 ### Monitoring
 
@@ -115,8 +118,7 @@ The plan, the rate limits and whether the Common Rule Set blocks are set per ins
 | Enable JSONP support (`jsonp_enabled`) | Disabled | Do not let other origins read API responses |
 | Forbidden extensions (`attachment_extensions_denied`) | Executable files (`exe`, `bat`, etc.), decided by adopters | Do not let attachments be used to distribute harmful files |
 
-- **Initial administrator:** Change the password of the initial administrator (`admin`, password also `admin`) right after deploying, and set up two-factor authentication. If it is not used, create another administrator and then lock it.
-- **Settings that cannot work on Lambda:** The plugin fixes the repository and incoming email web services to disabled ([admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html#redmine-settings-that-cannot-work-on-lambda)).
+Right after deploying, change the password of the initial administrator (`admin`, password also `admin`) and set up two-factor authentication. If that account is not used, create another administrator first, then lock it. The settings that cannot work on Lambda, the repository and incoming email web services, are fixed to disabled by the plugin ([admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html#redmine-settings-that-cannot-work-on-lambda)).
 
 ## AWS accounts and permissions
 
@@ -134,7 +136,7 @@ The plan, the rate limits and whether the Common Rule Set blocks are set per ins
 | SSM Parameter Store | SecureString (`aws/ssm` key) | TLS | `bin/deploy` creates the secrets the first time. The steps to regenerate them are in "Incidents" below |
 | CloudWatch Logs | Encrypted by default | TLS | "Retention periods" below |
 
-- **Restore drills:** Regularly practice restoring from backup to a separate DB instance and bucket. Do not rely on a backup you have not verified you can restore.
+Practice restoring from backup to a separate DB instance and bucket regularly. Do not rely on a backup that you have not restored.
 
 ## Retention periods
 
@@ -160,9 +162,7 @@ How long logs, records, temporary files and backups are kept. All periods are de
 | RDS automated backups | 7 days | Backup retention period of the DB instance ([rds.md](rds.md#settings)) | `retention.backupDays` |
 | WAF sampled requests | A period set by AWS (the last few hours; check when building) | — | — |
 
-- **During an incident:** Make sure nothing is deleted by the periods above until the investigation is finished ("Incidents" below).
-- **Do not make them too short:** Keep logs and records longer than the time it takes to notice an incident. To go below 90 days, estimate that time first.
-- **Personal information:** Logs and records contain users' email addresses and IP addresses. If the adopter's rules limit how long these can be kept, shorten the periods to match.
+During an incident, make sure nothing is deleted by these periods until the investigation is finished ("Incidents" below). Do not make the periods too short either: keep logs and records longer than the time it takes to notice an incident, and estimate that time before going below 90 days. Logs and records contain users' email addresses and IP addresses; if the adopter's rules limit how long these can be kept, shorten the periods to match.
 
 ## Logs
 
@@ -183,7 +183,7 @@ How long logs, records, temporary files and backups are kept. All periods are de
 | Lambda@Edge function | Use no npm package dependencies (only `node:crypto`) |
 | Distributed image and plugins | Adopters reference the image by digest. The plugin gems are pinned with their versions and checksums in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)) |
 
-- **Updating dependencies:** Updates to Redmine, gems and images go through the checks in [upgrade.md](upgrade.md) first.
+Updates to Redmine, gems and images go through the checks in [upgrade.md](upgrade.md) first.
 
 ## Remaining risks
 

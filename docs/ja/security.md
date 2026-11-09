@@ -59,7 +59,7 @@ Serverless のセキュリティの設計です。守るもの、起きうるこ
 | 関数 URL | OAC の署名がない要求は、関数が呼ばれる前に断られる([lambda.md](lambda.md#cloudfront-and-function-urls)) |
 | 要求の本文 | Redmine のビヘイビアでは 1 MB まで。超えたら Lambda@Edge が 413 を返す。`/incoming/*` へのアップロードは、Lambda ではなく S3 に届き、アップロードの上限を超える本文は CloudFront Functions が断る([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
 
-- **自分で作る応答のヘッダー:** Content Security Policy などを自分で決めるポリシーは、定額プランの Business より上だけです。Free と Pro では、上の AWS 管理のポリシーを使います。
+Content Security Policy などを自分で決めるポリシーは、定額プランの Business 以上でだけ使えます。Free と Pro では、上の AWS 管理のポリシーを使います。
 
 <a id="aws-waf"></a>
 
@@ -77,10 +77,11 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 | 定額プラン Pro | 月 15 ドル(CloudFront と WAF を含む) | 25 | CloudFront のアクセスログと WAF のログを、CloudWatch Logs に送れる(取り込みは含まれ、保存と検索は別料金) | ログを残したいとき。CAPTCHA、ヘッダーでのルール、止めたときの応答を変えたいとき |
 | 従量 | Web ACL 1 つで月 5 ドル、ルールか管理ルールのグループ 1 つで月 1 ドル、100 万件の要求で 0.60 ドル。下の 5 つのルールなら月 10 ドルほど | 上限なし | 送れる(別料金) | 定額プランの決まり(下記)に合わないとき |
 
-- **定額プランの決まり:** 定額プランでは、Web ACL を外せません(外すには従量に戻す)。自分で作るルールのグループは使えず、ルールを 1 つずつ置きます。Free のプランは、1 つのアカウントで 3 つまでで、上限は上げられません。キャッシュのビヘイビアは、Free で 5 つまでです(この設計は 2 つ)。
-- **Free で使えないもの:** CAPTCHA、JavaScript のチャレンジ、ヘッダーで絞るルール、正規表現で絞るルール、止めたときの応答を変えること、Bot Control。
-- **調べる本文:** WAF が中身を調べる本文は、Free と Pro では最初の 16 KB までです。それより後ろは調べません。
-- **置き場所:** CloudFront の Web ACL は us-east-1 に作ります。インスタンスの us-east-1 のスタック(`<instance>-edge`)に置きます([deploy-config.md](deploy-config.md))。
+定額プランには、いくつかの決まりがあります。Web ACL は外せず(外すには従量に戻す)、自分で作るルールのグループは使えないので、ルールを 1 つずつ置きます。Free のプランは 1 つのアカウントで 3 つまでで、この上限は上げられません。キャッシュのビヘイビアは、Free で 5 つまでです(この設計は 2 つ)。
+
+Free では、CAPTCHA、JavaScript のチャレンジ、ヘッダーや正規表現で絞るルール、止めたときの応答を変えること、Bot Control は使えません。Free と Pro では、WAF が中身を調べる本文は最初の 16 KB までです。
+
+CloudFront の Web ACL は us-east-1 に作り、インスタンスの us-east-1 のスタック(`<instance>-edge`)に置きます([deploy-config.md](deploy-config.md))。
 
 <a id="rules"></a>
 
@@ -96,13 +97,15 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 | 4 | AWS の管理ルール: Known Bad Inputs | 知られた悪い入力(Log4j の形など) | — | 止める |
 | 5 | AWS の管理ルール: Common Rule Set | よくある攻撃(SQL インジェクション、XSS の典型、パスの書き換えなど) | — | 初めは数えるだけ。確認してから止める(下記) |
 
-- **ログインの回数の制限:** Redmine には、ログインの失敗の回数でアカウントを止める仕組みがありません(Redmine 7.0.3 のソースで確認した)。総当たりは、このルールと二要素認証で防ぎます。二要素認証のコードの試しは、Redmine が、パスワード 1 回につき 3 回までに抑えています。
-- **回数の制限の決まり:** 数える時間は 1、2、5、10 分から選べ、回数の下限は 10 です。WAF は、決めた回数の近くで止めますが、ちょうどの回数は約束していません(WAF の資料)。CloudFront を通るので、数える IP アドレスは、利用者の IP アドレスです。
-- **全体の回数:** 1,000 回は、起点の値です。Redmine の 1 画面は、アセットを除いて数件の要求です(アセットも CloudFront を通るので数に入る)。使い方を測って決めます。社内からの要求が 1 つの IP アドレスにまとまる(NAT など)ときは、上げます。
-- **Common Rule Set を初めは数えるだけにする理由:** Redmine の正しい要求を止めるルールがあるためです。`SizeRestrictions_BODY`(本文が 8 KB を超えると止める)は、wiki やチケットの長い本文を止めます。`CrossSiteScripting_BODY` などは、wiki に書いたコードの例を止めることがあります。初めの 2 週間ほどは、グループ全体を数えるだけにし、止めたはずの要求をダッシュボードで見て、当たったルールだけを数えるだけのまま残し、ほかを止める形にします。
-- **国での遮断:** Free でも使えます。使うなら、ルールの数が 5 を超えないように、全体の回数の制限と入れ替えるか、Pro にします。既定では使いません(出張先などから使う人がいるため)。
-- **止めたときの応答:** Free では、WAF の既定の 403 です。
-- **Lambda@Edge より先:** WAF は、オリジンへの要求の前に当たります。WAF が止めた要求では、Lambda@Edge も Lambda も呼ばれません。WAF が止めた要求は、定額プランの使用量にも数えません(CloudFront の資料)。
+Redmine には、ログインの失敗の回数でアカウントを止める仕組みがありません(Redmine 7.0.3 のソースで確認)。そのため総当たりは、ログインの回数の制限と二要素認証で防ぎます。二要素認証のコードの試行は、Redmine 自身がパスワード 1 回につき 3 回までに抑えています。
+
+回数の制限のルールは、1、2、5、10 分のどれかの時間で数え、回数の下限は 10 です。WAF は決めた回数の近くで止めますが、ちょうどの回数は約束していません(WAF の資料)。CloudFront を通るので、数える IP アドレスは利用者のものです。全体の回数の 1,000 回は起点の値です。Redmine の 1 画面は、アセットを除いて数件の要求で、アセットも CloudFront を通るので数に入ります。使い方を測って決め、社内からの要求が 1 つの IP アドレスにまとまる(NAT など)ときは上げます。
+
+Common Rule Set を初めは数えるだけにするのは、Redmine の正しい要求を止めるルールがあるためです。`SizeRestrictions_BODY`(本文が 8 KB を超えると止める)は、wiki やチケットの長い本文を止め、`CrossSiteScripting_BODY` などは、wiki に書いたコードの例を止めることがあります。初めの 2 週間ほどはグループ全体を数えるだけにし、止めたはずの要求をダッシュボードで見て、当たったルールだけを数えるだけのまま残し、ほかを止める形にします。
+
+国での遮断は Free でも使えますが、出張先などから使う人がいるので、既定では使いません。使うなら、ルールが 5 つを超えないように全体の回数の制限と入れ替えるか、Pro にします。Free で WAF が要求を止めると、WAF の既定の 403 を返します。
+
+WAF は、要求がオリジンに届く前に当たります。WAF が止めた要求では、Lambda@Edge も Lambda も呼ばれず、定額プランの使用量にも数えません(CloudFront の資料)。
 
 <a id="monitoring"></a>
 
@@ -135,8 +138,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 | JSONPを有効にする(`jsonp_enabled`) | 無効 | 別のオリジンから API の応答を読ませない |
 | 禁止する拡張子(`attachment_extensions_denied`) | 実行できるファイル(`exe`、`bat` など)を、使う側で決める | 添付ファイルで悪いファイルを配らせない |
 
-- **初めの管理者:** 初めの管理者(`admin`、パスワードも `admin`)は、立てたらすぐにパスワードを変え、二要素認証を設定します。使わないなら、別の管理者を作ってからロックします。
-- **Lambda で使えない設定:** リポジトリと受信メールの Web サービスは、プラグインが無効に固定します([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
+デプロイしたらすぐに、初めの管理者(`admin`、パスワードも `admin`)のパスワードを変え、二要素認証を設定します。このアカウントを使わないなら、別の管理者を作ってからロックします。Lambda で使えない設定(リポジトリと受信メールの Web サービス)は、プラグインが無効に固定します([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
 
 <a id="aws-accounts-and-permissions"></a>
 
@@ -158,7 +160,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 | SSM Parameter Store | SecureString(`aws/ssm` の鍵) | TLS | 秘密の値は、`bin/deploy` が初めて作る。作り直しの手順は下の「事故のとき」 |
 | CloudWatch Logs | 既定で暗号化される | TLS | 下の「保持の期間」 |
 
-- **戻す練習:** バックアップから、別の DB インスタンスとバケットに戻す練習を、定期的に行います。戻せることを確認していないバックアップは、当てにしません。
+バックアップから、別の DB インスタンスとバケットに戻す練習を、定期的に行います。戻せることを確認していないバックアップは、当てにしません。
 
 <a id="retention-periods"></a>
 
@@ -186,9 +188,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 | RDS の自動バックアップ | 7 日 | DB インスタンスのバックアップの保持の期間([rds.md](rds.md#settings)) | `retention.backupDays` |
 | WAF のサンプルの要求 | AWS が決めた期間(直近の数時間。作るときに確認する) | — | — |
 
-- **事故のとき:** 調べ終わるまで、上の期間で消えないようにします(下の「事故のとき」)。
-- **短くしすぎない:** ログと記録は、事故に気づくまでの時間より長く残します。90 日より短くするときは、気づくまでの時間を見積もってから決めます。
-- **個人の情報:** ログと記録には、利用者のメールのアドレスと IP アドレスが入ります。使う側の決まりで、残せる期間に上限があれば、それに合わせて短くします。
+事故のときは、調べ終わるまで、これらの期間で消えないようにします(下の「事故のとき」)。期間を短くしすぎないことも大事です。ログと記録は事故に気づくまでの時間より長く残し、90 日より短くするときは、その時間を見積もってから決めます。ログと記録には、利用者のメールアドレスと IP アドレスが入ります。使う側の決まりで残せる期間に上限があれば、それに合わせて短くします。
 
 <a id="logs"></a>
 
@@ -213,7 +213,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 | Lambda@Edge の関数 | 依存の npm のパッケージを使わない(`node:crypto` だけ) |
 | 配布するイメージとプラグイン | 使う側は、イメージを digest で参照する。プラグインの gem は、バージョンとチェックサムを `image/Gemfile.lock` で固定する([architecture.md](architecture.md#distribution)) |
 
-- **依存の更新:** Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md) の確認を通してから行います。
+Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md) の確認を通してから行います。
 
 <a id="remaining-risks"></a>
 

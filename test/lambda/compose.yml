@@ -1,4 +1,4 @@
-# Services of bin/test-lambda (docs/testing.md#lambda-tests). LocalStack runs
+# Services of bin/test-lambda (docs/testing.md#lambda-integration-tests). LocalStack runs
 # the functions as Lambda in containers on this network, where they reach
 # PostgreSQL. It needs the Docker socket to start those containers, and an
 # auth token (LocalStack Hobby), which is never written to the repository.

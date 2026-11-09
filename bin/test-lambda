@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lambda tests on LocalStack (docs/testing.md#lambda-tests). The three
+# Lambda tests on LocalStack (docs/testing.md#lambda-integration-tests). The three
 # functions run as Lambda from the local image: the task through the
 # deployment's own functions (deploy/lib.sh), the worker from its SQS event
 # source, including the deletion of the message, and web through a function
@@ -109,8 +109,12 @@ queue_url=$(aws sqs create-queue --queue-name "$instance-jobs" --attributes "$(j
   '{VisibilityTimeout: "60", RedrivePolicy: ({deadLetterTargetArn: $dlq, maxReceiveCount: 3} | tojson)}')" \
   --query QueueUrl --output text)
 queue_arn=$(aws sqs get-queue-attributes --queue-url "$queue_url" --attribute-names QueueArn --query Attributes.QueueArn --output text)
-# Redmine's default sender (Setting.mail_from).
-aws sesv2 create-email-identity --email-identity redmine@example.net >/dev/null
+# Redmine's default sender (Setting.mail_from), when the license includes
+# SES v2 (Hobby does not).
+ses=false
+if aws sesv2 create-email-identity --email-identity redmine@example.net >/dev/null 2>&1; then
+  ses=true
+fi
 
 echo "== Functions"
 create() { # <role> <timeout>
@@ -167,17 +171,21 @@ project_deleted() {
   return 1
 }
 check "the worker ran the job" project_deleted
-messages() { # <queue URL>: visible and in flight
-  aws sqs get-queue-attributes --queue-url "$1" \
-    --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
-    --query 'Attributes.[ApproximateNumberOfMessages, ApproximateNumberOfMessagesNotVisible]' --output text | awk '{ print $1 + $2 }'
-}
-# Longer than the visibility timeout: a message that was not deleted is back.
+# A message that the worker does not delete comes back after the visibility
+# timeout and runs the job again. The job's notification mail is a job of its
+# own, which fails without SES, so the queues are not checked as a whole.
 sleep 75
-check "the messages are deleted from the queue" test "$(messages "$queue_url")" == 0
-check "the dead-letter queue is empty" test "$(messages "$dlq_url")" == 0
-mail_sent() { curl -fsS http://127.0.0.1:4566/_aws/ses | grep -q 'redmine@example.net'; }
-check "the worker sent the notification mail through SES" mail_sent
+runs() {
+  aws logs filter-log-events --log-group-name "/aws/lambda/$instance-worker" \
+    --filter-pattern '"Running job" "DestroyProjectJob"' --query 'length(events)' --output text
+}
+check "the message is deleted after the job (the job ran once)" test "$(runs)" == 1
+if $ses; then
+  mail_sent() { curl -fsS http://127.0.0.1:4566/_aws/ses | grep -q 'redmine@example.net'; }
+  check "the worker sent the notification mail through SES" mail_sent
+else
+  echo "skipped: the notification mail (SES v2 is not in the LocalStack license)"
+fi
 
 echo "== web through a function URL"
 url=$(aws lambda create-function-url-config --function-name "$instance-web" --auth-type NONE \

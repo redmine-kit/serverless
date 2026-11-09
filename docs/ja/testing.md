@@ -64,36 +64,21 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 
 <a id="running-on-lambda-redmine_serverless"></a>
 
-### Lambda での実行(`redmine_serverless`)
+### Lambda で動かす(`redmine_serverless`)
 
-| 対象 | 確認すること |
-| --- | --- |
-| `/events` のミドルウェア | Lambda Web Adapter の `/events` への要求に、データベースに触れずに 204 を返す。ほかのパスには何もしない |
-| アセットの自動の書き出しを止める設定 | 起動のときに `public/assets` に書かない |
+プラグインは、`/events`、アセットの設定、固定する設定、管理画面を、自分のリポジトリと CI で、Redmine のすべてのテストといっしょにテストします([その README](https://redmine-kit.github.io/redmine_serverless/ja/#tests))。
 
 <a id="email-redmine_serverless_ses"></a>
 
 ### メール(`redmine_serverless_ses`)
 
-| 対象 | 確認すること |
-| --- | --- |
-| 宛先からプロジェクトを決める | SES のイベントの宛先(Bcc を含む)から、識別子と別名でプロジェクトを決める。受けないプロジェクト、当てはまらない宛先、全体用のアドレスを、設定のとおりに扱う。本文の `Project:` のキーワードでプロジェクトを変えられない |
-| プロジェクトごとの送信元 | `X-Redmine-Project` のあるメールの送信元がプロジェクトのアドレスに、ないメール(パスワードの再設定など)が全体用のアドレスになる。メールを受けないプロジェクトでは `Reply-To` が全体用のアドレスになる |
-| プロジェクトのメールの設定 | 別名の重なりと予約した名前を断る。権限のない人が開けない |
-| `redmine_serverless_ses:receive_mail` | SES のイベントの DMARC、迷惑メール、ウイルスの判定が `PASS` のメールだけを取り込み、判定を記録する。判定のないメールや、登録のないアドレスのメールを取り込まない。送信者が付けたヘッダー(`X-SES-*`、`Authentication-Results`)では何も変わらない。取り込み直しは、記録した判定と宛先を使う。自動応答のメールを取り込まない。成功したら `processed/` に移す |
-| メールの送信のやり直し | `redmine-worker` でだけ `raise_delivery_errors` が `true` になる。SES のエラーを、SDK の応答の差し替えで 1 つずつ起こし、一時的なものはやり直し、アカウントの問題はデッドレターキューへ、メールの問題は捨てる。どれも、最後に失敗したときに記録が残る |
-
-メールの取り込みのテストには、Redmine のテストのメールの見本(`test/fixtures/mail_handler/`)に、SES が付けるヘッダーを足したものを使います。
+プラグインは、SES v2 での送信、SES のそれぞれのエラー、SES のイベントの判定と宛先を使うメールのバケットからの取り込み、プロジェクトのアドレス、画面を、自分のリポジトリと CI で、LocalStack(トークンがなければ moto)に対してテストします([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#tests)、[receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#tests))。
 
 <a id="jobs-redmine_serverless_sqs"></a>
 
 ### ジョブ(`redmine_serverless_sqs`)
 
-| 対象 | 確認すること |
-| --- | --- |
-| SQS でのジョブ | `REDMINE_JOBS_QUEUE_URL` があると、通知のメールのジョブが SQS に積まれ、ジョブ用のハンドラーで実行されてメールが送られる。許可の一覧にないクラスのメッセージは実行しない。なければ、Redmine は標準のままにジョブを動かす |
-| 失敗の記録 | 最後に失敗したジョブ(やり直しを使い切ったもの、やり直さないエラー)は、中身とエラーといっしょに記録が残る |
-| 失敗の記録からの送り直し | 記録したジョブの中身から、同じジョブを積み直せる |
+プラグインは、`aws-activejob-sqs` を通した SQS でのジョブ、許可の一覧、失敗の記録、送り直し、デッドレターキューの戻しを、自分のリポジトリと CI で、LocalStack(トークンがなければ moto)に対してテストします([setup.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/setup.html#tests))。
 
 <a id="settings-and-code-outside-the-plugins"></a>
 
@@ -101,12 +86,10 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 
 | 対象 | 確認すること | 道具 |
 | --- | --- | --- |
-| Lambda で使えない設定 | `REDMINE_ROLE` があるとき、`enabled_scm` などが決めた値を返し、設定の画面から保存しても変わらない。設定の画面の入力が押せず、説明が出る。`REDMINE_ROLE` がないときは、Redmine の標準のまま | Minitest(ユニット、機能)、システムのテスト |
 | SSM の読み込み(`redmine_serverless_ssm`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。すでにある環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM につながらなければ失敗する。イメージのテストでは、3 つの役割が、データベースのホスト、そのパスワード、`SECRET_KEY_BASE` を SSM だけから読み、`config/database.yml` より前に読めていることを確認する | Minitest、moto(プラグインの `test/loader_test.rb`、`bin/test-image`) |
 | タスクのハンドラー | 決めた `command` と `env` だけを受け付ける。SES のイベントを見分け、メッセージ ID、宛先、判定を渡す。形の正しくない値は入れず、コマンドのイベントでは SES の変数を渡せない。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
 | 拡張機能のスクリプト | `REDMINE_ROLE` ごとに、本物の Lambda Web Adapter を起動するか、何もしない拡張機能として登録するかが変わる | ShellCheck、イメージのテスト |
 | webhook | `webhook_blocklist` の範囲(プライベート、リンクローカル)の送り先に送らない。送り先のエラーでジョブが失敗し、届け直される | Minitest、moto |
-| メールの送信(`aws-actionmailer-ses`) | Redmine の通知のメールが、SES v2 の `SendEmail` に、全文と宛先(To、Cc、Bcc)で渡る | Minitest、SDK の `stub_responses` |
 | 本文のハッシュを入れる関数(`edge/body-hash/`) | 本文のない要求と空の本文に、空の本文の SHA256 を入れる。base64 の本文を、バイト列のまま SHA256 にする(バイナリの本文とマルチパートのフォームで、手元で計算した値と同じ)。`inputTruncated` の要求に 413 を返し、オリジンに送らない | Node.js の `node:test`。依存の npm のパッケージは使わない |
 
 <a id="redmines-own-tests"></a>
@@ -231,7 +214,6 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 | アップロードとダウンロード | 確認用のプロジェクトで、CloudFront を通して PUT したファイルを、署名付き URL で取れる。取ったファイルの SHA256 が送ったものと同じ。中身が申告の SHA256 と合わない PUT は断られる |
 | 添付ファイルのヘッダー | `/files/` の下の応答に、`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` と `X-Content-Type-Options: nosniff` が付き、署名のない同じ URL は断られる。添付ファイルは Redmine のオリジンにあるので、ディストリビューションを変えるたびに、これが成り立つ必要がある |
 | 権限のない人のダウンロード | 署名付き URL が出ない |
-| メールの送信 | SES のメールボックスシミュレーター(`success@simulator.amazonses.com`)宛ての通知のジョブが、SQS を通って送られる |
 | メールの受信 | 確認用のアドレスから受信のアドレスに送ったメールが、確認用のプロジェクトのチケットになる |
 | タスク | `bin/rake -T` が成功する |
 

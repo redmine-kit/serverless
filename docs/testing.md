@@ -56,41 +56,24 @@ The plugin tests every piece of replaced code and every call to AWS in its own r
 
 ### Running on Lambda (`redmine_serverless`)
 
-| Target | What to check |
-| --- | --- |
-| `/events` middleware | Returns 204 for Lambda Web Adapter requests to `/events` without touching the database. Does nothing for other paths |
-| Setting that stops automatic asset writing | Nothing is written to `public/assets` at startup |
+The plugin tests `/events`, the asset setting, the fixed settings and its administration pages in its own repository and CI, with Redmine's full test suite ([its README](https://redmine-kit.github.io/redmine_serverless/#tests)).
 
 ### Email (`redmine_serverless_ses`)
 
-| Target | What to check |
-| --- | --- |
-| Choosing the project from the recipient | Chooses the project by identifier and alias from the recipients in the SES event (including Bcc). Handles projects that do not receive mail, unmatched recipients and the instance-wide address as configured. A `Project:` keyword in the body cannot change the project |
-| Per-project sender | Mail with `X-Redmine-Project` is sent from the project's address, and mail without it (such as password resets) from the instance-wide address. For projects that do not receive mail, `Reply-To` is the instance-wide address |
-| Project email settings | Rejects overlapping aliases and reserved names. Users without permission cannot open them |
-| `redmine_serverless_ses:receive_mail` | Imports only mail whose DMARC, spam and virus verdicts in the SES event are `PASS`, and records the verdicts. Does not import mail without verdicts, or to unregistered addresses. Headers added by the sender (`X-SES-*`, `Authentication-Results`) change nothing. A re-import uses the recorded verdicts and recipients. Does not import auto-replies. On success, moves the message to `processed/` |
-| Mail sending retries | `raise_delivery_errors` is `true` only in `redmine-worker`. Each SES error is raised one by one with SDK response stubs: temporary errors are retried, account problems go to the dead-letter queue, and message problems are dropped. In every case, a record remains after the final failure |
-
-Mail import tests use Redmine's test mail samples (`test/fixtures/mail_handler/`) with the headers SES adds.
+The plugin tests sending through SES v2, each SES error, the import from the mail bucket with SES-event verdicts and recipients, the project addresses and the pages in its own repository and CI, against LocalStack (or moto without its token) ([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/sending.html#tests), [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/receiving.html#tests)).
 
 ### Jobs (`redmine_serverless_sqs`)
 
-| Target | What to check |
-| --- | --- |
-| Jobs on SQS | With `REDMINE_JOBS_QUEUE_URL`, a notification mail job is enqueued to SQS, run by the job handler, and the mail is sent. A message for a class outside the allowlist is not run. Without it, Redmine runs jobs as standard |
-| Failure records | A job that fails for the last time (retries used up, or an error that is not retried) leaves a record with its contents and the error |
-| Resending from failure records | The same job can be re-enqueued from the recorded job contents |
+The plugin tests the jobs on SQS through `aws-activejob-sqs`, the allowlist, the failure records, resending and moving the dead-letter queue back in its own repository and CI, against LocalStack (or moto without its token) ([setup.md](https://redmine-kit.github.io/redmine_serverless_sqs/setup.html#tests)).
 
 ### Settings and code outside the plugins
 
 | Target | What to check | Tools |
 | --- | --- | --- |
-| Settings that cannot work on Lambda | When `REDMINE_ROLE` is set, `enabled_scm` and the others return fixed values and do not change when saved from the settings page. The inputs on the settings page are disabled and an explanation is shown. Without `REDMINE_ROLE`, Redmine behaves as standard | Minitest (unit, functional), system tests |
 | SSM loading (`redmine_serverless_ssm`) | Reads everything under `/<instance>/env/`, continuing past 10 entries, and decrypts SecureString. Does not overwrite existing environment variables. Skips names that cannot be environment variables and deeper paths. Fails when SSM cannot be reached. In the image tests, the three roles read the database host, its password and `SECRET_KEY_BASE` only from SSM, which checks that the reading comes before `config/database.yml` | Minitest, moto (the plugin's `test/loader_test.rb`, `bin/test-image`) |
 | Task handler | Accepts only the defined `command` and `env`. Recognizes SES events and passes their message ID, recipients and verdicts, leaving out values that are not well formed; a command event cannot pass the SES variables. Returns the child process's exit code and the end of its output. Does not cut Japanese text in the middle of a character | Minitest |
 | Extension script | Depending on `REDMINE_ROLE`, starts the real Lambda Web Adapter or registers as an extension that does nothing | ShellCheck, image tests |
 | Webhooks | Not sent to destinations in the `webhook_blocklist` ranges (private, link-local). An error at the destination fails the job, and it is redelivered | Minitest, moto |
-| Mail sending (`aws-actionmailer-ses`) | Redmine's notification mail is passed to SES v2 `SendEmail` with the full message and recipients (To, Cc, Bcc) | Minitest, SDK `stub_responses` |
 | Function that adds the body hash (`edge/body-hash/`) | Sets the SHA256 of an empty body for requests without a body and with an empty body. Computes the SHA256 of a base64 body over the raw bytes (matching a locally computed value for binary bodies and multipart forms). Returns 413 for requests with `inputTruncated` and does not send them to the origin | Node.js `node:test`. No npm package dependencies |
 
 ## Redmine's own tests

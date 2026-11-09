@@ -284,20 +284,33 @@ sequenceDiagram
 | まとめて受け取る数 | 1。ハンドラーは、途中のジョブが失敗すると例外で終わるので、1 件ずつにして、失敗したものだけがやり直されるようにする |
 | 可視性タイムアウト | 関数のタイムアウト(900 秒)より長くする |
 
-- **速い:** `redmine-worker` は、環境が残っているあいだ、読み込んだ Rails をそのまま使います。ジョブのたびに Rails を起動し直しません。
-- **Redmine の bundle を先に:** ランタイムインターフェイスクライアントは、ハンドラーが Rails を読み込む前に、json や uri などの Ruby に最初から入っている gem を読み込みます。そのあとで Bundler が、Redmine の bundle の新しいバージョンを拒否します。そこで `redmine-worker` は、ランタイムが動き出す前に Redmine の bundle を準備します(`RUBYOPT=-rbundler/setup`)(2026-11-09 にランタイムインターフェイスエミュレーターで確認)。
-- **やり直し:** ジョブが失敗すると、メッセージは可視性タイムアウトのあとで、もう一度届きます。3 回失敗したら、デッドレターキューに移り、件数をアラームで通知します。プラグインは、最後の受け取りでジョブを記録し、送り直せるようにします([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/admin.html#jobs))。
-- **2 回動くことがある:** SQS の標準のキューは、同じメッセージを 2 回届けることがあります。通知のメールが 2 通届くことがありえますが、この規模では受け入れます。
-- **時間を置くジョブ:** gem は、15 分までの時間を置く指定に対応しています。Redmine 本体は使っていません。
-- **要求が速くなる:** 画面の要求は、ジョブを SQS に積んだ時点で応答を返します。通知のメールの送信を待ちません。
-- **同時実行数:** `redmine-worker` の同時実行数の予約を 3 にします。ジョブが一度に多く動いて、データベースの接続と費用が増えすぎないようにするためです。
-- **webhook:** Redmine 7.0 の webhook は、ジョブ(`WebhookJob`)で送るので、`redmine-worker` が送ります。`redmine-worker` は VPC の中にあるので、webhook を送れるのは NAT インスタンスの形のときだけです([rds.md](rds.md#routes-out-of-the-vpc))。VPC のエンドポイントの形では、すぐに失敗します(上の `webhook_blocklist`)。
-  - **有効にする:** Redmine の既定では止まっています(`webhooks_enabled` が 0)。管理者が有効にし、権限(`use_webhooks`)を持つ人が、自分の webhook を作ります。
-  - **失敗したとき:** 送り先がエラーを返すか、つながらないと(Redmine の待ち時間は 60 秒)、ジョブが失敗します。SQS が届け直し、3 回失敗したらデッドレターキューに移り、失敗の記録に残ります。管理画面の「ジョブ」から送り直せます([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/admin.html#jobs))。
-  - **送り先の制限:** Redmine は、送る前に送り先の名前を IP アドレスに引き、`webhook_blocklist` の範囲なら送りません。引いた IP アドレスに直接つなぐので、DNS の答えを途中で差し替える攻撃にも備えています(`lib/webhook_endpoint_validator.rb`、`Webhook::Executor`)。この設計では、プライベートのアドレスと、リンクローカルのアドレス(メタデータのアドレス `169.254.169.254` を含む)を断ります([ai.md](ai.md#event-notifications-redmines-standard-webhooks))。
-- **大きなプロジェクトの削除:** `redmine-worker` で動くので、15 分まで使えます。
-- **rake の中のメール:** Redmine の rake のタスク(期日の通知など)は、メールをその場で送る形(`Mailer.with_synched_deliveries`)に切り替えるので、ジョブを積みません。
-- **届く経路:** `redmine-web` と `redmine-worker` は、SQS の VPC のエンドポイントか NAT インスタンスを通って、IAM の認証で届きます([rds.md](rds.md#routes-out-of-the-vpc))。
+`redmine-worker` は、環境が残っているあいだ Rails を読み込んだままにして、その中でジョブを実行します。ジョブのたびに Rails を起動し直すことはありません。画面の要求は、ジョブを SQS に積んだ時点で応答を返すので、通知のメールの送信を待ちません。`redmine-worker` の同時実行数の予約は 3 です。ジョブが一度に多く動いて、データベースの接続と費用が増えすぎないようにするためです。
+
+ランタイムインターフェイスクライアントは、ハンドラーが Rails を読み込む前に、json や uri など Ruby に最初から入っている gem を読み込みます。そのあとで Bundler が、Redmine の bundle の新しいバージョンを拒否します。そこで `redmine-worker` は、ランタイムが動き出す前に Redmine の bundle を準備します(`RUBYOPT=-rbundler/setup`。2026-11-09 にランタイムインターフェイスエミュレーターで確認)。
+
+<a id="retries-and-duplicates"></a>
+
+#### やり直しと重複
+
+ジョブが失敗すると、SQS は可視性タイムアウトのあとでメッセージをもう一度届けます。3 回失敗したらデッドレターキューに移り、件数をアラームで通知します。プラグインは最後の受け取りでジョブを記録するので、管理画面から送り直せます([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/admin.html#jobs))。
+
+標準のキューは、同じメッセージを 2 回届けることもあります。そのため通知のメールがまれに 2 通届きますが、この規模では受け入れます。gem は 15 分までの時間を置く指定に対応していますが、Redmine 本体は使っていません。
+
+<a id="webhooks"></a>
+
+#### webhook
+
+Redmine 7.0 は webhook をジョブ(`WebhookJob`)で送るので、送るのは `redmine-worker` です。`redmine-worker` は VPC の中で動くので、webhook を送れるのは NAT インスタンスの形のときだけです([rds.md](rds.md#routes-out-of-the-vpc))。VPC エンドポイントの形では、すぐに失敗します(上の `webhook_blocklist`)。
+
+webhook は、Redmine の既定では無効です(`webhooks_enabled` が 0)。管理者が有効にし、権限(`use_webhooks`)を持つ人が自分の webhook を作ります。送り先がエラーを返すか、Redmine の待ち時間の 60 秒以内につながらないと、ジョブは失敗し、上のやり直しをたどって失敗の記録に残ります。管理画面の「ジョブ」から送り直せます。
+
+Redmine は、送る前に送り先の名前を IP アドレスに引き、`webhook_blocklist` の範囲なら送りません。そのうえで引いたアドレスに直接つなぐので、途中で DNS の答えを差し替える攻撃も防げます(`lib/webhook_endpoint_validator.rb`、`Webhook::Executor`)。この設計では、プライベートのアドレスと、メタデータのアドレス `169.254.169.254` を含むリンクローカルのアドレスを断ります([ai.md](ai.md#event-notifications-redmines-standard-webhooks))。
+
+<a id="other-jobs-and-the-route-to-sqs"></a>
+
+#### ほかのジョブと SQS への経路
+
+大きなプロジェクトの削除は `redmine-worker` で動くので、15 分まで使えます。Redmine の rake のタスク(期日の通知など)は、メールをその場で送る形(`Mailer.with_synched_deliveries`)に切り替えるので、ジョブを積みません。`redmine-web` と `redmine-worker` は、SQS の VPC エンドポイントか NAT インスタンスを通って、IAM の認証で SQS に届きます([rds.md](rds.md#routes-out-of-the-vpc))。
 
 <a id="other-options-considered"></a>
 
@@ -360,10 +373,11 @@ flowchart LR
 2. 本文が 1 MB を超えて切り詰められていたら(`inputTruncated`)、オリジンに送らず、413 を返します。ハッシュが合わない要求を送っても、関数 URL で断られるだけだからです。
 3. 本文を base64 から戻したバイト列のまま、SHA256 を計算して、`x-amz-content-sha256` に入れます。文字列にしてから計算すると、バイナリの本文で値が変わるので、バイト列のまま計算します。
 
-- **本文は 1 MB まで:** CloudFront を通って Redmine に届く要求の本文は、1 MB までになります。画面からの添付ファイルは S3 に直接送るので当たりません。当たるものは [下の「6 MB の制限」](#the-6-mb-limit) にまとめました。
-- **費用:** 東京で、100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルです(価格表)。オリジンへの要求のところに付けるので、キャッシュしない画面の要求ごとに動きます。月 5 万件なら 0.1 ドルより少ない見込みです。CloudFront の定額プランでも使え、料金はプランとは別にかかります(AWS のブログ、2026-03-24)。
-- **ログ:** Lambda@Edge のログは、関数が動いたエッジに近いリージョンの CloudWatch Logs に出ます(`/aws/lambda/us-east-1.redmine-body-hash`)。
-- **公式の資料にない形:** Lambda@Edge で本文のハッシュを入れてから OAC が署名する形は、公式の資料には書かれていません。動いたという実践の記録はあります(クラスメソッドの記事、2024-07-29。公式の情報ではありません)。最初に試して確認します。
+この関数があるので、CloudFront を通って Redmine に届く要求の本文は 1 MB までになります。画面からの添付ファイルは S3 に直接送るので当たりません。当たるものは、下の[「6 MB の制限」](#the-6-mb-limit)にまとめました。
+
+この関数はオリジンへの要求のところで動くので、キャッシュしない画面の要求ごとに動きます。東京では 100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルで(価格表)、月 5 万件なら 0.1 ドルに届きません。CloudFront の定額プランでも使え、料金はプランとは別にかかります(AWS のブログ、2026-03-24)。ログは、関数が動いたエッジに近いリージョンの CloudWatch Logs に出ます(`/aws/lambda/us-east-1.redmine-body-hash`)。
+
+Lambda@Edge で本文のハッシュを入れてから OAC が署名する形は、公式の資料には書かれていません。動いたという実践の記録はあります(クラスメソッドの記事、2024-07-29。公式の情報ではありません)。最初に試して確認します。
 
 <a id="the-events-path-of-lambda-web-adapter"></a>
 
@@ -393,9 +407,9 @@ flowchart LR
 | 古いアセット | 消さずに残す。デプロイの途中や、古い画面を開いたままの人が、前のファイル名で読むため。ライフサイクルで、90 日より古いバージョンを消す |
 | 同一オリジン | Redmine と同じドメインで配る。Redmine のアイコンは SVG のスプライトを `<use href>` で参照しており、ブラウザーは別のオリジンの `<use>` を読み込まないので、`config.asset_host` で別のドメインにはしない |
 
-- **Lambda を呼ばない:** 画面を開くたびに読むファイルが Lambda を通らないので、起動待ちと同時の要求の数が減ります。CloudFront のキャッシュが切れたときも、S3 から返ります。
-- **デプロイの順番:** アセットを S3 に置いてから、`redmine-web` のイメージを更新します。新しい HTML が参照するファイルが、先に S3 にあるようにするためです。
-- **Rails の配信:** Rails 8.1 の既定では、Rails も `public/` のファイルを配ります(`public_file_server.enabled`)。CloudFront が `/assets/*` を S3 に向けるので、Rails には届きません。そのままにしておいても害はありません。
+これで、画面を開くたびに読むファイルが Lambda を通らなくなり、起動待ちと同時の要求の数が減ります。CloudFront のキャッシュが切れても、S3 から返ります。デプロイでは、アセットを S3 に置いてから `redmine-web` のイメージを更新するので、新しい HTML が参照するファイルは先に S3 にあります。
+
+Rails 8.1 の既定では、Rails も `public/` のファイルを配ります(`public_file_server.enabled`)。CloudFront が `/assets/*` を S3 に向けるので、その要求は Rails に届きません。設定はそのままで問題ありません。
 
 <a id="flat-rate-free-plan-and-waf"></a>
 
@@ -403,7 +417,7 @@ flowchart LR
 
 CloudFront は、定額プランの Free(月 0 ドル)を既定にします。月 100 万リクエストと 100 GB の転送の枠で、この規模なら収まる見込みです。WAF のルール(5 つまで)も含まれます。プランの違い、含まれないもの(ログなど)、WAF のルールは [security.md](security.md#aws-waf) にあります。
 
-- **この設計で当たらないもの:** Free にない、独自のキャッシュのルールと、VPC の中のオリジンは使いません。AWS が用意しているキャッシュのポリシーだけを使い、オリジン(関数 URL と S3)も VPC の外です。キャッシュのビヘイビアは 2 つで、Free の上限(5)に収まります。
+Free には独自のキャッシュのルールと VPC の中のオリジンがありませんが、この設計はどちらも使いません。AWS が用意しているキャッシュのポリシーだけを使い、オリジン(関数 URL と S3)も VPC の外です。ディストリビューションのビヘイビアは、既定のものと、パスごとの 5 つ(`/files/*`、`/thumbnails/*`、`/tmp/bulk/*`、`/incoming/*`、`/assets/*`)です。Free のキャッシュのビヘイビアは 5 つまでで、既定のビヘイビアをその数に含めるかは資料に書かれていません(2026-11-10 に確認)。アカウントで確認が要ります。
 
 <a id="features-that-cannot-be-used"></a>
 
@@ -440,3 +454,4 @@ Event Functions の同期の呼び出しは、要求と応答がそれぞれ 6 M
 - Lambda@Edge で `x-amz-content-sha256` を入れたあと、OAC の署名で、関数 URL が POST、PUT、PATCH、DELETE を受けるか。本文のない POST と、マルチパートのフォームでも通るか
 - Lambda@Edge の `inputTruncated` で 413 を返したときに、ブラウザーと API のクライアントに分かる応答になるか
 - CloudFront の定額プラン Free を、アカウントでいくつ使えるか
+- ディストリビューション(既定のビヘイビアとパスごとの 5 つ)が、Free のキャッシュのビヘイビアの上限(5)に収まるか

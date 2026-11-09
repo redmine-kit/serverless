@@ -250,20 +250,27 @@ sequenceDiagram
 | Batch size | 1. The handler ends with an exception when a job in the batch fails, so messages are processed one at a time and only the failed one is retried |
 | Visibility timeout | Longer than the function timeout (900 seconds) |
 
-- **Fast:** While the environment stays alive, `redmine-worker` reuses the loaded Rails. Rails is not restarted for each job.
-- **Redmine's bundle first:** The runtime interface client loads default gems such as json and uri before the handler loads Rails, and Bundler then refuses the newer versions in Redmine's bundle. So `redmine-worker` sets up Redmine's bundle before the runtime starts (`RUBYOPT=-rbundler/setup`) (checked on the Runtime Interface Emulator on 2026-11-09).
-- **Retries:** When a job fails, the message is delivered again after the visibility timeout. After 3 failures, it moves to the dead-letter queue, and an alarm reports the count. The plugin records the job on the last receive and can resend it ([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/admin.html#jobs)).
-- **May run twice:** An SQS standard queue may deliver the same message twice. A notification mail may arrive twice, which is acceptable at this scale.
-- **Delayed jobs:** The gem supports delays of up to 15 minutes. Redmine itself does not use them.
-- **Faster requests:** A page request returns its response as soon as the job is queued in SQS. It does not wait for notification mail to be sent.
-- **Concurrency:** The reserved concurrency of `redmine-worker` is 3, so that too many jobs running at once do not use too many database connections and cost too much.
-- **Webhooks:** Redmine 7.0 sends webhooks in a job (`WebhookJob`), so `redmine-worker` sends them. `redmine-worker` is in the VPC, so webhooks can be sent only in the NAT instance setup ([rds.md](rds.md#routes-out-of-the-vpc)). In the VPC endpoint setup, they fail at once (`webhook_blocklist` above).
-  - **Enabling:** Disabled by default in Redmine (`webhooks_enabled` is 0). An administrator enables it, and people with the permission (`use_webhooks`) create their own webhooks.
-  - **On failure:** If the destination returns an error or cannot be reached (Redmine's timeout is 60 seconds), the job fails. SQS delivers it again; after 3 failures it moves to the dead-letter queue and is kept in the failure records. It can be resent from "Jobs" in the administration pages ([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/admin.html#jobs)).
-  - **Destination restrictions:** Before sending, Redmine resolves the destination name to an IP address and does not send if it is in the `webhook_blocklist` ranges. It connects directly to the resolved IP address, which also protects against attacks that swap the DNS answer in between (`lib/webhook_endpoint_validator.rb`, `Webhook::Executor`). This design rejects private addresses and link-local addresses (including the metadata address `169.254.169.254`) ([ai.md](ai.md#event-notifications-redmines-standard-webhooks)).
-- **Deleting large projects:** This runs in `redmine-worker`, so it can take up to 15 minutes.
-- **Mail in rake tasks:** Redmine's rake tasks (such as due-date reminders) switch to sending mail immediately (`Mailer.with_synched_deliveries`), so they do not queue jobs.
-- **Route:** `redmine-web` and `redmine-worker` reach SQS with IAM authentication through the SQS VPC endpoint or the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)).
+While its environment stays alive, `redmine-worker` keeps Rails loaded and runs each job in it; Rails is not restarted per job. A page request returns as soon as its job is in SQS, so it never waits for notification mail to be sent. The reserved concurrency of `redmine-worker` is 3, so that a burst of jobs doesn't use too many database connections or cost too much.
+
+The runtime interface client loads default gems such as json and uri before the handler loads Rails, and Bundler then refuses the newer versions in Redmine's bundle. So `redmine-worker` sets up Redmine's bundle before the runtime starts (`RUBYOPT=-rbundler/setup`; checked on the Runtime Interface Emulator on 2026-11-09).
+
+#### Retries and duplicates
+
+When a job fails, SQS delivers the message again after the visibility timeout. After 3 failures it moves to the dead-letter queue, and an alarm reports the count. The plugin records the job on its last receive so that it can be resent from the administration pages ([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/admin.html#jobs)).
+
+A standard queue may also deliver the same message twice, so a notification mail can occasionally arrive twice; that is acceptable at this scale. The gem supports delays of up to 15 minutes, but Redmine itself doesn't use them.
+
+#### Webhooks
+
+Redmine 7.0 sends webhooks in a job (`WebhookJob`), so `redmine-worker` sends them. It runs in the VPC, so webhooks can be sent only in the NAT instance setup ([rds.md](rds.md#routes-out-of-the-vpc)); in the VPC endpoint setup they fail at once (`webhook_blocklist` above).
+
+Webhooks are off by default (`webhooks_enabled` is 0). An administrator turns them on, and people with the `use_webhooks` permission create their own. If the destination returns an error or can't be reached within Redmine's 60-second timeout, the job fails and follows the retries above, ending in the failure records, where it can be resent from "Jobs".
+
+Before sending, Redmine resolves the destination name and refuses addresses in the `webhook_blocklist` ranges. It then connects to the resolved address directly, which also defeats DNS answers swapped in between (`lib/webhook_endpoint_validator.rb`, `Webhook::Executor`). This design blocks private and link-local addresses, including the metadata address `169.254.169.254` ([ai.md](ai.md#event-notifications-redmines-standard-webhooks)).
+
+#### Other jobs and the route to SQS
+
+Deleting a large project runs in `redmine-worker`, so it can take up to 15 minutes. Redmine's rake tasks (such as due-date reminders) send mail immediately (`Mailer.with_synched_deliveries`) and don't queue jobs. `redmine-web` and `redmine-worker` reach SQS with IAM authentication through the SQS VPC endpoint or the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)).
 
 #### Other options considered
 
@@ -318,10 +325,11 @@ The processing is as follows.
 2. If the body is over 1 MB and was truncated (`inputTruncated`), return 413 without sending it to the origin. A request with a mismatched hash would only be rejected by the function URL.
 3. Compute the SHA256 over the body as bytes decoded from base64 and put it in `x-amz-content-sha256`. Computing it after converting to a string would change the value for binary bodies, so it is computed over the bytes.
 
-- **Body up to 1 MB:** Request bodies that reach Redmine through CloudFront are limited to 1 MB. Attachments from pages are sent directly to S3, so they are not affected. What is affected is summarized in ["The 6 MB limit" below](#the-6-mb-limit).
-- **Cost:** In Tokyo, $0.60 per million requests and $0.00005001 per GB-second (price list). It is attached to the origin request, so it runs for every uncached page request. At 50,000 requests per month it is expected to be less than $0.1. It can also be used with the CloudFront flat-rate plans, and it is charged separately from the plan (AWS blog, 2026-03-24).
-- **Logs:** Lambda@Edge logs go to CloudWatch Logs in the region near the edge where the function ran (`/aws/lambda/us-east-1.redmine-body-hash`).
-- **Not in the official documentation:** Adding the body hash with Lambda@Edge and then signing with OAC is not described in the official documentation. There is a practical report that it worked (a Classmethod article, 2024-07-29; not official information). It will be tried and checked first.
+Because of this function, request bodies that reach Redmine through CloudFront are limited to 1 MB. Attachments from pages go directly to S3, so they are not affected; what is affected is listed under ["The 6 MB limit"](#the-6-mb-limit) below.
+
+The function runs on the origin request, so it runs for every uncached page request. In Tokyo it costs $0.60 per million requests and $0.00005001 per GB-second (price list), which comes to less than $0.1 at 50,000 requests a month. It also works with the CloudFront flat-rate plans and is charged separately from the plan (AWS blog, 2026-03-24). Its logs go to CloudWatch Logs in the region near the edge where it ran (`/aws/lambda/us-east-1.redmine-body-hash`).
+
+Adding the body hash with Lambda@Edge and then signing with OAC is not described in the official documentation. A practical report says it works (a Classmethod article, 2024-07-29; not official information); it is the first thing to try.
 
 ### The `/events` path of Lambda Web Adapter
 
@@ -347,15 +355,15 @@ flowchart LR
 | Old assets | Kept, not deleted, because people may read the previous file names during a deployment or while an old page stays open. A lifecycle rule deletes versions older than 90 days |
 | Same origin | Served from the same domain as Redmine. Redmine's icons reference an SVG sprite with `<use href>`, and browsers do not load `<use>` from another origin, so `config.asset_host` is not set to a different domain |
 
-- **Lambda is not invoked:** Files loaded on every page do not go through Lambda, so waits for start-up and the number of concurrent requests go down. When the CloudFront cache expires, S3 still returns them.
-- **Deployment order:** Assets are put in S3 before the `redmine-web` image is updated, so that files referenced by the new HTML are already in S3.
-- **Serving by Rails:** By default in Rails 8.1, Rails also serves files in `public/` (`public_file_server.enabled`). CloudFront routes `/assets/*` to S3, so those requests do not reach Rails. Leaving the setting as is does no harm.
+Files loaded on every page then never go through Lambda, which cuts start-up waits and concurrent requests; when the CloudFront cache expires, S3 still serves them. At deployment the assets go to S3 before the `redmine-web` image is updated, so the files the new HTML refers to are already there.
+
+By default in Rails 8.1, Rails also serves `public/` (`public_file_server.enabled`). CloudFront sends `/assets/*` to S3, so those requests never reach Rails, and the setting can stay as it is.
 
 ### Flat-rate Free plan and WAF
 
 CloudFront uses the flat-rate Free plan ($0 per month) by default. It includes 1 million requests and 100 GB of transfer per month, which is expected to be enough at this scale. It also includes WAF rules (up to 5). The plan differences, what is not included (such as logs) and the WAF rules are in [security.md](security.md#aws-waf).
 
-- **Limits this design does not hit:** Custom cache rules and origins inside a VPC, which Free does not include, are not used. Only the cache policies provided by AWS are used, and the origins (the function URL and S3) are outside a VPC. There are two cache behaviors, within the Free limit (5).
+Free has no custom cache rules and no origins inside a VPC; this design uses neither. It uses only the cache policies AWS provides, and its origins (the function URL and S3) are outside a VPC. The distribution has the default behavior and 5 path behaviors (`/files/*`, `/thumbnails/*`, `/tmp/bulk/*`, `/incoming/*`, `/assets/*`). Free allows 5 cache behaviors, and the documentation does not say whether the default behavior counts toward that limit (checked 2026-11-10), so this has to be confirmed in an account.
 
 ## Features that cannot be used
 
@@ -386,3 +394,4 @@ Synchronous invocations of Event Functions are limited to 6 MB each for the requ
 - Whether, after Lambda@Edge adds `x-amz-content-sha256` and OAC signs the request, the function URL accepts POST, PUT, PATCH and DELETE. Whether POST without a body and multipart forms also pass
 - Whether returning 413 on Lambda@Edge `inputTruncated` gives a response that browsers and API clients can understand
 - How many CloudFront flat-rate Free plans an account can use
+- Whether the distribution (the default behavior and 5 path behaviors) fits the Free plan's limit of 5 cache behaviors

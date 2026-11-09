@@ -18,7 +18,7 @@ Unit prices on this page come from the Tokyo files of the AWS price list (Price 
 
 | Setup | Breakdown | Monthly |
 | --- | --- | --- |
-| This design | RDS about $21.0, the route out of the VPC (NAT instance about $8.4, or three endpoints about $30.7), others (Lambda, S3, ECR, logs, Route 53 and so on) about $2.4 ([cost.md](cost.md)) | about $31.8–54.1 |
+| This design | RDS about $21.0, the route out of the VPC (NAT instance about $8.4, or three endpoints about $30.7), others (Lambda, S3, ECR, logs, Route 53, the malware scan of uploads and so on) about $3.6 ([cost.md](cost.md)) | about $33.0–55.3 |
 | One EC2 instance | t4g.small $15.8 ($0.0216 per hour), gp3 30 GB $2.9 ($0.096 per GB-month), public IPv4 $3.7 | about $22.3 |
 | EC2 and RDS | One EC2 instance (about $22.3) and RDS about $21.0 | about $43.3 |
 | One Lightsail instance | 2 GB instance $11.8 ($0.01612 per hour, including public IPv4) | about $11.8 |

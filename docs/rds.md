@@ -239,8 +239,8 @@ The Redmine and plugin code is the same in both setups. Switch with `network.mod
 
 | Setup | Monthly | Breakdown |
 | --- | --- | --- |
-| RDS with SES, SSM and SQS endpoints | About USD 54.1 | RDS about USD 21.0, endpoints about USD 30.7, other (Lambda, S3, etc.; [cost.md](cost.md)) about USD 2.4 |
-| RDS with a NAT instance | About USD 31.8 | RDS about USD 21.0, NAT instance about USD 8.4, other about USD 2.4 |
+| RDS with SES, SSM and SQS endpoints | About USD 55.3 | RDS about USD 21.0, endpoints about USD 30.7, other (Lambda, S3, etc.; [cost.md](cost.md)) about USD 3.6 |
+| RDS with a NAT instance | About USD 33.0 | RDS about USD 21.0, NAT instance about USD 8.4, other about USD 3.6 |
 
 | Addition | Monthly | When to add |
 | --- | --- | --- |

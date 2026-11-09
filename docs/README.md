@@ -15,6 +15,7 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | Build the administration pages | [admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html) |
 | Decide permissions | [iam.md](iam.md) |
 | Learn about security protections, WAF, log retention and incident procedures | [security.md](security.md) |
+| Set up the AWS-side security settings (GuardDuty, CloudTrail, Access Analyzer and so on) | [aws-security.md](aws-security.md) |
 | Write the configuration and deploy, set up several instances | [deploy-config.md](deploy-config.md) |
 | Connect AI features | [ai.md](ai.md) |
 | Decide on the cache and tune it | [cache.md](cache.md) |
@@ -38,6 +39,7 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | [admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html) | Administration pages added by the plugins, as tabs under one shared "Serverless" menu item (status and connections in `redmine_serverless`; jobs in `redmine_serverless_sqs`; mail sending and receiving in `redmine_serverless_ses`; S3 attachments in `redmine_serverless_s3`) |
 | [iam.md](iam.md) | Execution roles, resource-based policies, the deployment role, permissions for people |
 | [security.md](security.md) | What to protect, threats and protections, the entry point and AWS WAF, Redmine settings, data protection, retention periods, logs, the supply chain, remaining risks, incidents |
+| [aws-security.md](aws-security.md) | The AWS-side security settings: what each protects, who sets it up, cost, defaults (GuardDuty and its malware scan of uploads, CloudTrail, IAM Access Analyzer, Security Hub, Config, Block Public Access, EBS encryption, the root user, budgets) |
 | [deploy-config.md](deploy-config.md) | The configuration file for each Redmine (`redmine.json`), naming rules, the shared foundation, deployment commands |
 | [ai.md](ai.md) | Integration with AI features from a separate project (Redmine's standard REST API, OAuth, webhooks) and safety rules |
 | [cache.md](cache.md) | What Redmine caches, the cache in each environment, what can be tuned, the cost of a shared cache (ElastiCache for Valkey) |

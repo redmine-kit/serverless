@@ -20,14 +20,15 @@
 | SES の送信 | 宛先 1 件あたり 0.0001 ドル | 1,000 通 | 0.10 ドル |
 | SES の受信 | 1 通あたり 0.0001 ドル、チャンクあたり 0.00009 ドル | 1,000 通 | 約 0.19 ドル |
 | Route 53 | ホストゾーン 1 つで月 0.50 ドル。CloudFront を向く別名のレコードへの問い合わせは無料、ほかは 100 万件あたり 0.40 ドル | Redmine のサブドメインを委任するときだけ。委任しないなら 0 ドル | 約 0.5 ドル |
-| 小計 | | | 約 23.4 ドル |
+| GuardDuty Malware Protection for S3(アップロードとインポート。[aws-security.md](aws-security.md#malware-protection-for-s3)) | スキャンした量 1 GB あたり 0.1185 ドル(月に最初の 1 GB は無料)、オブジェクト 1 つあたり 0.000282 ドル(月に最初の 1,000 は無料) | 3,000 ファイル、6 GB | 約 1.2 ドル |
+| 小計 | | | 約 24.6 ドル |
 
 小計に、VPC から AWS のサービスに届く経路の費用が加わります([rds.md](rds.md#routes-out-of-the-vpc))。
 
 | 形 | 経路 | 月の合計 |
 | --- | --- | --- |
-| 形 2: NAT インスタンス | t4g.nano 1 台、パブリック IPv4、ディスクで約 8.4 ドル | 約 31.8 ドル |
-| 形 1: VPC のエンドポイント | SES、SSM、SQS のインターフェイスエンドポイント(1 AZ)で約 30.7 ドル | 約 54.1 ドル |
+| 形 2: NAT インスタンス | t4g.nano 1 台、パブリック IPv4、ディスクで約 8.4 ドル | 約 33.0 ドル |
+| 形 1: VPC のエンドポイント | SES、SSM、SQS のインターフェイスエンドポイント(1 AZ)で約 30.7 ドル | 約 55.3 ドル |
 
 - **ほとんどが決まった費用:** RDS と VPC から外への経路は、Redmine を使っても使わなくても時間で課金され、合計の大半を占めます。ほかの項目は、使った分だけです。
 - **CloudFront:** 定額プラン Free を使えば、月 100 万リクエストと 100 GB まで 0 ドルです。使わない場合も、常時無料の枠(月 1 TB の転送と 1,000 万件の要求)に収まる見込みです。常時無料の枠の内容は、作るときに確認します。
@@ -43,6 +44,7 @@
 | --- | --- | --- |
 | Provisioned Concurrency(2 GB を 1 つ) | 約 23 ドル | 起動待ちをなくしたいとき |
 | CloudFront の定額プラン Pro | 15 ドル(ログの保存と検索は別料金) | CloudFront と WAF のログを残したいとき([security.md](security.md#plan-and-cost)) |
+| 使う側が有効にする AWS のセキュリティのサービス(GuardDuty の脅威の検出、Security Hub、Config、使われていないアクセスの分析) | それぞれ 1 ドル未満から。ページを参照 | アカウントごと([aws-security.md](aws-security.md)) |
 | 共有のキャッシュ(ElastiCache Serverless for Valkey) | 約 7.4 ドル(`cache.t4g.micro` のノード 1 台なら 14.60 ドル) | 整形済みのテキストと検索の結果を、環境をまたいで使い回したいとき([cache.md](cache.md#when-a-shared-cache-is-worth-it)) |
 
 データベースと経路に足すもの(Multi-AZ、NAT Gateway、RDS Proxy など)は、[rds.md](rds.md#cost) にあります。
@@ -62,5 +64,6 @@
 | AmazonSES | 2026-11-04 |
 | AWSQueueService(SQS) | 2026-09-11 |
 | AmazonRoute53 | 2026-11-04 |
+| AmazonGuardDuty | 2026-10-30 |
 
 URL の形は `https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/<サービス>/current/ap-northeast-1/index.json` です(2026-11-08 に取得)。AmazonRDS と AmazonVPC は、[rds.md](rds.md#cost) の費用にも使っています。

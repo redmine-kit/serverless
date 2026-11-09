@@ -1,6 +1,6 @@
 # Security
 
-This is the security design of Serverless. It covers what to protect, what can happen, the protections at each layer, the remaining risks, and the steps for an incident. Detailed settings for permissions, networking and the database are in their own pages, which this page links to.
+This is the security design of Serverless. It covers what to protect, what can happen, the protections at each layer, the remaining risks, and the steps for an incident. Detailed settings for permissions, networking and the database are in their own pages, which this page links to. The security settings on the AWS side (GuardDuty and the malware scan of uploads, CloudTrail, IAM Access Analyzer and others) are in [aws-security.md](aws-security.md).
 
 The specifications in this page were checked against official information and the Redmine 7.0.3 source as of 2026-11-09. Sources are in [sources.md](sources.md).
 

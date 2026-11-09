@@ -59,7 +59,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | `domain` | ○ | | Web とメールのホスト名(たとえば `redmine.example.com`) |
 | `dns.mode` | | `route53` | `route53`(Route 53 のホストゾーンに置く)か `external`(ほかの DNS に、表示したレコードを自分で置く)([mail.md](mail.md#receiving-domain)) |
 | `dns.hostedZoneId` | `route53` のとき | | ドメインの Route 53 のホストゾーン |
-| `account.*` | | | アカウントのロールの設定。`bin/deploy --account` だけが使う。`ssoPermissionSet`(既定は `AdministratorAccess`)、`githubRepository`(`owner/repository`。なければ GitHub Actions のロールは作らない)、`githubInfraEnvironment`(既定は `infrastructure`)、`githubCodeEnvironment`(既定は `production`)、`githubOidcProviderArn`(アカウントに GitHub の OIDC のプロバイダーがすでにあるとき)([iam.md](iam.md#account-roles)) |
+| `account.*` | | | アカウントのスタックの設定。`bin/deploy --account` だけが使う。ロール(`ssoPermissionSet`。既定は `AdministratorAccess`。`githubRepository`。`owner/repository`。なければ GitHub Actions のロールは作らない。`githubInfraEnvironment`。既定は `infrastructure`。`githubCodeEnvironment`。既定は `production`。`githubOidcProviderArn`。アカウントに GitHub の OIDC のプロバイダーがすでにあるとき。[iam.md](iam.md#account-roles))と、アカウントのセキュリティの設定(`cloudTrail` と `accessAnalyzer`。既定では、アカウントになければ作る。`trailDays`。既定は 365。`unusedAccessAnalyzer`。既定は `false`。[aws-security.md](aws-security.md)) |
 | `network.mode` | | `endpoints` | VPC の外への道。`endpoints`(VPC のエンドポイント。インターネットへの出口なし)か `nat`(NAT インスタンス。webhook や外の API に届く)([rds.md](rds.md#which-to-choose)) |
 | `network.shared` | | `true` | 共有の土台のネットワークを使うか。今は `true` だけ。インスタンスごとの VPC は作っていない |
 | `database.majorVersion` | ○ | | PostgreSQL のメジャーバージョン(たとえば `"17"`)。インスタンスを作るときに、RDS が出しているバージョンと照らして確認する([rds.md](rds.md#database)) |
@@ -69,6 +69,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | `lambda.webReservedConcurrency` | | 10 | `redmine-web` の同時実行数の予約 |
 | `lambda.workerReservedConcurrency` | | 3 | `redmine-worker` の同時実行数の予約。`redmine-task` は 2 で決め打ち([tasks.md](tasks.md#kinds-of-events)) |
 | `lambda.warmup` | | `false` | 業務時間の温めの呼び出しをするか([lambda.md](lambda.md#waiting-for-start-up))。今は `false` だけ |
+| `uploads.malwareScan` | | `true` | GuardDuty Malware Protection for S3 で、Redmine が読む前に、アップロードとインポートをスキャンするか([aws-security.md](aws-security.md#malware-protection-for-s3))。`false` で止める |
 | `uploads.maxBytes` | | 104857600(100 MB) | 添付ファイルの大きさの上限。`/incoming/*` の CloudFront Function が、これより大きいアップロードを 413 で断る。段 10 で、Redmine の添付ファイルの最大の大きさ(`attachment_max_size`。KB)も、`redmine.settings` に書いていなければ同じ上限にする |
 | `mail.receive` | | `true` | メールの受信を使うか |
 | `mail.perProjectAddresses` | | `false` | プロジェクトごとのアドレスを使うか。`false` なら Redmine の標準と同じ([mail.md](mail.md#addresses-per-project)) |
@@ -152,7 +153,7 @@ bin/deploy path/to/redmine.json --code-only  # イメージだけを更新する
 | 11 | デプロイしたあとの確認。`/login` が `Strict-Transport-Security` 付きの 200 を返し、署名のない `/files/` が 403 を返すこと。要求は、ドメインのホスト名のまま、ディストリビューションそのものの名前に送るので、DNS を待たない([testing.md](testing.md#checks-after-deployment))。`dns.mode` が `external` なら、足すレコードを表示する |
 
 - **イメージの順番:** Web と worker が新しいイメージになるのは、マイグレーションのあとです。データベースより新しいコードが動くことはありません。マイグレーションが失敗すると、デプロイはそこで止まり、Web と worker は前のイメージのままです。
-- **`--dry-run`:** 段 1〜4 とインスタンスのスタックについて、変更セットを作って表示し、消します。作られるはずのスタックも消します。秘密の値、イメージ、アセット、関数の呼び出しなど、ほかは何も変えません。
+- **`--dry-run`:** 段 1〜4 とインスタンスのスタックについて、変更セットを作って表示し、消します。作られるはずのスタックも消します。秘密の値、イメージ、アセット、関数の呼び出しなど、ほかは何も変えません(そのまま渡すには大きすぎるテンプレートだけは、テンプレートのバケットに置きます)。
 - **`--code-only`:** 段 5〜7、9、11 を、スタックを変えずに、渡された認証情報で動かします(たとえば、GitHub Actions のコードのデプロイ用のロール。[iam.md](iam.md#role-for-deploying-code-github-actions))。関数は直接更新します。立てたインスタンスが要ります。
 - **`--account`:** `infra/account.yaml`(スタック `redmine-account`)を、管理者の自分の認証情報で当てます。それより前には、デプロイ用のロールも CloudFormation のサービスロールも無いからです。アカウントごとに 1 回、最初のデプロイの前に行います。
 - **CloudFormation のロール:** どのスタックも、サービスロール `redmine-cfn-exec` を付けた変更セットで当てます。デプロイ用のロールは、自分ではリソースを作れません([iam.md](iam.md#role-for-deploying-infrastructure))。
@@ -182,11 +183,11 @@ CloudFormation は SecureString のパラメーターを作れないので、`bi
 
 | ファイル | スタック | 中身 |
 | --- | --- | --- |
-| `infra/account.yaml` | `redmine-account` | 権限の境界 `redmine-boundary`、CloudFormation のサービスロール `redmine-cfn-exec`、ロール `redmine-infra-deploy` と `redmine-github-deploy`、要るときは GitHub の OIDC のプロバイダー([iam.md](iam.md#account-roles)) |
-| `infra/shared.yaml` | `redmine-shared` | ECR のリポジトリ、2 つの AZ のプライベートのサブネットを持つ VPC、S3 のゲートウェイのエンドポイント、共有の SES の受信のルールのセット、外への道。外への道は、1 つの AZ の SSM、SQS、SES のインターフェースのエンドポイント(`network.mode` が `endpoints`)か、NAT インスタンス(`nat`。インターネットゲートウェイ、パブリックのサブネット、起動のときに Elastic IP と経路を引き継ぐ 1 台の Auto Scaling グループ。[rds.md](rds.md#setup-2-nat-instance)) |
+| `infra/account.yaml` | `redmine-account` | 権限の境界 `redmine-boundary`、CloudFormation のサービスロール `redmine-cfn-exec`、ロール `redmine-infra-deploy` と `redmine-github-deploy`、要るときは GitHub の OIDC のプロバイダー([iam.md](iam.md#account-roles))。アカウントになければ、CloudTrail の証跡と IAM Access Analyzer のアナライザー([aws-security.md](aws-security.md)) |
+| `infra/shared.yaml` | `redmine-shared` | ECR のリポジトリ、そのまま渡すには大きすぎるテンプレートのためのバケット、2 つの AZ のプライベートのサブネットを持つ VPC、S3 のゲートウェイのエンドポイント、共有の SES の受信のルールのセット、外への道。外への道は、1 つの AZ の SSM、SQS、SES のインターフェースのエンドポイント(`network.mode` が `endpoints`)か、NAT インスタンス(`nat`。インターネットゲートウェイ、パブリックのサブネット、起動のときに Elastic IP と経路を引き継ぐ 1 台の Auto Scaling グループ。[rds.md](rds.md#setup-2-nat-instance)) |
 | `infra/shared-edge.yaml` | `redmine-shared-edge`(us-east-1) | Lambda@Edge の関数 `redmine-body-hash`(Node.js 24。コードは `edge/body-hash/index.js` をそのまま埋め込む)と、そのバージョン。コードが変わると、新しいバージョンを作る |
 | `infra/instance-edge.yaml` | `<instance>-edge`(us-east-1) | ドメインの ACM の証明書(DNS で検証)と、`cloudfront.webAclArn` がなければ AWS WAF の Web ACL([security.md](security.md#rules)) |
-| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL。添付ファイル、アセット、メールのバケット。ジョブのキュー、そのデッドレターキュー、失敗したタスクの呼び出しのキュー。3 つの関数と、そのロールとロググループ。worker の SQS のイベントソース。CloudFront(OAC、本文のハッシュの関数、署名付き URL の添付ファイルのビヘイビア、CloudFront Function `<instance>-incoming-size`、保守の画面)。DNS のレコード。SES の ID と受信のルール。EventBridge Scheduler のスケジュール。アラーム |
+| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL。添付ファイル、アセット、メールのバケット。ジョブのキュー、そのデッドレターキュー、失敗したタスクの呼び出しのキュー。3 つの関数と、そのロールとロググループ。worker の SQS のイベントソース。CloudFront(OAC、本文のハッシュの関数、署名付き URL の添付ファイルのビヘイビア、CloudFront Function `<instance>-incoming-size`、保守の画面)。DNS のレコード。SES の ID と受信のルール。EventBridge Scheduler のスケジュール。アラーム。`incoming/` と `imports/` の GuardDuty Malware Protection for S3([aws-security.md](aws-security.md#malware-protection-for-s3)) |
 
 - **イメージ:** インスタンスのスタックは、そのアカウントの ECR のイメージを、digest で受け取ります(`ImageUri`)。
 - **PostgreSQL のバージョン:** `DbMajorVersion` には既定の値を置きません([rds.md](rds.md#database))。

@@ -17,6 +17,7 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | 管理画面を作る | [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html) |
 | 権限を決める | [iam.md](iam.md) |
 | セキュリティの守り、WAF、ログの保持、事故のときの手順を知る | [security.md](security.md) |
+| AWS の側のセキュリティの設定(GuardDuty、CloudTrail、Access Analyzer など)をする | [aws-security.md](aws-security.md) |
 | 設定を書いてデプロイする、いくつも立てる | [deploy-config.md](deploy-config.md) |
 | AI の機能をつなぐ | [ai.md](ai.md) |
 | キャッシュを決め、調整する | [cache.md](cache.md) |
@@ -42,6 +43,7 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html) | プラグインが足す管理画面。共有の「Serverless」のメニューの項目の下のタブ(`redmine_serverless` の状態と接続、`redmine_serverless_sqs` のジョブ、`redmine_serverless_ses` のメールの送信と受信、`redmine_serverless_s3` の添付ファイルの S3) |
 | [iam.md](iam.md) | 実行ロール、リソースベースのポリシー、デプロイ用のロール、人の権限 |
 | [security.md](security.md) | 守るもの、起きうることと守り、入口と AWS WAF、Redmine の設定、データの守り、保持の期間、ログ、供給網、残るリスク、事故のとき |
+| [aws-security.md](aws-security.md) | AWS の側のセキュリティの設定。それぞれが守るもの、用意するもの、費用、既定(GuardDuty とアップロードのマルウェアのスキャン、CloudTrail、IAM Access Analyzer、Security Hub、Config、パブリックアクセスのブロック、EBS の暗号化、ルートユーザー、予算) |
 | [deploy-config.md](deploy-config.md) | 1 つの Redmine ごとの設定のファイル(`redmine.json`)、名前の決まり、共有の土台、デプロイのコマンド |
 | [ai.md](ai.md) | 別のプロジェクトの AI の機能との連携(Redmine の標準の REST API、OAuth、webhook)と安全の決まり |
 | [cache.md](cache.md) | Redmine がキャッシュするもの、環境ごとのキャッシュ、調整できるところ、共有のキャッシュ(ElastiCache for Valkey)の費用 |

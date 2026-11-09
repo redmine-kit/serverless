@@ -56,6 +56,8 @@ def instance_params($image_uri; $certificate; $web_acl; $body_hash; $public_key)
     p("LogRetentionDays"; .logs.retentionDays // 90),
     p("MailDays"; .retention.mailDays // 30),
     p("NoncurrentVersionDays"; .retention.noncurrentVersionDays // 30),
+    p("CostEnabled"; if .cost.enabled == true then "true" else "false" end),
+    p("CostTagKey"; .cost.allocationTag // ""),
     p("ReceiveMail"; if .mail.receive == false then "false" else "true" end),
     p("SendReminders"; if .schedule.sendReminders == true then "true" else "false" end),
     p("ScheduleTimezone"; .schedule.timezone // "UTC"),

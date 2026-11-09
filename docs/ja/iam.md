@@ -108,6 +108,12 @@ flowchart LR
 | `sqs:SendMessage` | ジョブのキュー | rake の中で積まれるジョブ |
 | `sqs:SendMessage` | 失敗の送り先のキュー(`redmine-task-failures`) | SES からの非同期の呼び出しが失敗したときの送り先。Lambda の送り先は、実行ロールの権限で送る |
 
+<a id="cost-explorer-only-with-costenabled"></a>
+
+## Cost Explorer(`cost.enabled` のときだけ)
+
+プラグインの `redmine_serverless_cost` が、アカウントの費用を読みます。ポリシー `cost-explorer` で、`redmine-task`(毎日の更新)と `redmine-worker`(ジョブからの更新)に、`*` への `ce:GetCostAndUsage` と `ce:GetCostForecast` を許します。Cost Explorer にはリソースごとの権限がなく、費用はアカウント全体のものです(`cost.allocationTag` のときだけ、インスタンスに絞ります)。`redmine-web` は Cost Explorer を呼びません。権限の境界 `redmine-boundary` も、この 2 つの操作を許します。
+
 <a id="resource-based-policies"></a>
 
 ## リソースベースのポリシー

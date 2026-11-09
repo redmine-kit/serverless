@@ -86,6 +86,8 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | `redmine.settings` | | なし | Redmine の管理画面の設定の値(`host_name`、`default_language`、`mail_from` など) |
 | `redmine.settingsMode` | | `initial` | `initial`(まだ保存されていない設定だけ入れる。あとは画面で変えられる)か `enforce`(デプロイのたびに入れ直す) |
 | `redmine.pluginSettings` | | なし | プラグインの設定の値。プラグインの名前(`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`)ごとに書く。保存されている設定に足し合わせる |
+| `cost.enabled` | | `false` | プラグインの `redmine_serverless_cost` が、Cost Explorer からアカウントの費用を取り、管理画面に出すか。関数に `REDMINE_COST_ENABLED` を渡し、`redmine-task` と `redmine-worker` に `ce:GetCostAndUsage` と `ce:GetCostForecast` を許し、`redmine_serverless_cost:refresh` を毎日動かす([tasks.md](tasks.md#scheduled-runs))。Cost Explorer の API(`ce.us-east-1.amazonaws.com`)には、NAT インスタンス(`network.mode` が `nat`)を通って届く。`endpoints` のときに使えるインターフェースのエンドポイントがあるかは未確認。要求 1 回に USD 0.01 かかる([cost.md](cost.md#what-adds-cost)) |
+| `cost.allocationTag` | | 空 | このインスタンスの費用だけを出すための、コスト配分タグ(たとえば `redmine:instance`)。関数に `REDMINE_COST_TAG_KEY` として渡す。タグは、請求のコンソールでコスト配分タグとして有効にしておく |
 | `schedule.timezone` | | `UTC` | 定期の rake のタイムゾーン([tasks.md](tasks.md#scheduled-runs)) |
 | `schedule.sendReminders` | | `false` | 平日の朝に、期日の近いチケットのメール(`redmine:send_reminders`)を送るか |
 | `logs.retentionDays` | | 90 | CloudWatch Logs の保持の日数(Lambda@Edge のロググループを含む) |

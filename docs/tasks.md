@@ -107,6 +107,7 @@ EventBridge Scheduler invokes `redmine-task` with input in the form above.
 | --- | --- |
 | `redmine:attachments:prune` | Daily |
 | `redmine:send_reminders` (due date reminders) | If used, weekday mornings |
+| `redmine_serverless_cost:refresh` (the account's costs from Cost Explorer, for the administration pages) | Daily, only with `cost.enabled` ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
 | `redmine_serverless_sqs:prune_records[<days>]` and `redmine_serverless_ses:prune_records[<days>]` (delete the plugins' records older than the retention period, `retention.recordsDays`: failed jobs and received email; [security.md](security.md#retention-periods)) | Daily |
 
 ## Stopping unused functions

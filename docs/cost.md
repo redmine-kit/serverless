@@ -41,6 +41,7 @@ The route from the VPC to AWS services is added to the subtotal ([rds.md](rds.md
 | Provisioned Concurrency (one 2 GB environment) | about $23 | To remove the wait for start-up |
 | CloudFront flat-rate Pro plan | $15 (log storage and search are charged separately) | To keep CloudFront and WAF logs ([security.md](security.md#plan-and-cost)) |
 | AWS security services the adopter turns on (GuardDuty threat detection, Security Hub, Config, unused access analysis) | from under $1 each; see the page | Per account ([aws-security.md](aws-security.md)) |
+| Costs on the administration pages (`cost.enabled`) | about $1 (Cost Explorer API: $0.01 per request; a daily refresh makes a few requests; estimate) | To see the account's costs in Redmine ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
 | A shared cache (ElastiCache Serverless for Valkey) | about $7.4 (one `cache.t4g.micro` node: $14.60) | To share formatted text and search results across environments ([cache.md](cache.md#when-a-shared-cache-is-worth-it)) |
 
 What to add to the database and the route (Multi-AZ, a NAT Gateway, RDS Proxy and so on) is in [rds.md](rds.md#cost).
@@ -59,5 +60,6 @@ What to add to the database and the route (Multi-AZ, a NAT Gateway, RDS Proxy an
 | AWSQueueService (SQS) | 2026-09-11 |
 | AmazonRoute53 | 2026-11-04 |
 | AmazonGuardDuty | 2026-10-30 |
+| AWSCostExplorer (global) | 2026-09-11 |
 
 The URL format is `https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/<service>/current/ap-northeast-1/index.json` (retrieved on 2026-11-08). AmazonRDS and AmazonVPC are also used for the cost in [rds.md](rds.md#cost).

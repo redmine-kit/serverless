@@ -121,6 +121,15 @@
         "pluginSettings": { "type": "object", "additionalProperties": { "type": "object" } }
       }
     },
+    "cost": {
+      "description": "The plugin redmine_serverless_cost (costs from Cost Explorer on the administration pages).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "allocationTag": { "type": "string", "maxLength": 128, "default": "" }
+      }
+    },
     "schedule": {
       "type": "object",
       "additionalProperties": false,

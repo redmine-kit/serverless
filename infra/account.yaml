@@ -120,6 +120,9 @@ Resources:
               - sqs:*
               - ses:*
               - lambda:InvokeFunction
+              # redmine_serverless_cost
+              - ce:GetCostAndUsage
+              - ce:GetCostForecast
             Resource: "*"
           # The role of GuardDuty Malware Protection for S3: the EventBridge
           # rule it manages and the bucket's notifications.

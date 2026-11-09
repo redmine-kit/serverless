@@ -121,6 +121,7 @@ EventBridge Scheduler から、上の形の入力で `redmine-task` を呼びま
 | --- | --- |
 | `redmine:attachments:prune` | 毎日 |
 | `redmine:send_reminders`(期日の通知) | 使うなら、平日の朝 |
+| `redmine_serverless_cost:refresh`(Cost Explorer から、管理画面のためにアカウントの費用を取る) | 毎日。`cost.enabled` のときだけ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
 | `redmine_serverless_sqs:prune_records[<日数>]` と `redmine_serverless_ses:prune_records[<日数>]`(プラグインの記録を、保持の期間 `retention.recordsDays` より古いものから消す。失敗したジョブと受け取ったメール。[security.md](security.md#retention-periods)) | 毎日 |
 
 <a id="stopping-unused-functions"></a>

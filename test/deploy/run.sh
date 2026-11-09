@@ -69,6 +69,9 @@ check "values: the hosted zone only with route53" test \
 check "values: full.json" test \
   "$(value "$full" InstanceName) $(value "$full" MalwareScan) $(value "$full" DbInstanceClass) $(value "$full" ReceiveMail) $(value "$full" ScheduleTimezone) $(value "$full" LogRetentionDays)" \
   == "team-a false db.t4g.small false Asia/Tokyo 365"
+check "values: cost off by default, on in full.json" test \
+  "$(value "$minimal" CostEnabled)|$(value "$minimal" CostTagKey)|$(value "$full" CostEnabled)|$(value "$full" CostTagKey)" == \
+  "false||true|redmine:instance"
 check "values: the values from other stacks" test \
   "$(value "$full" ImageUri) $(value "$full" CertificateArn) $(value "$full" CloudFrontPublicKey)" == "img $arn key"
 edge=$(params instance_edge_params test/deploy/valid/full.json)

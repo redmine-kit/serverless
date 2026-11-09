@@ -96,6 +96,10 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 | `sqs:SendMessage` | The job queue | Jobs enqueued within rake |
 | `sqs:SendMessage` | The failure destination queue (`redmine-task-failures`) | The destination for failed asynchronous invocations from SES. Lambda sends to destinations with the execution role's permissions |
 
+## Cost Explorer (only with `cost.enabled`)
+
+The plugin `redmine_serverless_cost` reads the account's costs. The policy `cost-explorer` gives `redmine-task` (the daily refresh) and `redmine-worker` (refreshes from jobs) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`: Cost Explorer has no resource-level permissions, and the costs are of the whole account (narrowed to the instance only with `cost.allocationTag`). `redmine-web` does not call Cost Explorer. The boundary `redmine-boundary` allows these two actions.
+
 ## Resource-based policies
 
 | Resource | Allowed principal | Allowed actions | Condition |

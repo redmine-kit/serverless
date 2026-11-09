@@ -35,14 +35,14 @@ Start with [docs/architecture.md](docs/architecture.md). The plugins' designs ar
 <a href="https://www.keyselect.co.jp/">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/keyselect-logo-dark.svg">
-    <img alt="KEY SELECT" src=".github/assets/keyselect-logo.svg" width="113" height="24">
+    <img alt="KEY SELECT" src=".github/assets/keyselect-logo.svg" width="136" height="29">
   </picture>
 </a>
-
+&emsp;&emsp;
 <a href="https://localstack.cloud">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/localstack-logo-dark.svg">
-    <img alt="LocalStack" src=".github/assets/localstack-logo.svg" width="120" height="28">
+    <img alt="LocalStack" src=".github/assets/localstack-logo.svg" width="98" height="23">
   </picture>
 </a>
 

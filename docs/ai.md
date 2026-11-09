@@ -57,7 +57,7 @@ Events in Redmine are sent to the AI side with Redmine 7.0's standard webhooks. 
 
 Webhooks for AI are created by the bot user ("REST API and authorization" above), so their payload is limited to what the bot user can see. The AI project provides an endpoint, such as a Lambda function URL, that verifies the signature and receives them.
 
-Webhooks are sent from `redmine-worker` to a URL on the AI side. `redmine-worker` is outside a VPC and can reach the internet directly, so it can send them as is. With the RDS setup, only the NAT instance setup can send them; with the VPC endpoint setup, the AI side polls for updates through the REST API instead ([rds.md](rds.md#routes-out-of-the-vpc)).
+Webhooks are sent from `redmine-worker` to a URL on the AI side. `redmine-worker` runs in the VPC's private subnets, so it reaches the internet only through the NAT instance (`network.mode: nat`). With VPC endpoints only (`network.mode: endpoints`, the default), webhooks cannot be sent, and the AI side polls for updates through the REST API instead ([rds.md](rds.md#routes-out-of-the-vpc)).
 
 Private, loopback and link-local addresses go in `webhook_blocklist` (the values are in the table in [lambda.md](lambda.md#rails-and-redmine-settings)), so that webhooks cannot be used to send requests to internal addresses. The NAT instance in the RDS setup uses the same values.
 

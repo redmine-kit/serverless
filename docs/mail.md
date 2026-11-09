@@ -22,7 +22,7 @@ sequenceDiagram
 
 1. Redmine sends notification email with `deliver_later`. The job is queued in SQS and `redmine-worker` sends it ([lambda.md](lambda.md#background-jobs)). Web requests do not wait for email to be sent.
 2. The ActionMailer delivery method `:ses_v2` calls SES v2 `SendEmail`. It passes the full message (MIME) in `content.raw`, and passes the recipients separately as To, Cc and Bcc.
-3. `redmine-worker` is outside a VPC, so it reaches the public SES API endpoint (`email.ap-northeast-1.amazonaws.com`) over HTTPS with IAM authentication. Email from rake tasks (such as due date reminders) is sent directly by `redmine-task`.
+3. `redmine-worker` runs in the VPC's private subnets and calls the SES API (`email.ap-northeast-1.amazonaws.com`) over HTTPS with IAM authentication. With `network.mode: endpoints` the name resolves to the SES interface endpoint in the VPC (private DNS); with `network.mode: nat` the call goes out through the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)). Email from rake tasks (such as due date reminders) is sent directly by `redmine-task`.
 
 ### Gems
 

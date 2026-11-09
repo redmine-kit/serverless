@@ -26,7 +26,7 @@ sequenceDiagram
 
 1. Redmine は、通知のメールを `deliver_later` で送ります。ジョブは SQS に積まれ、`redmine-worker` が送ります([lambda.md](lambda.md#background-jobs))。画面の要求は、メールの送信を待ちません。
 2. ActionMailer の送信方法 `:ses_v2` が、SES v2 の `SendEmail` を呼びます。メールの全文(MIME)を `content.raw` で渡し、宛先は To、Cc、Bcc に分けて渡します。
-3. `redmine-worker` は VPC の外にあるので、SES の API の公開のエンドポイント(`email.ap-northeast-1.amazonaws.com`)に、HTTPS と IAM の認証で届きます。rake のタスク(期日の通知など)のメールは、`redmine-task` がその場で送ります。
+3. `redmine-worker` は VPC のプライベートサブネットで動き、SES の API(`email.ap-northeast-1.amazonaws.com`)を HTTPS と IAM の認証で呼びます。`network.mode: endpoints` では、この名前が VPC の中の SES のインターフェイスエンドポイントを指します(プライベート DNS)。`network.mode: nat` では、NAT インスタンスを通って外に出ます([rds.md](rds.md#routes-out-of-the-vpc))。rake のタスク(期日の通知など)のメールは、`redmine-task` がその場で送ります。
 
 <a id="gems"></a>
 

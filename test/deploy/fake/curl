@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# A fake curl for test/deploy/run.sh: answers like the deployed distribution
+# (FAKE_HSTS=0 leaves out Strict-Transport-Security).
+set -euo pipefail
+printf 'curl %s\n' "$*" >>"$FAKE/calls"
+headers="" url="${*: -1}"
+while (($#)); do
+  [[ "$1" == -D ]] && headers="$2"
+  shift
+done
+case "$url" in
+  */login) status=200 ;;
+  */files/*) status=403 ;;
+  *) status=404 ;;
+esac
+if [[ -n "$headers" ]]; then
+  printf 'HTTP/2 %s\r\ncontent-type: text/html\r\n' "$status" >"$headers"
+  [[ "${FAKE_HSTS:-1}" == 0 ]] || printf 'strict-transport-security: max-age=31536000\r\n' >>"$headers"
+fi
+printf '%s' "$status"

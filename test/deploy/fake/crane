@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# A fake crane for test/deploy/run.sh: records each call in $FAKE/calls.
+set -euo pipefail
+printf 'crane %s\n' "$*" >>"$FAKE/calls"
+case "$1" in
+  digest) echo "sha256:$(printf 'b%.0s' {1..64})" ;;
+  auth) cat >/dev/null ;;
+  copy) ;;
+  # The image's file system: only the assets matter.
+  export)
+    dir=$(mktemp -d)
+    mkdir -p "$dir/var/task/redmine/public/assets"
+    echo 'body {}' >"$dir/var/task/redmine/public/assets/application-0123.css"
+    tar -c -C "$dir" var
+    rm -rf "$dir" ;;
+  *) echo "fake crane: unexpected call: $*" >&2; exit 2 ;;
+esac

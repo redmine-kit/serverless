@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# A fake AWS CLI for test/deploy/run.sh. It records each call in
+# $FAKE/calls, keeps stacks and parameters as files under $FAKE, and answers
+# what deploy.sh reads. FAKE_NO_CHANGES (a stack name) and FAKE_TASK_FAIL
+# (an argument of the task) make those calls fail.
+set -euo pipefail
+printf '%s\n' "$*" >>"$FAKE/calls"
+service="$1" operation="$2"
+shift 2
+# The value after an option.
+opt() {
+  local name="$1"
+  shift
+  while (($#)); do
+    if [[ "$1" == "$name" ]]; then
+      printf '%s' "$2"
+      return
+    fi
+    shift
+  done
+}
+account=111122223333 region=${AWS_DEFAULT_REGION:-ap-northeast-1}
+stack=$(opt --stack-name "$@")
+
+case "$service $operation" in
+  "sts get-caller-identity") echo "arn:aws:sts::$account:assumed-role/admin/someone" ;;
+  "sts assume-role")
+    echo '{"AccessKeyId": "ASIAFAKE", "SecretAccessKey": "fake-secret", "SessionToken": "fake-token"}' ;;
+  "cloudformation describe-stacks")
+    [[ -f "$FAKE/stacks/$stack" ]] || { echo "Stack with id $stack does not exist" >&2; exit 254; }
+    query=$(opt --query "$@")
+    if [[ "$query" == *OutputKey* ]]; then
+      key=${query#*OutputKey==\'}
+      key=${key%%\'*}
+      case "$key" in
+        RepositoryUri) echo "$account.dkr.ecr.$region.amazonaws.com/redmine" ;;
+        ReceiptRuleSetName) echo redmine-shared ;;
+        CertificateArn) echo "arn:aws:acm:us-east-1:$account:certificate/00000000-0000-0000-0000-000000000000" ;;
+        WebAclArn) echo "arn:aws:wafv2:us-east-1:$account:global/webacl/$stack/1" ;;
+        FunctionVersionArn) echo "arn:aws:lambda:us-east-1:$account:function:redmine-body-hash:3" ;;
+        AssetsBucketName) echo "$stack-assets-$account-$region" ;;
+        DistributionDomainName) echo d111111abcdef8.cloudfront.net ;;
+        *) echo None ;;
+      esac
+    fi ;;
+  "cloudformation create-change-set")
+    mkdir -p "$FAKE/params"
+    cp "$(opt --parameters "$@" | sed 's|^file://||')" "$FAKE/params/$stack.json"
+    cp "$(opt --tags "$@" | sed 's|^file://||')" "$FAKE/params/$stack.tags.json"
+    { opt --change-set-type "$@"; echo; } >"$FAKE/params/$stack.type" ;;
+  "cloudformation wait")
+    if [[ "$1" == change-set-create-complete && "$stack" == "${FAKE_NO_CHANGES:-}" ]]; then
+      exit 255
+    fi ;;
+  "cloudformation describe-change-set")
+    if [[ "$(opt --query "$@")" == StatusReason ]]; then
+      echo "The submitted information didn't contain changes. Submit different information to create a change set."
+    else
+      printf 'Add\tSomething\tAWS::Some::Thing\tNone\n'
+    fi ;;
+  "cloudformation execute-change-set")
+    mkdir -p "$FAKE/stacks"
+    touch "$FAKE/stacks/$stack" ;;
+  "cloudformation delete-change-set" | "cloudformation delete-stack") ;;
+  "ssm get-parameter")
+    file="$FAKE/ssm/$(opt --name "$@" | tr / _)"
+    [[ -f "$file" ]] || { echo "ParameterNotFound" >&2; exit 254; }
+    if [[ "$(opt --query "$@")" == Parameter.Value ]]; then
+      cat "$file"
+    else
+      echo '{"Parameter": {}}'
+    fi ;;
+  "ssm put-parameter")
+    [[ "$(opt --cli-input-json "$@")" == file:///dev/stdin ]] || { echo "values must come on standard input" >&2; exit 1; }
+    input=$(cat)
+    mkdir -p "$FAKE/ssm"
+    name=$(jq -r .Name <<<"$input")
+    jq -r .Value <<<"$input" >"$FAKE/ssm/$(tr / _ <<<"$name")"
+    jq -r .Type <<<"$input" >"$FAKE/ssm/$(tr / _ <<<"$name").type" ;;
+  "ses set-active-receipt-rule-set") ;;
+  "ec2 describe-regions") printf 'us-east-1\tap-northeast-1\teu-west-1\n' ;;
+  # The function has run in two Regions.
+  "logs describe-log-groups")
+    case "$(opt --region "$@")" in us-east-1 | ap-northeast-1) echo 1 ;; *) echo 0 ;; esac ;;
+  "logs put-retention-policy") ;;
+  "ecr describe-images") exit 254 ;;
+  "ecr get-login-password") echo fake-ecr-password ;;
+  "lambda get-function") echo "$account.dkr.ecr.$region.amazonaws.com/redmine@sha256:$(printf 'a%.0s' {1..64})" ;;
+  "lambda update-function-code" | "lambda wait") ;;
+  "lambda invoke")
+    payload=$(opt --payload "$@")
+    event=$(cat "${payload#fileb://}")
+    printf 'event %s\n' "$event" >>"$FAKE/calls"
+    response="${*: -1}"
+    if [[ -n "${FAKE_TASK_FAIL:-}" && "$event" == *"$FAKE_TASK_FAIL"* ]]; then
+      printf '%s\n' '{"exit_code": 1, "output": "rake aborted!\n"}' >"$response"
+    else
+      printf '%s\n' '{"exit_code": 0, "output": "ok\n"}' >"$response"
+    fi
+    echo '{"StatusCode": 200}' ;;
+  "s3 sync" | "s3 cp") ;;
+  *) echo "fake aws: unexpected call: $service $operation" >&2; exit 2 ;;
+esac

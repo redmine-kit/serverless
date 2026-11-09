@@ -1,0 +1,26 @@
+{
+  "instance": "team-a",
+  "region": "eu-west-1",
+  "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-infra-deploy",
+  "domain": "redmine.example.org",
+  "dns": { "mode": "external" },
+  "network": { "mode": "nat", "shared": true },
+  "database": { "majorVersion": "17", "instanceClass": "db.t4g.small", "storageGb": 50 },
+  "lambda": { "webMemoryMb": 3008, "webReservedConcurrency": 20, "workerReservedConcurrency": 5, "warmup": false },
+  "uploads": { "maxBytes": 52428800 },
+  "mail": { "receive": false, "perProjectAddresses": true, "globalLocalPart": "tracker" },
+  "webhooks": true,
+  "cloudfront": { "plan": "pro" },
+  "waf": { "loginRateLimit": 30, "rateLimit": 2000, "commonRuleSet": "block", "commonRuleSetCountOnly": ["SizeRestrictions_BODY"] },
+  "image": { "repository": "ghcr.io/example/redmine", "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000001" },
+  "redmine": {
+    "settings": { "app_title": "Team A", "default_language": "ja", "per_page_options": "25,50" },
+    "settingsMode": "enforce",
+    "pluginSettings": { "redmine_serverless_s3": { "download_url_expiry": "600" } }
+  },
+  "schedule": { "timezone": "Asia/Tokyo", "sendReminders": true },
+  "logs": { "retentionDays": 365 },
+  "retention": { "recordsDays": 60, "mailDays": 14, "noncurrentVersionDays": 60, "backupDays": 14 },
+  "alarms": { "snsTopicArn": "arn:aws:sns:eu-west-1:111122223333:redmine-alarms" },
+  "tags": { "team": "a", "cost-center": "1234" }
+}

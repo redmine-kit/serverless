@@ -26,12 +26,12 @@ step() {
 # GitHub Actions workflows
 step actionlint run "$ACTIONLINT" -color
 
-# Shell scripts: files without an extension in bin/, image/bin/ and
-# image/extensions/, and *.sh
+# Shell scripts: files without an extension in bin/, image/bin/,
+# image/extensions/ and test/deploy/fake/, and *.sh
 shell_files=()
 while IFS= read -r file; do shell_files+=("$file"); done < <(
   {
-    find bin image/bin image/extensions -type f ! -name '*.*'
+    find bin image/bin image/extensions test/deploy/fake -type f ! -name '*.*'
     git ls-files --cached --others --exclude-standard '*.sh'
   } 2>/dev/null | sort -u
 )

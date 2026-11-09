@@ -1,0 +1,1 @@
+{"region": "ap-northeast-1", "deployRoleArn": "arn:aws:iam::111122223333:role/r", "domain": "redmine.example.com", "database": {"majorVersion": "17"}, "dns": {"mode": "external"}, "cloudfront": {"webAclArn": "arn:aws:wafv2:eu-west-1:111122223333:regional/webacl/x/1"}}

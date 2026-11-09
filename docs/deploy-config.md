@@ -92,6 +92,8 @@ The shape of the configuration file is defined by a JSON Schema (`schema/redmine
   "region": "ap-northeast-1",
   "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-infra-deploy",
   "domain": "redmine.example.com",
+  "dns": { "hostedZoneId": "Z0123456789ABCDEFGHIJ" },
+  "database": { "majorVersion": "17" },
   "network": { "mode": "endpoints" },
   "mail": { "receive": true, "perProjectAddresses": true },
   "redmine": {

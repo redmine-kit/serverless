@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Deploys one Redmine instance from its redmine.json (docs/deploy-config.md).
+# The steps run in the tools image (deploy/Dockerfile), so only Docker is
+# needed. Credentials come from the AWS_* environment variables or from
+# ~/.aws (read-only); bin/deploy assumes deployRoleArn with them.
+#   bin/deploy redmine.json              # deploy
+#   bin/deploy redmine.json --dry-run    # show the change sets, change nothing
+#   bin/deploy redmine.json --code-only  # only the image of the functions
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+config="" args=()
+for arg in "$@"; do
+  case "$arg" in
+    -*) args+=("$arg") ;;
+    *) config="$arg" ;;
+  esac
+done
+if [[ -z "$config" || ! -f "$config" ]]; then
+  echo "usage: bin/deploy <redmine.json> [--dry-run] [--code-only]" >&2
+  exit 64
+fi
+
+image=serverless-deploy-tools:local
+docker build --quiet -t "$image" deploy >/dev/null
+
+run=(docker run --rm -i -v "$PWD:/work:ro" -v "$(cd "$(dirname "$config")" && pwd)/$(basename "$config"):/config/redmine.json:ro")
+for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_REGION; do
+  [[ -z "${!name:-}" ]] || run+=(-e "$name")
+done
+[[ ! -d "$HOME/.aws" ]] || run+=(-v "$HOME/.aws:/root/.aws:ro")
+exec "${run[@]}" "$image" /config/redmine.json "${args[@]}"

@@ -37,6 +37,17 @@ jobs:
           persist-credentials: false
       - run: bin/test-edge
 
+  # bin/deploy without AWS: the schema, the stack parameters and the steps
+  # against fake AWS.
+  deploy:
+    needs: static
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: bin/test-deploy
+
   services:
     needs: static
     runs-on: ubuntu-24.04

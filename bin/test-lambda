@@ -3,7 +3,9 @@
 # functions run as Lambda from the local image: the task through the
 # deployment's own functions (deploy/lib.sh), the worker from its SQS event
 # source, including the deletion of the message, and web through a function
-# URL. Needs LOCALSTACK_AUTH_TOKEN; without it, the tests are skipped.
+# URL. Needs LOCALSTACK_AUTH_TOKEN; without it, the tests are skipped. Running
+# the functions needs a license with container image functions (Pro); with
+# Hobby, only the secrets in SSM are checked.
 #   bin/test-lambda [image]   # default: serverless:test (bin/build-image)
 #   bin/test-lambda --down    # stop LocalStack and PostgreSQL
 #   KEEP=1 bin/test-lambda    # leave them running for inspection
@@ -140,6 +142,18 @@ fi
 
 echo "== task (deploy/lib.sh)"
 task() { lib task "$1" 2>&1; }
+# The Hobby license does not run functions from container images (a Pro
+# feature): then only the checks above count.
+if ! task '{"command": "rake", "args": ["-T"]}' >/dev/null &&
+  "${compose[@]}" logs localstack 2>&1 | grep -q 'Container images are a Pro feature'; then
+  echo "skipped: the functions (container images are not in the LocalStack license)"
+  if ((failures)); then
+    echo "$failures check(s) failed" >&2
+    exit 1
+  fi
+  echo "all Lambda checks that the license allows passed"
+  exit 0
+fi
 check "db:migrate" quiet task '{"command": "rake", "args": ["db:migrate"]}'
 check "redmine:load_default_data" quiet task '{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}'
 secrets_read() {

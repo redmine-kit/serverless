@@ -126,8 +126,8 @@ bin/deploy path/to/redmine.json             # 立てる、更新する
 | --- | --- |
 | 1 | 設定のファイルを JSON Schema で確認する |
 | 2 | 共有の土台のスタック(`redmine-shared` と、us-east-1 の `redmine-shared-edge`)を、無ければ作り、あれば更新する |
-| 3 | インスタンスのスタック(`<instance>` と、us-east-1 の `<instance>-edge`)を、作るか更新する。Lambda@Edge が各リージョンに作ったロググループに、保持の期間を当て直す([security.md](security.md#retention-periods)) |
-| 4 | 秘密の値が SSM に無ければ作る(あれば変えない) |
+| 3 | 秘密の値が SSM に無ければ作る(あれば変えない)。RDS は作るときにデータベースのパスワードを SSM から読むので、インスタンスのスタックより先に行う |
+| 4 | インスタンスのスタック(`<instance>` と、us-east-1 の `<instance>-edge`)を、作るか更新する。Lambda@Edge が各リージョンに作ったロググループに、保持の期間を当て直す([security.md](security.md#retention-periods)) |
 | 5 | 使うバージョンのイメージを、そのアカウントの ECR に置く(Lambda は、同じリージョンの ECR のイメージしか使えない) |
 | 6 | アセットを S3 に同期する |
 | 7 | `redmine-task` のイメージを更新し、`db:migrate` と `redmine:plugins:migrate` を実行する。初めて立てるときは、これで空のデータベースにスキーマができる |
@@ -142,9 +142,27 @@ bin/deploy path/to/redmine.json             # 立てる、更新する
 - **多くのインスタンスを立てるとき:** インスタンスの数だけ、同じコマンドを繰り返します。順番(先に試す小さなインスタンスから)は、使う側で決めます。
 - **イメージ:** このプロジェクトの CI が、Redmine のバージョンごとにイメージを作り、GitHub Packages のコンテナのレジストリ(`ghcr.io`)に公開します(案。[architecture.md](architecture.md#distribution-proposal))。デプロイのコマンドは、digest で指定してそのイメージを取り、立てるアカウントの ECR に置きます。
 
+
+<a id="templates"></a>
+
+### テンプレート
+
+スタックは、`infra/` に CloudFormation で書きます。`bin/lint` が cfn-lint で検査します。
+
+| ファイル | スタック | 今の中身 |
+| --- | --- | --- |
+| `infra/shared.yaml` | `redmine-shared` | ECR のリポジトリ、2 つの AZ のプライベートのサブネットを持つ VPC(インターネットゲートウェイはない)、S3 のゲートウェイのエンドポイント、`network.mode` が `endpoints` のときの、1 つの AZ の SSM と SQS のインターフェースのエンドポイント |
+| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL(パラメーターグループで TLS を必須にし、暗号化、削除保護、自動のバックアップ)、SSM の `REDMINE_DB_HOST` のパラメーター、ジョブのキューと、そのデッドレターキュー、関数 URL(IAM の認証)を持つ `redmine-web` と `redmine-task`(プライベートのサブネットの中)、その実行ロールとロググループ |
+
+- **秘密の値:** CloudFormation は SecureString のパラメーターを作れません。`bin/deploy` が `SECRET_KEY_BASE` と `REDMINE_DB_PASSWORD` を作り(手順 3)、RDS のインスタンスは、動的な参照(`{{resolve:ssm-secure:/<instance>/env/REDMINE_DB_PASSWORD}}`)でパスワードを受け取ります。
+- **イメージ:** インスタンスのスタックは、そのアカウントの ECR のイメージを、digest で受け取ります(`ImageUri`)。
+- **PostgreSQL のバージョン:** `DbMajorVersion` には既定の値を置きません。メジャーバージョンは、インスタンスを作るときに、RDS が出しているバージョンと照らして確認します([rds.md](rds.md#database))。
+- **あとの段で足すもの:** `redmine-worker` と、その SQS のイベントソース(ジョブとメールの送信)、CloudFront、S3 のバケットと Lambda@Edge、SES、NAT インスタンス(`network.mode` が `nat`)、アラーム、us-east-1 のスタック、`bin/deploy` そのもの([architecture.md](architecture.md#order-of-work))。
+
 <a id="to-verify"></a>
 
 ## 確認すること
 
+- RDS のインスタンスが、作るときと更新のときに、`ssm-secure` の動的な参照でパスワードを受け取れるか(CloudFormation の資料では対応しているプロパティ。まだ試していない)
 - SES の受信のルールのセットを共有の土台に置き、インスタンスのスタックからルールを足す形が、CloudFormation で作れるか
 - `ghcr.io` から、立てるアカウントの ECR に、digest を変えずにイメージを写す方法(ECR のプルスルーキャッシュが `ghcr.io` に使えるかを含む)

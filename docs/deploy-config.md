@@ -114,8 +114,8 @@ bin/deploy path/to/redmine.json             # set up or update
 | --- | --- |
 | 1 | Check the configuration file against the JSON Schema |
 | 2 | Create the shared base stacks (`redmine-shared` and `redmine-shared-edge` in us-east-1) if they do not exist, or update them if they do |
-| 3 | Create or update the instance stacks (`<instance>` and `<instance>-edge` in us-east-1). Reapply the retention period to the log groups Lambda@Edge created in each Region ([security.md](security.md#retention-periods)) |
-| 4 | Create the secrets in SSM if they do not exist (leave them unchanged if they do) |
+| 3 | Create the secrets in SSM if they do not exist (leave them unchanged if they do). This comes before the instance stack, because RDS reads the database password from SSM when it is created |
+| 4 | Create or update the instance stacks (`<instance>` and `<instance>-edge` in us-east-1). Reapply the retention period to the log groups Lambda@Edge created in each Region ([security.md](security.md#retention-periods)) |
 | 5 | Put the image of the version to use into that account's ECR (Lambda can use only images in ECR in the same Region) |
 | 6 | Sync assets to S3 |
 | 7 | Update the image of `redmine-task` and run `db:migrate` and `redmine:plugins:migrate`. On the first setup, they create the schema in the empty database |
@@ -130,7 +130,22 @@ bin/deploy path/to/redmine.json             # set up or update
 - **When setting up many instances:** Repeat the same command for each instance. The order (starting with a small instance used for trying things first) is decided by the adopter.
 - **Images:** This project's CI builds an image for each Redmine version and publishes it to the GitHub Packages container registry (`ghcr.io`) (proposal; [architecture.md](architecture.md#distribution-proposal)). The deployment command pulls that image by digest and puts it in the target account's ECR.
 
+### Templates
+
+The stacks are written in CloudFormation in `infra/`. `bin/lint` checks them with cfn-lint.
+
+| File | Stack | Contents now |
+| --- | --- | --- |
+| `infra/shared.yaml` | `redmine-shared` | The ECR repository, the VPC with two private subnets in two AZs (no internet gateway), the S3 gateway endpoint, and the SSM and SQS interface endpoints in one AZ with `network.mode` `endpoints` |
+| `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL (TLS required by the parameter group, encrypted, deletion protection, automated backups), the `REDMINE_DB_HOST` parameter in SSM, the job queue and its dead-letter queue, `redmine-web` with its function URL (IAM authentication) and `redmine-task` in the private subnets, their execution roles and log groups |
+
+- **Secrets:** CloudFormation cannot create SecureString parameters. `bin/deploy` creates `SECRET_KEY_BASE` and `REDMINE_DB_PASSWORD` (step 3), and the RDS instance takes the password with a dynamic reference (`{{resolve:ssm-secure:/<instance>/env/REDMINE_DB_PASSWORD}}`).
+- **The image:** The instance stack takes the image in the account's ECR by digest (`ImageUri`).
+- **The PostgreSQL version:** `DbMajorVersion` has no default. The major version is checked against the versions RDS offers when the instance is created ([rds.md](rds.md#database)).
+- **Added in later stages:** `redmine-worker` and its SQS event source (jobs and mail sending), CloudFront, the S3 buckets and Lambda@Edge, SES, the NAT instance (`network.mode` `nat`), alarms, the us-east-1 stacks and `bin/deploy` itself ([architecture.md](architecture.md#order-of-work)).
+
 ## To verify
 
 - Whether CloudFormation can build the layout where the SES receipt rule set is in the shared base and instance stacks add rules to it
+- Whether the RDS instance accepts the password through the `ssm-secure` dynamic reference on creation and on updates (it is a property that supports it in the CloudFormation documentation; not tried yet)
 - How to copy an image from `ghcr.io` to the target account's ECR without changing its digest (including whether ECR pull through cache can be used with `ghcr.io`)

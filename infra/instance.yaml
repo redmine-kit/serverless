@@ -267,8 +267,10 @@ Resources:
       Architectures: [arm64]
       MemorySize: !Ref WebMemoryMb
       Timeout: 60
+      # Lambda's default. /tmp holds only files Redmine itself reads (thumbnails,
+      # previews, the bulk-download zip); see the S3 plugin's /tmp cache.
       EphemeralStorage:
-        Size: 2048
+        Size: 512
       ReservedConcurrentExecutions: !Ref WebReservedConcurrency
       VpcConfig:
         SecurityGroupIds: [!Ref FunctionSecurityGroup]
@@ -307,8 +309,10 @@ Resources:
       Architectures: [arm64]
       MemorySize: 2048
       Timeout: 900
+      # Lambda's default. /tmp holds only files Redmine itself reads (thumbnails,
+      # previews, the bulk-download zip); see the S3 plugin's /tmp cache.
       EphemeralStorage:
-        Size: 2048
+        Size: 512
       # docs/tasks.md#kinds-of-events
       ReservedConcurrentExecutions: 2
       VpcConfig:

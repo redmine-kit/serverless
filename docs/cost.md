@@ -28,11 +28,13 @@ The route from the VPC to AWS services is added to the subtotal ([rds.md](rds.md
 | Setup 2: NAT instance | One t4g.nano, a public IPv4 address and a disk, about $8.4 | about $33.0 |
 | Setup 1: VPC endpoints | Interface endpoints for SES, SSM and SQS (1 AZ), about $30.7 | about $55.3 |
 
-- **Mostly fixed cost:** RDS and the route out of the VPC are charged by the hour whether Redmine is used or not, and they are most of the total. The other items are pay-per-use.
-- **CloudFront:** With the flat-rate Free plan, up to 1 million requests and 100 GB per month cost $0. Without it, usage is still expected to fit the always-free tier (1 TB of transfer and 10 million requests per month). The contents of the always-free tier will be checked when building.
-- **Not included:** CloudWatch alarms (dead-letter queue, sending failures, receiving failures and so on; about $0.10 each per month), the run time of `redmine-worker` and `redmine-task`, SSM Parameter Store requests and the KMS requests for decrypting SecureString parameters are not included. The unit price of the NAT instance disk has not been checked in the price list ([rds.md](rds.md#cost)). All are expected to be small.
-- **Lambda in a VPC:** Placing the functions in a VPC is assumed to add no charge of its own (not checked in the price list yet).
-- **SQS polling:** The event source mapping of `redmine-worker` polls the queue continuously (long polling) and makes requests. SQS includes 1 million free requests each month, so at this scale the total is not expected to change (not checked yet).
+Most of the total is fixed: RDS and the route out of the VPC are charged by the hour whether Redmine is used or not. The other items are charged by use.
+
+CloudFront costs nothing with the flat-rate Free plan, up to 1 million requests and 100 GB per month. Without the plan, the usage is still expected to fit the always-free tier (1 TB of transfer and 10 million requests per month); what that tier includes will be checked when building.
+
+Some small items are left out: CloudWatch alarms (dead-letter queue, sending failures, receiving failures and so on; about $0.10 each per month), the run time of `redmine-worker` and `redmine-task`, SSM Parameter Store requests, and the KMS requests that decrypt SecureString parameters. The unit price of the NAT instance's disk has not been checked in the price list ([rds.md](rds.md#cost)). All of these are expected to be small.
+
+Two assumptions are not checked in the price list yet. Placing the functions in a VPC is assumed to add no charge of its own. The event source mapping of `redmine-worker` polls the queue continuously (long polling) and so makes requests, but SQS includes 1 million free requests each month, so at this scale the total is not expected to change.
 
 ## What adds cost
 

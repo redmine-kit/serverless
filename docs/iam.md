@@ -54,9 +54,9 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 | `ssm:GetParametersByPath` | `arn:aws:ssm:<region>:<account>:parameter/redmine/env` and below it (`parameter/redmine/env/*`) | Settings and secrets at start-up, including the database password ([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store)) |
 | `ec2:CreateNetworkInterface`<br>`ec2:DescribeNetworkInterfaces`<br>`ec2:DeleteNetworkInterface`<br>`ec2:AssignPrivateIpAddresses`<br>`ec2:UnassignPrivateIpAddresses` | `*` (the EC2 API cannot be scoped) | Running in the VPC. The same as the AWS managed policy `AWSLambdaVPCAccessExecutionRole` ([rds.md](rds.md#routes-out-of-the-vpc)) |
 
-- **Decrypting SecureString:** Encrypt with the default SSM key (`aws/ssm`). Whether `kms:Decrypt` must be granted in IAM for this key is checked when building it.
+SecureString parameters are encrypted with the default SSM key (`aws/ssm`). Whether `kms:Decrypt` must be granted in IAM for this key will be checked when building it.
 
-- **Where the permissions come from:** Each row belongs to one of the plugins, whose IAM pages explain the permissions for use outside Serverless too: [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/iam.html) (jobs and the "Jobs" page), [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#iam-permissions) (attachments), [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/iam.html) (email) and [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/iam.html) (settings at start-up). [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/iam.html) needs none of its own. This page puts them together per function.
+Each row belongs to one of the plugins, and the plugin's IAM page also explains the permissions for use outside Serverless: [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/iam.html) (jobs and the "Jobs" page), [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#iam-permissions) (attachments), [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/iam.html) (email) and [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/iam.html) (settings at start-up). [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/iam.html) needs none of its own. This page puts them together per function.
 
 ## Execution role of `redmine-web`
 
@@ -71,8 +71,9 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 | `ses:GetEmailIdentity` | The SES identity of the sender domain | The "Sending email" admin page |
 | `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)) |
 
-- **Two sending permissions:** Email is sent by passing the full message (raw) to SES v2 `SendEmail`. The examples in the AWS SES documentation allow both `ses:SendEmail` and `ses:SendRawEmail` as sending permissions, so this design follows them. Whether `ses:SendRawEmail` is required for raw sending with v2 has not been checked (not checked yet).
-- **Signed URLs:** Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/iam.html)). CloudFront reaches the bucket through OAC, allowed by the bucket policy ("Resource-based policies" below).
+Email is sent by passing the full message (raw) to SES v2 `SendEmail`. The examples in the AWS SES documentation allow both `ses:SendEmail` and `ses:SendRawEmail` as sending permissions, and this design follows them. Whether `ses:SendRawEmail` is required for raw sending with v2 has not been checked yet.
+
+Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/iam.html)). CloudFront reaches the bucket through OAC, which the bucket policy allows ("Resource-based policies" below).
 
 ## Execution role of `redmine-worker`
 
@@ -124,8 +125,7 @@ The trust policy allows both `lambda.amazonaws.com` and `edgelambda.amazonaws.co
 | --- | --- | --- |
 | `logs:CreateLogGroup`<br>`logs:CreateLogStream`<br>`logs:PutLogEvents` | The log group `/aws/lambda/us-east-1.redmine-body-hash` in all regions (`arn:aws:logs:*:<account>:log-group:/aws/lambda/us-east-1.redmine-body-hash:*`) | Logs. Lambda@Edge writes logs to the region close to the edge location where it ran |
 
-- **No other permissions:** It only reads the body and adds the hash, so it gets no permissions for AWS services.
-- **Permissions to attach the function to CloudFront:** Attaching a Lambda@Edge function version to CloudFront needs `lambda:EnableReplication*` and `iam:CreateServiceLinkedRole`. The CloudFormation service role has them ("Role for deploying infrastructure" below). The code deployment role does not.
+The function only reads the body and adds the hash, so it gets no permissions for AWS services. Attaching a Lambda@Edge function version to CloudFront needs `lambda:EnableReplication*` and `iam:CreateServiceLinkedRole`; the CloudFormation service role has them ("Role for deploying infrastructure" below), and the code deployment role does not.
 
 ## Role of EventBridge Scheduler
 
@@ -148,10 +148,9 @@ The trust policy uses GitHub OIDC (`token.actions.githubusercontent.com`), with 
 | `lambda:UpdateFunctionCode`<br>`lambda:GetFunction`<br>`lambda:GetFunctionConfiguration`<br>`lambda:InvokeFunction` | Functions with the tag `redmine:instance` | Updating the image, waiting for the update to finish, and the migrations in `redmine-task` ([tasks.md](tasks.md#migrations-during-deployment)) |
 | `cloudformation:DescribeStacks` | The account's stacks | Reading the outputs: the repository, the buckets and the distribution |
 
-- **One policy for every instance:** The permissions are in the managed policy `redmine-code-deploy` (`infra/account.yaml`), shared with the role for deploying infrastructure. Instance names are free, so functions are found by the tag `redmine:instance`, which every stack puts on its resources, and buckets by their names.
+The permissions are in the managed policy `redmine-code-deploy` (`infra/account.yaml`), which is shared with the role for deploying infrastructure and covers every instance. Instance names are free, so functions are found by the tag `redmine:instance`, which every stack puts on its resources, and buckets by their names.
 
-- **What it does not get:** Other `iam:*` and `iam:PassRole`, `lambda:UpdateFunctionConfiguration` (because it can change the execution role and environment variables), CloudFormation, and the database password in SSM. These are changed with the infrastructure deployment role.
-- **Assets are not deleted:** Old assets are kept, so it does not get `s3:DeleteObject`. A lifecycle rule deletes old assets.
+The role does not get other `iam:*` actions, `iam:PassRole`, `lambda:UpdateFunctionConfiguration` (which could change the execution role and environment variables), CloudFormation, or the database password in SSM; these are changed with the infrastructure deployment role. It does not get `s3:DeleteObject` either, because old assets are kept and a lifecycle rule deletes them.
 
 ## Role for deploying infrastructure
 
@@ -163,9 +162,9 @@ This role applies the shared base and instance stacks with `bin/deploy`. `deploy
 | Permissions | Creating change sets only with the service role `redmine-cfn-exec` (`cloudformation:CreateChangeSet` with the condition `cloudformation:RoleArn`), and describing, executing and deleting them; `iam:PassRole` only for `redmine-cfn-exec` to CloudFormation; setting the retention period of the Lambda@Edge log groups (`logs:PutRetentionPolicy` in all regions, only for `/aws/lambda/us-east-1.redmine-body-hash`, with `logs:DescribeLogGroups` and `ec2:DescribeRegions`); reading and creating SSM parameters under `/<instance>/env/` and `/<instance>/deploy/` (with `kms:Encrypt` through SSM); putting and reading templates in the templates bucket of the shared base; activating the SES receipt rule set; and the managed policy `redmine-code-deploy` of the code deployment role |
 | Permissions to create resources | None. CloudFormation creates resources with the permissions of `redmine-cfn-exec` |
 
-- **CloudFormation service role:** `redmine-cfn-exec` can create the resources of this design (Lambda, RDS, the VPC and its endpoints, the NAT instance, S3, SQS, SES, CloudFront, AWS WAF web ACL, ACM, IAM roles, logs, alarms). IAM roles it creates must have the permissions boundary `redmine-boundary` (`iam:PermissionsBoundary`).
-- **us-east-1:** The same role also applies the stacks for the Lambda@Edge function and the CloudFront certificate in us-east-1 ([deploy-config.md](deploy-config.md#shared-base-and-per-instance-resources)).
-- **Permissions to attach the function to CloudFront:** `redmine-cfn-exec` also gets `lambda:EnableReplication*` and `iam:CreateServiceLinkedRole` for attaching the Lambda@Edge function version to CloudFront.
+`redmine-cfn-exec` can create the resources of this design: Lambda, RDS, the VPC and its endpoints, the NAT instance, S3, SQS, SES, CloudFront, the AWS WAF web ACL, ACM, IAM roles, logs and alarms. Every IAM role it creates must have the permissions boundary `redmine-boundary` (`iam:PermissionsBoundary`).
+
+The same role also applies the stacks of the Lambda@Edge function and the CloudFront certificate in us-east-1 ([deploy-config.md](deploy-config.md#shared-base-and-per-instance-resources)), and it gets `lambda:EnableReplication*` and `iam:CreateServiceLinkedRole` to attach the function to CloudFront.
 
 ## Account roles
 
@@ -184,7 +183,7 @@ bin/deploy --account
 | CloudTrail and IAM Access Analyzer | The trail `redmine-trail` and the analyzers, unless the account has them ([aws-security.md](aws-security.md)) |
 | The GitHub OIDC provider | Created with `account.githubRepository` unless `account.githubOidcProviderArn` names the one the account already has (an account has one per URL) |
 
-- **The GitHub Environments:** The required approvers of the infrastructure Environment are set on GitHub. The roles trust only the `sub` of that Environment (`repo:<owner>/<repository>:environment:<name>`).
+The required approvers of the infrastructure Environment are set on GitHub, and the roles trust only the `sub` of that Environment (`repo:<owner>/<repository>:environment:<name>`).
 
 ## Permissions of people
 
@@ -201,12 +200,11 @@ If an operations permission set is created, it has the following scope (whether 
 | `logs:StartQuery`<br>`logs:GetQueryResults`<br>`logs:FilterLogEvents` | The log groups of the three functions |
 | `sqs:GetQueueAttributes`<br>`sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | The job queue and the dead-letter queue |
 
-- **rake is a powerful permission:** Anyone who can invoke `redmine-task` can read and write everything in the database and S3 with rake and `rails runner`. Restrict who can invoke it ([tasks.md](tasks.md#permissions)).
+Invoking `redmine-task` is a powerful permission: with rake and `rails runner`, anyone who can invoke it can read and write everything in the database and S3. Restrict who can invoke it ([tasks.md](tasks.md#permissions)).
 
 ## In the VPC
 
-- **Security groups:** Not a permission, but RDS allows only port 5432 from the functions' security groups, and the VPC interface endpoints allow only port 443 from the functions' security groups ([rds.md](rds.md#security)).
-- **Browsers and S3:** Browsers reach attachments only through CloudFront, so nothing from the internet uses the functions' roles on S3.
+Security groups add a network layer: RDS allows only port 5432 from the functions' security groups, and the VPC interface endpoints allow only port 443 from them ([rds.md](rds.md#security)). Browsers reach attachments only through CloudFront, so nothing from the internet uses the functions' roles on S3.
 
 ### Role of the NAT instance (only with a NAT instance)
 
@@ -218,7 +216,7 @@ The role is named `redmine-nat` (provisional) and is assumed by EC2. It is used 
 | `logs:CreateLogStream`<br>`logs:PutLogEvents` | The log group for Session Manager logs | Session logs |
 | Route switching such as `ec2:ReplaceRoute` and `ec2:AttachNetworkInterface` | The route tables of the private subnets | Pointing the routes back to itself during recovery |
 
-- **Permissions of people:** People who connect with Session Manager get `ssm:StartSession` only for this instance and specific documents (shell, and port forwarding to a remote host).
+People who connect with Session Manager get `ssm:StartSession` only for this instance and for specific documents (a shell, and port forwarding to a remote host).
 
 ## IAM Access Analyzer
 

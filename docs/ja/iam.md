@@ -60,9 +60,9 @@ flowchart LR
 | `ssm:GetParametersByPath` | `arn:aws:ssm:<リージョン>:<アカウント>:parameter/redmine/env` と、その下(`parameter/redmine/env/*`) | 起動のときの設定と秘密の値。データベースのパスワードも含む([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store)) |
 | `ec2:CreateNetworkInterface`<br>`ec2:DescribeNetworkInterfaces`<br>`ec2:DeleteNetworkInterface`<br>`ec2:AssignPrivateIpAddresses`<br>`ec2:UnassignPrivateIpAddresses` | `*`(EC2 の API が対象を絞れない) | VPC の中で動く。AWS の管理ポリシー `AWSLambdaVPCAccessExecutionRole` と同じ内容([rds.md](rds.md#routes-out-of-the-vpc)) |
 
-- **SecureString の復号:** SSM の既定の鍵(`aws/ssm`)で暗号化します。この鍵のときに `kms:Decrypt` を IAM で付ける必要があるかは、作るときに確認します。
+SecureString のパラメーターは、SSM の既定の鍵(`aws/ssm`)で暗号化します。この鍵で `kms:Decrypt` を IAM で付ける必要があるかは、作るときに確認します。
 
-- **権限の出どころ:** 各行は、どれかのプラグインのためのものです。Serverless の外で使うときの権限も、プラグインの IAM の権限のページにあります。[Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/ja/iam.html)(ジョブと「ジョブ」の画面)、[Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/setup.html#iam-permissions)(添付ファイル)、[Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/ja/iam.html)(メール)、[Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/iam.html)(起動のときの設定)です。[Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/ja/iam.html) 自身の権限は要りません。このページは、それを関数ごとにまとめたものです。
+各行は、どれかのプラグインのための権限です。Serverless の外で使うときの権限も、プラグインの IAM の権限のページにあります。[Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/ja/iam.html)(ジョブと「ジョブ」の画面)、[Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/setup.html#iam-permissions)(添付ファイル)、[Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/ja/iam.html)(メール)、[Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/iam.html)(起動のときの設定)です。[Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/ja/iam.html) 自身の権限は要りません。このページは、それらを関数ごとにまとめたものです。
 
 <a id="execution-role-of-redmine-web"></a>
 
@@ -79,8 +79,9 @@ flowchart LR
 | `ses:GetEmailIdentity` | 送信元のドメインの SES の ID | 管理画面の「メールの送信」 |
 | `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*`(対象を絞れない) | 同上([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email)) |
 
-- **送信の権限は 2 つ:** メールは、SES v2 の `SendEmail` に全文(raw)を渡して送ります。AWS の SES の資料の例は、送信の権限として `ses:SendEmail` と `ses:SendRawEmail` の両方を許しているので、それに合わせます。v2 の全文の送信に `ses:SendRawEmail` が欠かせないかは、確認していません(未確認)。
-- **署名付き URL:** ブラウザーはこのロールを使いません。アップロードとダウンロードは、CloudFront の秘密鍵で署名した URL で CloudFront を通ります。関数は、この鍵をほかの秘密の値と一緒に SSM Parameter Store から読みます([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/iam.html))。CloudFront は OAC でバケットに届き、バケットポリシーがそれを許します(下の「リソースベースのポリシー」)。
+メールは、SES v2 の `SendEmail` に全文(raw)を渡して送ります。AWS の SES の資料の例は、送信の権限として `ses:SendEmail` と `ses:SendRawEmail` の両方を許しているので、この設計もそれに合わせます。v2 の全文の送信に `ses:SendRawEmail` が欠かせないかは、まだ確認していません。
+
+ブラウザーはこのロールを使いません。アップロードとダウンロードは、CloudFront の秘密鍵で署名した URL で CloudFront を通ります。関数は、この鍵をほかの秘密の値と一緒に SSM Parameter Store から読みます([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/iam.html))。CloudFront は OAC でバケットに届き、バケットポリシーがそれを許します(下の「リソースベースのポリシー」)。
 
 <a id="execution-role-of-redmine-worker"></a>
 
@@ -142,8 +143,7 @@ flowchart LR
 | --- | --- | --- |
 | `logs:CreateLogGroup`<br>`logs:CreateLogStream`<br>`logs:PutLogEvents` | すべてのリージョンのロググループ `/aws/lambda/us-east-1.redmine-body-hash`(`arn:aws:logs:*:<アカウント>:log-group:/aws/lambda/us-east-1.redmine-body-hash:*`) | ログ。Lambda@Edge は、動いたエッジに近いリージョンにログを書く |
 
-- **ほかの権限を持たせない:** 本文を読んでハッシュを入れるだけなので、AWS のサービスの権限は付けません。
-- **関数を CloudFront に付ける権限:** Lambda@Edge の関数のバージョンを CloudFront に付けるには、`lambda:EnableReplication*` と `iam:CreateServiceLinkedRole` が要ります。CloudFormation のサービスロールに持たせます(下の「インフラのデプロイ用のロール」)。コードのデプロイ用のロールには持たせません。
+この関数は本文を読んでハッシュを入れるだけなので、AWS のサービスの権限は付けません。Lambda@Edge の関数のバージョンを CloudFront に付けるには、`lambda:EnableReplication*` と `iam:CreateServiceLinkedRole` が要ります。これは CloudFormation のサービスロールに持たせ(下の「インフラのデプロイ用のロール」)、コードのデプロイ用のロールには持たせません。
 
 <a id="role-of-eventbridge-scheduler"></a>
 
@@ -170,10 +170,9 @@ flowchart LR
 | `lambda:UpdateFunctionCode`<br>`lambda:GetFunction`<br>`lambda:GetFunctionConfiguration`<br>`lambda:InvokeFunction` | タグ `redmine:instance` を持つ関数 | イメージの更新、更新が終わるのを待つこと、`redmine-task` での migration([tasks.md](tasks.md#migrations-during-deployment)) |
 | `cloudformation:DescribeStacks` | アカウントのスタック | 出力(リポジトリ、バケット、ディストリビューション)を読む |
 
-- **すべてのインスタンスに 1 つのポリシー:** 権限は、管理ポリシー `redmine-code-deploy`(`infra/account.yaml`)に置き、インフラのデプロイ用のロールと共有します。インスタンスの名前は自由なので、関数は、どのスタックもリソースに付けるタグ `redmine:instance` で、バケットは名前で絞ります。
+権限は管理ポリシー `redmine-code-deploy`(`infra/account.yaml`)に置き、インフラのデプロイ用のロールと共有して、すべてのインスタンスに使います。インスタンスの名前は自由なので、関数は、どのスタックもリソースに付けるタグ `redmine:instance` で絞り、バケットは名前で絞ります。
 
-- **持たせないもの:** ほかの `iam:*` と `iam:PassRole`、`lambda:UpdateFunctionConfiguration`(実行ロールや環境変数を変えられるため)、CloudFormation、SSM のデータベースのパスワード。これらは、インフラのデプロイ用のロールで変えます。
-- **アセットを消さない:** 古いアセットを残すので、`s3:DeleteObject` は持たせません。古いアセットは、ライフサイクルで消します。
+ほかの `iam:*` と `iam:PassRole`、`lambda:UpdateFunctionConfiguration`(実行ロールや環境変数を変えられるため)、CloudFormation、SSM のデータベースのパスワードは持たせません。これらは、インフラのデプロイ用のロールで変えます。古いアセットは残し、ライフサイクルで消すので、`s3:DeleteObject` も持たせません。
 
 <a id="role-for-deploying-infrastructure"></a>
 
@@ -187,9 +186,9 @@ flowchart LR
 | 権限 | サービスロール `redmine-cfn-exec` を付けた変更セットだけを作る権限(条件 `cloudformation:RoleArn` 付きの `cloudformation:CreateChangeSet`)と、その表示、実行、削除。CloudFormation への `redmine-cfn-exec` だけの `iam:PassRole`。Lambda@Edge のロググループへの保持の期間の設定(すべてのリージョンの `logs:PutRetentionPolicy`。対象は `/aws/lambda/us-east-1.redmine-body-hash` だけ。`logs:DescribeLogGroups` と `ec2:DescribeRegions` も)。`/<instance>/env/` と `/<instance>/deploy/` の下の SSM のパラメーターを読むことと作ること(SSM を通した `kms:Encrypt` も)。共有の土台のテンプレートのバケットに、テンプレートを置くことと読むこと。SES の受信のルールのセットを有効にすること。コードのデプロイ用のロールの管理ポリシー `redmine-code-deploy` |
 | リソースを作る権限 | 持たない。リソースは、CloudFormation が `redmine-cfn-exec` の権限で作る |
 
-- **CloudFormation のサービスロール:** `redmine-cfn-exec` は、この設計のリソース(Lambda、RDS、VPC とそのエンドポイント、NAT インスタンス、S3、SQS、SES、CloudFront、AWS WAF の Web ACL、ACM、IAM のロール、ログ、アラーム)を作れます。作る IAM のロールには、権限の境界 `redmine-boundary` を付けることを条件にします(`iam:PermissionsBoundary`)。
-- **us-east-1:** Lambda@Edge の関数と CloudFront の証明書のスタックも、同じロールで us-east-1 に当てます([deploy-config.md](deploy-config.md#shared-base-and-per-instance-resources))。
-- **関数を CloudFront に付ける権限:** Lambda@Edge の関数のバージョンを CloudFront に付けるための `lambda:EnableReplication*` と `iam:CreateServiceLinkedRole` も、`redmine-cfn-exec` に持たせます。
+`redmine-cfn-exec` は、この設計のリソースを作れます。Lambda、RDS、VPC とそのエンドポイント、NAT インスタンス、S3、SQS、SES、CloudFront、AWS WAF の Web ACL、ACM、IAM のロール、ログ、アラームです。作る IAM のロールには、権限の境界 `redmine-boundary` を付けることを条件にします(`iam:PermissionsBoundary`)。
+
+同じロールで、Lambda@Edge の関数と CloudFront の証明書のスタックも us-east-1 に適用します([deploy-config.md](deploy-config.md#shared-base-and-per-instance-resources))。関数を CloudFront に付けるための `lambda:EnableReplication*` と `iam:CreateServiceLinkedRole` も、`redmine-cfn-exec` に持たせます。
 
 <a id="account-roles"></a>
 
@@ -210,7 +209,7 @@ bin/deploy --account
 | CloudTrail と IAM Access Analyzer | 証跡 `redmine-trail` とアナライザー。アカウントにあれば作らない([aws-security.md](aws-security.md)) |
 | GitHub の OIDC のプロバイダー | `account.githubRepository` があるときに作る。アカウントにすでにあるときは、`account.githubOidcProviderArn` でそれを指す(1 つのアカウントに、URL ごとに 1 つ) |
 
-- **GitHub の Environment:** インフラの Environment の承認する人は、GitHub の側で決めます。ロールは、その Environment の `sub`(`repo:<owner>/<repository>:environment:<name>`)だけを信頼します。
+インフラの Environment の承認者は GitHub の側で決め、ロールはその Environment の `sub`(`repo:<owner>/<repository>:environment:<name>`)だけを信頼します。
 
 <a id="permissions-of-people"></a>
 
@@ -229,14 +228,13 @@ bin/deploy --account
 | `logs:StartQuery`<br>`logs:GetQueryResults`<br>`logs:FilterLogEvents` | 3 つの関数のロググループ |
 | `sqs:GetQueueAttributes`<br>`sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | ジョブのキューとデッドレターキュー |
 
-- **rake は強い権限:** `redmine-task` を呼べる人は、rake と `rails runner` で、データベースと S3 のすべてを読み書きできます。呼べる人を絞ります([tasks.md](tasks.md#permissions))。
+`redmine-task` を呼べることは強い権限です。呼べる人は、rake と `rails runner` で、データベースと S3 のすべてを読み書きできます。呼べる人を絞ります([tasks.md](tasks.md#permissions))。
 
 <a id="in-the-vpc"></a>
 
 ## VPC の中
 
-- **セキュリティグループ:** 権限ではありませんが、RDS には関数のセキュリティグループからの 5432 番だけを、VPC のインターフェイスエンドポイントには関数のセキュリティグループからの 443 番だけを許します([rds.md](rds.md#security))。
-- **ブラウザーと S3:** ブラウザーは CloudFront だけを通して添付ファイルに触れるので、インターネットから関数のロールで S3 を使うものはありません。
+権限とは別に、セキュリティグループでもネットワークを絞ります。RDS には関数のセキュリティグループからの 5432 番だけを、VPC のインターフェイスエンドポイントには同じく 443 番だけを許します([rds.md](rds.md#security))。ブラウザーは CloudFront だけを通して添付ファイルに触れるので、インターネットから関数のロールで S3 を使うものはありません。
 
 <a id="role-of-the-nat-instance-only-with-a-nat-instance"></a>
 
@@ -250,7 +248,7 @@ bin/deploy --account
 | `logs:CreateLogStream`<br>`logs:PutLogEvents` | Session Manager のログのロググループ | 操作のログ |
 | `ec2:ReplaceRoute`、`ec2:AttachNetworkInterface` などの経路の付け替え | プライベートのサブネットの経路表 | 立て直しのときに、経路を自分に向け直す |
 
-- **人の権限:** Session Manager でつなぐ人には、`ssm:StartSession` を、このインスタンスと、決めたドキュメント(シェルと、リモートのホストへのポートフォワーディング)だけに許します。
+Session Manager で接続する人には、`ssm:StartSession` を、このインスタンスと、決めたドキュメント(シェルと、リモートのホストへのポートフォワーディング)だけに許します。
 
 <a id="iam-access-analyzer"></a>
 

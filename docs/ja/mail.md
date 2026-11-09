@@ -63,8 +63,9 @@ production:
 
 ### SES
 
-- **ドメインの認証:** Redmine のサブドメインを、使うリージョンの SES の ID として確認し(DKIM)、本番での利用(サンドボックスの解除)を申請しておきます。SES の ID と本番での利用は、リージョンごとです([受信のドメイン](#receiving-domain))。
-- **届く経路:** `redmine-web`、`redmine-worker`、`redmine-task` は VPC の中にあるので、SES の API 用のインターフェイスエンドポイントか NAT インスタンスを通って SES の API に届きます([rds.md](rds.md#routes-out-of-the-vpc))。`redmine-web` は、管理画面の「メールの送信」とテストのメールで SES の API を使います([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email))。プラグインが呼ぶものと、その権限は、プラグインの[準備のページ](https://redmine-kit.github.io/redmine_serverless_ses/ja/setup.html#network)にあります。
+Redmine のサブドメインを、使うリージョンの SES の ID として確認し(DKIM)、本番での利用(サンドボックスの解除)を前もって申請します。SES の ID と本番での利用は、どちらもリージョンごとです([受信のドメイン](#receiving-domain))。
+
+`redmine-web`、`redmine-worker`、`redmine-task` は VPC の中にあるので、SES の API 用のインターフェイスエンドポイントか NAT インスタンスを通って SES の API に届きます([rds.md](rds.md#routes-out-of-the-vpc))。`redmine-web` は、管理画面の「メールの送信」とテストメールで SES の API を使います([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email))。プラグインが呼ぶものと必要な権限は、プラグインの[導入のページ](https://redmine-kit.github.io/redmine_serverless_ses/ja/setup.html#network)にあります。
 
 <a id="when-sending-fails"></a>
 
@@ -115,7 +116,7 @@ sequenceDiagram
 
 Web とメールは、同じホスト名にします。Redmine のためのサブドメイン(たとえば `redmine.example.com`)を、Web の URL にも、メールのアドレスの `@` のあとにも使い、プロジェクトごとにアドレスを持たせます(下の「プロジェクトごとのアドレス」)。
 
-- **CNAME にしない:** DNS では、CNAME のある名前に、MX などのほかのレコードを置けません。そこで、Web のレコードを、CloudFront の名前を書きつつ答えは A と AAAA になる別名の種類のレコードにし、同じ名前に MX を置きます。
+Web のレコードは CNAME にできません。DNS では、CNAME のある名前に MX などのほかのレコードを置けないためです。そこで Web のレコードを、CloudFront の名前を書きつつ答えは A と AAAA になる別名の種類のレコードにし、同じ名前に MX を置きます。
 
 DNS の置き方は、親のドメイン(`example.com`)の DNS のサービスに合わせて、次の 2 つの形から選びます。
 
@@ -124,12 +125,11 @@ DNS の置き方は、親のドメイン(`example.com`)の DNS のサービス�
 | 委任しない | 親のドメインがすでに Route 53 にある。または、親のドメインの DNS が、サブドメインで別名の種類のレコード(ALIAS、ANAME、CNAME の平坦化など)を使える | 親のドメインの DNS に、別名の種類のレコードで CloudFront の名前を書く | 親のドメインの DNS の費用のまま |
 | Route 53 に委任する | 親のドメインの DNS が、サブドメインで別名の種類のレコードを使えない | 親のドメインの DNS に、`redmine.example.com` の NS のレコードを置き、サブドメインだけを Route 53 のホストゾーンに任せる。ホストゾーンに、CloudFront を向く別名のレコード(A と AAAA)を置く | ホストゾーンが月 0.50 ドル。CloudFront を向く別名のレコードへの問い合わせは無料、ほかは 100 万件あたり 0.40 ドル(価格表、2026-11-04 公開) |
 
-- **親のドメインが Route 53 のとき:** 親のホストゾーンに、`redmine.example.com` の別名のレコード(A と AAAA)と MX を足すだけです。委任は要りません。
-- **Cloudflare のとき:** 有料のプランでは、サブドメインの CNAME も、レコードごとに平坦化できます(Cloudflare の資料。無料のプランで平坦化されるのは、ドメインの頂点と、プロキシを通すレコードだけ)。平坦化した CNAME と同じ名前に MX を置けるかは、Cloudflare の資料に書かれていないので、作るときに確認します。プロキシを通すレコード(オレンジの雲)にすると、CloudFront の前にさらに Cloudflare が入るので、使いません。置けないときや、無料のプランのときは、Route 53 に委任します。
-- **委任しても、親のドメインは変わらない:** 委任するのは Redmine のサブドメインだけで、親のドメインのほかのレコードとふだんのメールは、今のまま変わりません。
-- **同じ DNS に置くもの:** どちらの形でも、Web のレコード、MX、SES の Easy DKIM の CNAME(`<トークン>._domainkey.redmine.example.com`)、証明書の検証の CNAME を、Redmine のサブドメインを持つ DNS に置きます。Route 53 なら、どれも CloudFormation で作れます。
-- **MX のレコード:** サブドメインに MX(優先度 10、`inbound-smtp.ap-northeast-1.amazonaws.com`)を置きます。親のドメインの MX(ふだんのメール)は変えません。
-- **SES の ID:** サブドメインそのものを、SES の ID として確認します(Easy DKIM の CNAME をサブドメインの下に置く)。SES は、確認済みの ID 宛てのメールだけを受けます。送信元もサブドメインのアドレスにするので、送信と受信の両方に、この ID を使います。DKIM の署名のドメインと差出人のドメインが同じになり、DMARC が確実に通ります。
+親のドメインが Route 53 にあるときは、親のホストゾーンに `redmine.example.com` の別名のレコード(A と AAAA)と MX を足すだけで、委任は要りません。Cloudflare では、有料のプランなら、サブドメインの CNAME もレコードごとに平坦化できます(Cloudflare の資料。無料のプランで平坦化されるのは、ドメインの頂点とプロキシを通すレコードだけ)。平坦化した CNAME と同じ名前に MX を置けるかは Cloudflare の資料に書かれていないので、作るときに確認します。プロキシを通すレコード(オレンジの雲)にすると、CloudFront の前にさらに Cloudflare が入るので、使いません。MX を置けないときや無料のプランのときは、Route 53 に委任します。委任するのは Redmine のサブドメインだけで、親のドメインのほかのレコードとふだんのメールは変わりません。
+
+どちらの形でも、Web のレコード、MX、SES の Easy DKIM の CNAME(`<トークン>._domainkey.redmine.example.com`)、証明書の検証の CNAME を、Redmine のサブドメインを持つ DNS に置きます。Route 53 なら、どれも CloudFormation で作れます。サブドメインの MX は、優先度 10 で `inbound-smtp.ap-northeast-1.amazonaws.com` を指します。親のドメインの MX(ふだんのメール)は変えません。
+
+SES は確認済みの ID 宛てのメールだけを受信するので、サブドメインそのものを SES の ID として確認し、Easy DKIM の CNAME をサブドメインの下に置きます。送信元もサブドメインのアドレスにするので、送信と受信の両方に、この 1 つの ID を使います。DKIM の署名のドメインと差出人のドメインが同じになるので、DMARC が確実に通ります。
 
 <a id="addresses-per-project"></a>
 
@@ -167,8 +167,7 @@ SES の受信のルールは、ルールのセットにまとめ、リージョ�
 
 受信のルールは、SES のイベントを付けて `redmine-task` を非同期で呼びます。そのハンドラーが、イベントのメッセージ ID、エンベロープの宛先、SES の判定を付けて、rake のタスク `redmine_serverless_ses:receive_mail` を動かします([tasks.md](tasks.md#kinds-of-events))。タスクは、メールのバケットからメッセージを読み、宛先からプロジェクトを決め、Redmine の `MailHandler` に渡し、`processed/` に移します。手順とオプションは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#importing) にあります。
 
-- **添付ファイル:** メールの添付ファイルは Redmine の添付ファイルとして保存し、プラグイン `redmine_serverless_s3` が S3 に置きます([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#uploads-through-lambda))。
-- **失敗したとき:** SES は Lambda を非同期で呼ぶので、失敗すると Lambda が 2 回までやり直します。それでも失敗したイベントは、失敗の送り先(SQS)に入れ、件数をアラームで通知します。
+メールの添付ファイルは Redmine の添付ファイルとして保存し、プラグイン `redmine_serverless_s3` が S3 に置きます([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#uploads-through-lambda))。SES は Lambda を非同期で呼ぶので、失敗すると Lambda が 2 回までやり直します。それでも失敗したイベントは失敗の送り先(SQS)に入れ、件数をアラームで通知します。
 
 <a id="spoofing-and-spam"></a>
 

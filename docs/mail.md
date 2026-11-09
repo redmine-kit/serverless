@@ -53,8 +53,9 @@ production:
 
 ### SES
 
-- **Domain verification:** Verify Redmine's subdomain as an SES identity in the Region you use (DKIM), and request production access (leaving the sandbox) in advance. SES identities and production access are per Region ([Receiving domain](#receiving-domain)).
-- **Network path:** `redmine-web`, `redmine-worker` and `redmine-task` are in the VPC, so they reach the SES API through an interface endpoint for the SES API or the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)). `redmine-web` uses the SES API for "Sending email" in the administration screen and for test email ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)). What the plugin calls, and its permissions, are in the plugin's [setup page](https://redmine-kit.github.io/redmine_serverless_ses/setup.html#network).
+Verify Redmine's subdomain as an SES identity in the Region you use (DKIM), and request production access (leaving the sandbox) in advance. Both identities and production access are per Region ([Receiving domain](#receiving-domain)).
+
+`redmine-web`, `redmine-worker` and `redmine-task` are in the VPC, so they reach the SES API through an interface endpoint for the SES API or through the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)). `redmine-web` uses the SES API for "Sending email" in the administration screen and for test email ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)). What the plugin calls, and the permissions it needs, are on the plugin's [setup page](https://redmine-kit.github.io/redmine_serverless_ses/setup.html#network).
 
 ### When sending fails
 
@@ -97,7 +98,7 @@ sequenceDiagram
 
 Web and email use the same host name. A subdomain for Redmine (for example, `redmine.example.com`) is used both for the web URL and after the `@` of email addresses, and each project has its own address ("Addresses per project" below).
 
-- **No CNAME:** In DNS, a name with a CNAME cannot have other records such as MX. So the web record is an alias-type record that names CloudFront but answers with A and AAAA, and an MX record is placed on the same name.
+The web record cannot be a CNAME: in DNS, a name with a CNAME cannot have other records such as MX. So the web record is an alias-type record that names CloudFront but answers with A and AAAA, and an MX record is placed on the same name.
 
 Choose the DNS setup from the following two, depending on the DNS service of the parent domain (`example.com`).
 
@@ -106,12 +107,11 @@ Choose the DNS setup from the following two, depending on the DNS service of the
 | No delegation | The parent domain is already in Route 53. Or the parent domain's DNS supports alias-type records (ALIAS, ANAME, CNAME flattening and similar) on subdomains | In the parent domain's DNS, name CloudFront with an alias-type record | Same as the parent domain's DNS cost |
 | Delegate to Route 53 | The parent domain's DNS does not support alias-type records on subdomains | In the parent domain's DNS, add an NS record for `redmine.example.com` and delegate only the subdomain to a Route 53 hosted zone. In the hosted zone, add alias records (A and AAAA) that point to CloudFront | $0.50 per month for the hosted zone. Queries to alias records that point to CloudFront are free; others are $0.40 per million (price list, published 2026-11-04) |
 
-- **When the parent domain is in Route 53:** Just add alias records (A and AAAA) and MX for `redmine.example.com` to the parent hosted zone. No delegation is needed.
-- **With Cloudflare:** On paid plans, CNAMEs on subdomains can also be flattened per record (Cloudflare documentation; on the free plan, only the zone apex and proxied records are flattened). Whether an MX record can be placed on the same name as a flattened CNAME is not stated in the Cloudflare documentation, so it is checked when building. A proxied record (orange cloud) would put Cloudflare in front of CloudFront, so it is not used. If MX cannot be placed, or on the free plan, delegate to Route 53.
-- **Delegation does not change the parent domain:** Only Redmine's subdomain is delegated. Other records and the regular email of the parent domain stay as they are.
-- **Records in the same DNS:** In either setup, the web record, MX, the SES Easy DKIM CNAMEs (`<token>._domainkey.redmine.example.com`) and the certificate validation CNAME go in the DNS that holds Redmine's subdomain. With Route 53, all of them can be created with CloudFormation.
-- **MX record:** Add MX (priority 10, `inbound-smtp.ap-northeast-1.amazonaws.com`) to the subdomain. The parent domain's MX (regular email) is not changed.
-- **SES identity:** Verify the subdomain itself as an SES identity (the Easy DKIM CNAMEs go under the subdomain). SES receives email only for verified identities. The sender is also an address on the subdomain, so this identity is used for both sending and receiving. The DKIM signing domain and the From domain are the same, so DMARC passes reliably.
+When the parent domain is in Route 53, just add alias records (A and AAAA) and MX for `redmine.example.com` to the parent hosted zone; no delegation is needed. With Cloudflare, paid plans can also flatten CNAMEs on subdomains per record (Cloudflare documentation; the free plan flattens only the zone apex and proxied records). The Cloudflare documentation does not say whether an MX record can be placed on the same name as a flattened CNAME, so this is checked when building. A proxied record (orange cloud) would put Cloudflare in front of CloudFront, so it is not used. If MX cannot be placed, or on the free plan, delegate to Route 53. Delegation covers only Redmine's subdomain; the parent domain's other records and its regular email stay as they are.
+
+In either setup, the web record, MX, the SES Easy DKIM CNAMEs (`<token>._domainkey.redmine.example.com`) and the certificate validation CNAME go in the DNS that holds Redmine's subdomain; with Route 53, CloudFormation can create all of them. The MX record on the subdomain has priority 10 and points to `inbound-smtp.ap-northeast-1.amazonaws.com`. The parent domain's MX, for its regular email, is not changed.
+
+The subdomain itself is verified as an SES identity, with the Easy DKIM CNAMEs under the subdomain, because SES receives email only for verified identities. The sender is also an address on the subdomain, so this one identity is used for sending and receiving. The DKIM signing domain and the From domain are then the same, so DMARC passes reliably.
 
 ### Addresses per project
 
@@ -143,8 +143,7 @@ SES receipt rules are grouped in rule sets, and only one rule set can be active 
 
 The receipt rule invokes `redmine-task` asynchronously with the SES event. Its handler runs the rake task `redmine_serverless_ses:receive_mail` with the message ID, the envelope recipients and SES's verdicts from the event ([tasks.md](tasks.md#kinds-of-events)). The task reads the message from the mail bucket, chooses the project from the recipients, passes the message to Redmine's `MailHandler`, and moves it to `processed/`; the steps and the options are in the plugin's [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/receiving.html#importing).
 
-- **Attachments:** Attachments in email are saved as Redmine attachments, and the plugin `redmine_serverless_s3` stores them in S3 ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#uploads-through-lambda)).
-- **On failure:** SES invokes Lambda asynchronously, so on failure Lambda retries up to 2 times. Events that still fail go to the failure destination (SQS), and an alarm reports the count.
+Attachments in email are saved as Redmine attachments, and the plugin `redmine_serverless_s3` stores them in S3 ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#uploads-through-lambda)). SES invokes Lambda asynchronously, so on failure Lambda retries up to 2 times. Events that still fail go to the failure destination (SQS), and an alarm reports the count.
 
 ### Spoofing and spam
 

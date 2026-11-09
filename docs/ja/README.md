@@ -19,7 +19,8 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | セキュリティの守り、WAF、ログの保持、事故のときの手順を知る | [security.md](security.md) |
 | 設定を書いてデプロイする、いくつも立てる | [deploy-config.md](deploy-config.md) |
 | AI の機能をつなぐ | [ai.md](ai.md) |
-| キャッシュを決める、セッションの仕組みを知る | [cache.md](cache.md) |
+| キャッシュを決め、調整する | [cache.md](cache.md) |
+| セッションの仕組みを知り、設定する | [session.md](session.md) |
 | 月の費用を見る | [cost.md](cost.md) |
 | ふつうのサーバーと比べる | [comparison.md](comparison.md) |
 | テストを書く、CI を作る | [testing.md](testing.md) |
@@ -43,7 +44,8 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | [security.md](security.md) | 守るもの、起きうることと守り、入口と AWS WAF、Redmine の設定、データの守り、保持の期間、ログ、供給網、残るリスク、事故のとき |
 | [deploy-config.md](deploy-config.md) | 1 つの Redmine ごとの設定のファイル(`redmine.json`)、名前の決まり、共有の土台、デプロイのコマンド |
 | [ai.md](ai.md) | 別のプロジェクトの AI の機能との連携(Redmine の標準の REST API、OAuth、webhook)と安全の決まり |
-| [cache.md](cache.md) | Redmine がキャッシュするもの、環境ごとのキャッシュ、Cookie のセッション、共有のキャッシュ(ElastiCache for Valkey)の費用 |
+| [cache.md](cache.md) | Redmine がキャッシュするもの、環境ごとのキャッシュ、調整できるところ、共有のキャッシュ(ElastiCache for Valkey)の費用 |
+| [session.md](session.md) | 暗号化した Cookie に入れ、データベースのトークンで確認するセッション、セッションの設定、`Secure` の属性 |
 | [cost.md](cost.md) | 東京リージョンでの月の費用の見込み |
 | [comparison.md](comparison.md) | ふつうのサーバー(EC2、Lightsail、ECS Fargate)との、料金、セキュリティ、運用の比較 |
 | [testing.md](testing.md) | テストの種類、プラグインと本体のテスト、イメージのテスト、デプロイしたあとの確認、CI の順番 |

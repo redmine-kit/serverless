@@ -228,7 +228,7 @@ Rails の設定は、どこに書くかで効くかどうかが変わります�
 
 | 設定 | 値 | 書く場所 | 理由 |
 | --- | --- | --- | --- |
-| `config.cache_store` | `:memory_store`(環境ごと、上限 64 MB) | `additional_environment.rb` | Rails 8.1 の既定は `tmp/cache/` のファイル。`production.rb` は設定していない。キャッシュするもの、セッション、共有のキャッシュは [cache.md](cache.md) |
+| `config.cache_store` | `:memory_store`(環境ごと、上限 64 MB) | `additional_environment.rb` | Rails 8.1 の既定は `tmp/cache/` のファイル。`production.rb` は設定していない。キャッシュするもの、調整、共有のキャッシュは [cache.md](cache.md)、セッションは [session.md](session.md) |
 | `config.active_job.queue_adapter` | Lambda の上(`REDMINE_ROLE` があるとき)は `:sqs`、手元では `:inline` | `additional_environment.rb` | 既定の `:async` は、環境が止まるとジョブが失われる(下記)。`production.rb` は設定していない |
 | `config.active_record.dump_schema_after_migration` | `false` | `additional_environment.rb` | migration のあとの `db/schema.rb` の書き出しを止める。`production.rb` ではコメントアウトされている |
 | `config.hosts` | Redmine のドメイン | `additional_environment.rb` | — |

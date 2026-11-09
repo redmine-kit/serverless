@@ -198,7 +198,7 @@ Whether a Rails setting takes effect depends on where it is written.
 
 | Setting | Value | Where | Reason |
 | --- | --- | --- | --- |
-| `config.cache_store` | `:memory_store` (per environment, up to 64 MB) | `additional_environment.rb` | The Rails 8.1 default is files in `tmp/cache/`. `production.rb` does not set it. What is cached, sessions and a shared cache: [cache.md](cache.md) |
+| `config.cache_store` | `:memory_store` (per environment, up to 64 MB) | `additional_environment.rb` | The Rails 8.1 default is files in `tmp/cache/`. `production.rb` does not set it. What is cached, tuning and a shared cache: [cache.md](cache.md); sessions: [session.md](session.md) |
 | `config.active_job.queue_adapter` | `:sqs` on Lambda (when `REDMINE_ROLE` exists), `:inline` locally | `additional_environment.rb` | With the default `:async`, jobs are lost when the environment shuts down (below). `production.rb` does not set it |
 | `config.active_record.dump_schema_after_migration` | `false` | `additional_environment.rb` | Stops writing `db/schema.rb` after migrations. Commented out in `production.rb` |
 | `config.hosts` | The Redmine domain | `additional_environment.rb` | — |

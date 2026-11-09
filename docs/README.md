@@ -17,7 +17,8 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | Learn about security protections, WAF, log retention and incident procedures | [security.md](security.md) |
 | Write the configuration and deploy, set up several instances | [deploy-config.md](deploy-config.md) |
 | Connect AI features | [ai.md](ai.md) |
-| Decide on the cache, understand sessions | [cache.md](cache.md) |
+| Decide on the cache and tune it | [cache.md](cache.md) |
+| Understand and set sessions | [session.md](session.md) |
 | See the monthly cost | [cost.md](cost.md) |
 | Compare with ordinary servers | [comparison.md](comparison.md) |
 | Write tests, build CI | [testing.md](testing.md) |
@@ -39,7 +40,8 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | [security.md](security.md) | What to protect, threats and protections, the entry point and AWS WAF, Redmine settings, data protection, retention periods, logs, the supply chain, remaining risks, incidents |
 | [deploy-config.md](deploy-config.md) | The configuration file for each Redmine (`redmine.json`), naming rules, the shared foundation, deployment commands |
 | [ai.md](ai.md) | Integration with AI features from a separate project (Redmine's standard REST API, OAuth, webhooks) and safety rules |
-| [cache.md](cache.md) | What Redmine caches, the cache in each environment, sessions in cookies, the cost of a shared cache (ElastiCache for Valkey) |
+| [cache.md](cache.md) | What Redmine caches, the cache in each environment, what can be tuned, the cost of a shared cache (ElastiCache for Valkey) |
+| [session.md](session.md) | Sessions in encrypted cookies checked against tokens in the database, the session settings, the `Secure` attribute |
 | [cost.md](cost.md) | Monthly cost estimate in the Tokyo Region |
 | [comparison.md](comparison.md) | Comparison with ordinary servers (EC2, Lightsail, ECS Fargate) on price, security and operations |
 | [testing.md](testing.md) | Kinds of tests, plugin and Redmine tests, image tests, checks after deployment, the CI order |

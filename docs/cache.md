@@ -1,38 +1,42 @@
-# Cache and sessions
+# Cache
 
-Each Lambda environment keeps Redmine's cache in its own memory. No shared cache service (such as ElastiCache) is used. Sessions do not depend on the cache.
+Each Lambda environment keeps Redmine's cache in its own memory. No shared cache service (such as ElastiCache) is used. Sessions do not use the cache ([session.md](session.md)).
 
 ## What Redmine caches
 
-Redmine 7.0.3 uses the Rails cache in only a few places (checked in the code on 2026-11-09).
+Redmine 7.0.3 uses the cache in only a few places (checked in the code on 2026-11-09).
 
-| What | Where in Redmine | When |
-| --- | --- | --- |
-| Formatted text (wiki, issue descriptions and notes rendered to HTML) | `Redmine::WikiFormatting.to_html` | Only when "Cache formatted text" is on in the administration settings (`cache_formatted_text`; off by default), and only for text over 2 KB |
-| Search results (the IDs of the results, for paging through them) | `Redmine::Search`, with its own store `redmine_search_cache_store` (memory, up to 32 MB) | Every search |
-| The list of languages for the language selector | `Redmine::I18n` | The first time it is shown |
-| Repository pages | `RepositoriesController` | Not used: repositories are turned off on Lambda ([lambda.md](lambda.md#features-that-cannot-be-used)) |
+| What | Where in Redmine | Store | When |
+| --- | --- | --- | --- |
+| Formatted text (wiki pages, issue descriptions and notes rendered to HTML) | `Redmine::WikiFormatting.to_html` | `config.cache_store` | Only when "Cache formatted text" is on (Administration › Settings › General; `cache_formatted_text`, off by default), and only for text over 2 KB |
+| Search results (the IDs of the results, for paging through them) | `Redmine::Search` | Redmine's own store, `config.redmine_search_cache_store` (memory, up to 32 MB) | Every search |
+| The list of languages for the language selector | `Redmine::I18n` | `config.cache_store` | The first time it is shown |
+| Repository pages | `RepositoriesController` | `config.cache_store` | Not used: repositories are turned off on Lambda ([lambda.md](lambda.md#features-that-cannot-be-used)) |
 
 ## The design: memory in each environment
 
 | Item | Value |
 | --- | --- |
 | `config.cache_store` | `:memory_store`, up to 64 MB per environment (`image/config/additional_environment.rb`) |
-| Search results | Redmine's own memory store (32 MB) |
+| `config.redmine_search_cache_store` | Redmine's default, `:memory_store` (32 MB) |
 | Cost | None |
 
 - **Why not the Rails default:** The Rails 8.1 default is files in `tmp/cache/`, which is in `/tmp` on Lambda and would grow without limit ([lambda.md](lambda.md#read-only-file-system)).
 - **What is lost:** Each environment has its own cache, and a new environment starts empty. A page that is served by another environment computes the formatted text again, and paging through search results in another environment runs the search again. The results are the same; only the time differs.
 - **Why it is enough:** For a small team the cache saves little. Formatted text is cached only when the setting is on and the text is long, and searches are run again only when the next page goes to another environment.
 
-## Sessions
+## What can be tuned
 
-Sessions do not use the cache, so they work across environments.
+| What | Where | Effect |
+| --- | --- | --- |
+| Caching formatted text | Administration › Settings › General › "Cache formatted text" | On: long text (over 2 KB) is rendered once per environment. Worth turning on when wiki pages are long. Off (the default): every page view renders the text |
+| Size of the cache | `config.cache_store = :memory_store, { size: … }` in `image/config/additional_environment.rb` | The memory store drops the least recently used entries when it is full. The functions have 2,048 MB ([lambda.md](lambda.md#function-settings)); the cache is a small part of it. Raise it if long wiki pages are cached and the environment's memory use leaves room (CloudWatch shows the maximum memory used per invocation) |
+| How long entries live | `expires_in:` on the same line | Not set: entries live as long as the environment. Formatted text is keyed by the text's digest, so it does not go stale when the text changes |
+| Size of the search cache | `config.redmine_search_cache_store = :memory_store, { size: … }` in `additional_environment.rb` | Redmine sets it in `config/application.rb` before `additional_environment.rb`, so a value there replaces Redmine's. `nil` turns search caching off |
+| How long environments live | Provisioned Concurrency, or the warm-up invocations (`lambda.warmup` in [deploy-config.md](deploy-config.md#fields-of-redminejson)) | The cache lives as long as its environment. Environments that are kept warm keep their cache; an environment that Lambda starts for a burst of requests starts empty. Provisioned Concurrency costs about USD 23 a month per 2 GB environment ([cost.md](cost.md#what-adds-cost)) |
+| A shared cache | `config.cache_store` and `config.redmine_search_cache_store` pointing at ElastiCache (below) | Every environment uses the same entries, and new environments start with them |
 
-- **In a cookie:** Redmine keeps the session in an encrypted cookie (`_redmine_session`, Rails' `cookie_store`, set in Redmine's `config/application.rb`). Nothing is stored on the server for it.
-- **Checked against the database:** At sign-in, Redmine creates a session token in the `tokens` table (up to 10 per user), puts it in the session, and checks it on every request. Signing out deletes it. The session timeout settings in the administration pages work through this token.
-- **On Lambda:** Every environment reads the cookie with the same `SECRET_KEY_BASE` (from SSM Parameter Store; [lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store)) and checks the token in the same database, so a sign-in continues whichever environment serves the next request.
-- **Changing `SECRET_KEY_BASE`:** Every session ends, and everyone signs in again.
+- **Measuring first:** How often an entry is found has not been measured. Rails reports cache reads (`cache_read.active_support`) to ActiveSupport notifications, which can be logged while trying it out.
 
 ## When a shared cache is worth it
 
@@ -51,6 +55,7 @@ A shared cache keeps the formatted text and the search results for all environme
 
 ## To verify
 
+- How often entries are found in each environment's cache with Redmine's use (not measured)
 - How many ECPUs Redmine's use would take in a month (the estimate above assumes 10 million)
 - Whether ElastiCache Serverless adds a charge for the endpoints it creates in the VPC (not checked)
 - How long the first connection to ElastiCache with TLS takes when a Lambda environment starts

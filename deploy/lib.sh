@@ -4,7 +4,7 @@
 # cfn_role_arn.
 # shellcheck disable=SC2154
 # Secrets are never printed or passed on a command line: values go to the
-# AWS CLI through JSON on standard input.
+# AWS CLI in a JSON file in the private work directory, deleted right after.
 
 step() { printf '\n== %s\n' "$*" >&2; }
 note() { printf '%s\n' "$*" >&2; }
@@ -62,17 +62,20 @@ output() {
 }
 
 # Puts a parameter if it does not exist yet; an existing value is kept. The
-# value comes on standard input.
+# value comes on standard input. The AWS CLI reads it from a file in $work
+# (mode 600): it does not take --cli-input-json from /dev/stdin.
 #   put_new_parameter <name> <SecureString | String>
 put_new_parameter() {
-  local value
-  value=$(cat)
+  local input="$work/parameter.json" status=0
   if aws ssm get-parameter --name "$1" >/dev/null 2>&1; then
+    cat >/dev/null
     note "$1: kept"
     return 0
   fi
-  jq -n --arg name "$1" --arg type "$2" --arg value "$value" '{Name: $name, Type: $type, Value: $value}' |
-    aws ssm put-parameter --cli-input-json file:///dev/stdin >/dev/null
+  (umask 077 && jq -Rs --arg name "$1" --arg type "$2" '{Name: $name, Type: $type, Value: (. | rtrimstr("\n"))}' >"$input")
+  aws ssm put-parameter --cli-input-json "file://$input" >/dev/null || status=$?
+  rm -f "$input"
+  ((status == 0)) || fail "$1: not created"
   note "$1: created"
 }
 

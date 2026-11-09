@@ -71,8 +71,11 @@ case "$service $operation" in
       echo '{"Parameter": {}}'
     fi ;;
   "ssm put-parameter")
-    [[ "$(opt --cli-input-json "$@")" == file:///dev/stdin ]] || { echo "values must come on standard input" >&2; exit 1; }
-    input=$(cat)
+    file=$(opt --cli-input-json "$@")
+    [[ "$file" == file://* ]] || { echo "values must come in a file" >&2; exit 1; }
+    file=${file#file://}
+    [[ "$(stat -c %a "$file")" == 600 ]] || { echo "the file must be private" >&2; exit 1; }
+    input=$(cat "$file")
     mkdir -p "$FAKE/ssm"
     name=$(jq -r .Name <<<"$input")
     jq -r .Value <<<"$input" >"$FAKE/ssm/$(tr / _ <<<"$name")"

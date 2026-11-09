@@ -152,6 +152,7 @@ no_secret_leaks() {
   ! grep -q -F "$(sed -n 2p "$state/ssm/_redmine_env_REDMINE_CLOUDFRONT_PRIVATE_KEY")" "$state/calls" "$state/output"
 }
 check "secrets: on no command line and not in the output" no_secret_leaks
+check "secrets: no file of them is left" test -z "$(find /tmp -name parameter.json 2>/dev/null)"
 check "the image in the stack is the account's ECR by digest" test \
   "$(value "$(cat "$state/params/redmine.json")" ImageUri)" == \
   "111122223333.dkr.ecr.ap-northeast-1.amazonaws.com/redmine@sha256:$(printf 'b%.0s' {1..64})"

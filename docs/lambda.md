@@ -173,8 +173,10 @@ Parameters under `/<instance>/env/` are loaded, with the last part of each name 
 
 ### Loading
 
-1. At the top of `config/additional_environment.rb`, call SSM `GetParametersByPath` (`/<instance>/env/`, with decryption). It returns up to 10 parameters per call, so the remaining ones are read with further calls.
-2. Put the values into `ENV`. Names that already exist as environment variables are not overwritten, so that values can be passed as environment variables when testing in local Docker.
+1. At the top of `config/additional_environment.rb`, call SSM `GetParametersByPath` (with decryption) on the path in the function's environment variable `REDMINE_SSM_PATH` (`/<instance>/env/`). It returns up to 10 parameters per call, so the remaining ones are read with further calls. Without `REDMINE_SSM_PATH`, as in local Docker, nothing is read.
+2. Put the values into `ENV`. Names that already exist as environment variables are not overwritten, so that values can be passed as environment variables when testing in local Docker. Only names that can be environment variables (capital letters, digits and `_`) are read, and paths below the one given are not.
+
+- **Code:** `config/serverless_env.rb` (`image/config/serverless_env.rb`) does the reading. If SSM cannot be reached, start-up fails instead of continuing without the secrets.
 3. After that, Rails reads `config/database.yml` and connects to the database.
 
 - **Where it is read:** `additional_environment.rb` is loaded inside `config/application.rb`. `config/database.yml` is evaluated and `SECRET_KEY_BASE` is read after that, so setting the values here is early enough. Redmine's `Gemfile` looks only at the literal `adapter:`, so the gem can be chosen without `REDMINE_DB_HOST`.

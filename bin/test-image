@@ -15,6 +15,8 @@ image="${1:-serverless:test}"
 network=serverless-image-test
 prefix=serverless-image-test
 queue_url=http://moto:5000/123456789012/redmine-jobs
+ssm_path=/image-test/env/
+secret_key_base='image-test-only-secret-key-base'
 
 bin/test-services >/dev/null 2>&1 || bin/test-services
 compose=(docker compose -f test/compose.yml -p serverless-test)
@@ -47,17 +49,17 @@ for service in postgres moto; do
   docker network connect --alias "$service" "$network" "serverless-test-$service-1"
 done
 
-# Same conditions as Lambda. Settings go in as environment variables; SSM is
-# not read in these tests.
+# Same conditions as Lambda. The secrets come from SSM (moto) as on Lambda;
+# the other settings go in as environment variables.
+aws_env=(-e AWS_REGION=us-east-1 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test
+  -e AWS_ENDPOINT_URL=http://moto:5000)
 run() {
   local role="$1"; shift
   docker run -d --name "$prefix-$role" --network "$network" \
     --read-only --tmpfs /tmp:exec --user 993:993 \
     -e REDMINE_ROLE="$role" \
     -e REDMINE_DB_HOST=postgres -e REDMINE_DB_NAME=postgres -e REDMINE_DB_USERNAME=postgres -e REDMINE_DB_SSLMODE=disable \
-    -e SECRET_KEY_BASE=image-test-only-secret-key-base \
-    -e AWS_REGION=us-east-1 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test \
-    -e AWS_ENDPOINT_URL=http://moto:5000 \
+    -e REDMINE_SSM_PATH="$ssm_path" "${aws_env[@]}" \
     -e REDMINE_JOBS_QUEUE_URL="$queue_url" \
     "$@" "$image" >/dev/null
 }
@@ -92,6 +94,12 @@ handler_tests() {
     --entrypoint ruby "$image" -r/var/task/handler.rb /test/task_handler_test.rb
 }
 check "task handler" handler_tests
+ssm_tests() {
+  docker run --rm --read-only --tmpfs /tmp --user 993:993 --network "$network" "${aws_env[@]}" \
+    -v "$PWD/test/image:/test:ro" -w /var/task/redmine --entrypoint ruby "$image" \
+    -rbundler/setup -r/var/task/redmine/config/serverless_env.rb /test/serverless_env_test.rb
+}
+check "SSM loading" ssm_tests
 
 echo "== contents"
 check "arm64 Linux image" test "$(docker image inspect "$image" -f '{{.Os}}/{{.Architecture}}')" = linux/arm64
@@ -121,6 +129,14 @@ echo "== task"
 # A new queue each run (SQS allows one PurgeQueue per 60 seconds).
 sqs -d Action=DeleteQueue -d QueueUrl="$queue_url" >/dev/null 2>&1 || true
 sqs -d Action=CreateQueue -d QueueName=redmine-jobs >/dev/null
+# The secrets in SSM, as the deployment puts them (PostgreSQL here does not
+# check the password).
+docker run --rm --network "$network" "${aws_env[@]}" -w /var/task/redmine --entrypoint ruby "$image" \
+  -rbundler/setup -raws-sdk-ssm -e '
+    ssm = Aws::SSM::Client.new
+    { "SECRET_KEY_BASE" => ARGV[1], "REDMINE_DB_PASSWORD" => "unused" }.each do |name, value|
+      ssm.put_parameter(name: "#{ARGV[0]}#{name}", value: value, type: "SecureString", overwrite: true)
+    end' "$ssm_path" "$secret_key_base"
 run task
 wait_rie task
 check "rake db:migrate" quiet task '{"command":"rake","args":["db:migrate"]}'
@@ -129,6 +145,11 @@ check "rake redmine:load_default_data" \
 check "rake -T" quiet task '{"command":"rake","args":["-T"]}'
 runner_counts_users() { task '{"command":"runner","args":["puts User.count"]}' | tail -n 1 | grep -qx 2; }
 check "rails runner" runner_counts_users
+from_ssm() {
+  task '{"command":"runner","args":["puts Rails.application.secret_key_base == ENV[%q(SECRET_KEY_BASE)] && ENV[%q(REDMINE_DB_PASSWORD)] == %q(unused)"]}' |
+    tail -n 1 | grep -qx true
+}
+check "the secrets come from SSM" from_ssm
 rejected() { jq -e '.errorType == "Function<ArgumentError>"' <<<"$(invoke task "$1")" >/dev/null; }
 check "env outside the allowed names is rejected" rejected '{"command":"rake","args":["-T"],"env":{"REDMINE_DB_HOST":"x"}}'
 check "unknown command is rejected" rejected '{"command":"sh","args":["-c","id"]}'

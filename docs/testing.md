@@ -92,7 +92,7 @@ Mail import tests use Redmine's test mail samples (`test/fixtures/mail_handler/`
 | Target | What to check | Tools |
 | --- | --- | --- |
 | Settings that cannot work on Lambda | When `REDMINE_ROLE` is set, `enabled_scm` and the others return fixed values and do not change when saved from the settings page. The inputs on the settings page are disabled and an explanation is shown. Without `REDMINE_ROLE`, Redmine behaves as standard | Minitest (unit, functional), system tests |
-| SSM loading (`additional_environment.rb`) | Reads everything under `/<instance>/env/`, continuing past 10 entries. Does not overwrite existing environment variables | Minitest, moto |
+| SSM loading (`additional_environment.rb`, `serverless_env.rb`) | Reads everything under `/<instance>/env/`, continuing past 10 entries, and decrypts SecureString. Does not overwrite existing environment variables. Skips names that cannot be environment variables and deeper paths. Fails when SSM cannot be reached. In the image tests, the three roles read `SECRET_KEY_BASE` and the database password from SSM | Minitest, moto (`test/image/serverless_env_test.rb`, `bin/test-image`) |
 | Task handler | Accepts only the defined `command` and `env`. Recognizes SES events. Returns the child process's exit code and the end of its output. Does not cut Japanese text in the middle of a character | Minitest |
 | Extension script | Depending on `REDMINE_ROLE`, starts the real Lambda Web Adapter or registers as an extension that does nothing | ShellCheck, image tests |
 | Jobs (`aws-activejob-sqs`) | A notification mail job is enqueued to SQS, run by the job handler, and the mail is sent | Minitest, moto |

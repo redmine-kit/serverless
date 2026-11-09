@@ -106,7 +106,7 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | 対象 | 確認すること | 道具 |
 | --- | --- | --- |
 | Lambda で使えない設定 | `REDMINE_ROLE` があるとき、`enabled_scm` などが決めた値を返し、設定の画面から保存しても変わらない。設定の画面の入力が押せず、説明が出る。`REDMINE_ROLE` がないときは、Redmine の標準のまま | Minitest(ユニット、機能)、システムのテスト |
-| SSM の読み込み(`additional_environment.rb`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読む。すでにある環境変数を上書きしない | Minitest、moto |
+| SSM の読み込み(`additional_environment.rb`、`serverless_env.rb`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。すでにある環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM につながらなければ失敗する。イメージのテストでは、3 つの役割が `SECRET_KEY_BASE` とデータベースのパスワードを SSM から読む | Minitest、moto(`test/image/serverless_env_test.rb`、`bin/test-image`) |
 | タスクのハンドラー | 決めた `command` と `env` だけを受け付ける。SES のイベントを見分ける。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
 | 拡張機能のスクリプト | `REDMINE_ROLE` ごとに、本物の Lambda Web Adapter を起動するか、何もしない拡張機能として登録するかが変わる | ShellCheck、イメージのテスト |
 | ジョブ(`aws-activejob-sqs`) | 通知のメールのジョブが SQS に積まれ、ジョブ用のハンドラーで実行されてメールが送られる | Minitest、moto |

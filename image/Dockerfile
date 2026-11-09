@@ -28,7 +28,7 @@ RUN curl -fsSLo /tmp/redmine.tar.gz "https://www.redmine.org/releases/redmine-${
   && rm /tmp/redmine.tar.gz
 WORKDIR /var/task/redmine
 COPY image/config/database.yml image/config/additional_environment.rb image/config/configuration.yml \
-  image/config/aws_active_job_sqs.yml config/
+  image/config/aws_active_job_sqs.yml image/config/serverless_env.rb config/
 COPY image/Gemfile.local ./
 COPY --from=plugin / plugins/redmine_serverless/
 RUN bundle config set --local path vendor/bundle \

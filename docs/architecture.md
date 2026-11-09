@@ -4,6 +4,14 @@ This is a design for running the latest Redmine (7.0.3) on AWS Lambda Event Func
 
 The specifications in this document were checked against official information as of 2026-11-08. Sources are in [sources.md](sources.md).
 
+## AWS resources
+
+The resources one instance creates in AWS (`infra/*.yaml`), drawn with the AWS Architecture Icons. Only one of the NAT instance and the VPC endpoints is created, by `network.mode` in the deployment configuration ([deploy-config.md](deploy-config.md)).
+
+![The AWS resources of one instance](diagrams/architecture.svg)
+
+The source is `docs/diagrams/architecture.py`. `bin/diagrams` draws it in Docker with the Python library [diagrams](https://diagrams.mingrammer.com/) and writes `docs/diagrams/architecture.svg` and `architecture.ja.svg`, with the icons embedded. Run it after changing the templates' resources, and commit the SVGs.
+
 ## Diagram
 
 ```mermaid

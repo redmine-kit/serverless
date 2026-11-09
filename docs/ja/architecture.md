@@ -4,6 +4,16 @@
 
 この資料の仕様は、2026-11-08 時点の公式の情報で確認したものです。出典は [sources.md](sources.md) にあります。
 
+<a id="aws-resources"></a>
+
+## AWS のリソース
+
+1 つのインスタンスが AWS に作るリソース(`infra/*.yaml`)を、AWS のアーキテクチャアイコンで描いたものです。NAT インスタンスと VPC エンドポイントは、デプロイの設定の `network.mode` で、どちらか一方だけを作ります([deploy-config.md](deploy-config.md))。
+
+![1 つのインスタンスの AWS のリソース](../diagrams/architecture.ja.svg)
+
+元は `docs/diagrams/architecture.py` です。`bin/diagrams` が、Docker の中で Python のライブラリー [diagrams](https://diagrams.mingrammer.com/) で描き、アイコンを埋め込んだ `docs/diagrams/architecture.svg` と `architecture.ja.svg` を書きます。テンプレートのリソースを変えたら実行し、SVG をコミットします。
+
 <a id="diagram"></a>
 
 ## 構成図

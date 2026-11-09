@@ -246,7 +246,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 
 <a id="to-verify"></a>
 
-## 確認すること
+## 未確認の事項
 
 - `config.filter_redirect` で、CloudFront の署名付き URL へのリダイレクトがログに残らないか
 - CloudFront の応答のヘッダーのポリシーと WAF のルールが、定額プラン Free で使えるか

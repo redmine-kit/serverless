@@ -197,7 +197,7 @@ CloudFormation は SecureString のパラメーターを作れないので、`bi
 
 <a id="to-verify"></a>
 
-## 確認すること
+## 未確認の事項
 
 - SES の受信のルールのセットを共有の土台に置き、インスタンスのスタックからルールを足す形が、CloudFormation で作れるか
 - RDS のインスタンスが、作るときと更新のときに、`ssm-secure` の動的な参照でパスワードを受け取れるか(CloudFormation の資料では対応しているプロパティ。まだ試していない)

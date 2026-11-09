@@ -4,7 +4,7 @@
 
 <a id="to-check-before-migrating"></a>
 
-## 移行前に確認すること
+## 移行前の確認事項
 
 | 項目 | 確認すること | 影響 |
 | --- | --- | --- |
@@ -58,7 +58,7 @@ flowchart TD
 3. **MySQL のまま 7.0.3 にバージョンアップする:** 一時の MySQL の上で、Redmine 7.0.3 の `db:migrate` を実行します。Redmine 7.0 は MySQL 8.0〜8.4 に対応しているので、古い Redmine を動かさずに、新しい Redmine でバージョンアップできます。古いバージョンから一気にバージョンアップしてよいかは、Redmine の更新の手順(RedmineUpgrade の wiki)で確認します。
 4. **一時の PostgreSQL に空のスキーマ:** 一時の PostgreSQL に、Redmine 7.0.3 の標準の `db:migrate` と `redmine:plugins:migrate` で、空のスキーマを作ります(初めのデータは入れない)。スキーマは、変換のツールに作らせず、Redmine の migration で作ります。
 5. **データだけをコピーする:** 一時の MySQL(7.0.3 のスキーマ)から、一時の PostgreSQL の空のスキーマに、データだけをコピーします(下の「コピーの方法」)。
-6. **確認する:** 下の「確認すること」を通します。
+6. **確認する:** 下の「確認する項目」を順に確認します。
 
 コピーする前に、一時の MySQL で、ログイン名が大文字と小文字だけ違う利用者がいないかを調べます(`SELECT LOWER(login), COUNT(*) FROM users GROUP BY LOWER(login) HAVING COUNT(*) > 1`)。Redmine 7.0 は、PostgreSQL に `lower(login)` の一意の索引を作る(migration `20260319062845`)ので、そういう利用者がいると、コピーするときに失敗します。いれば、移行前に、どちらかのログイン名を変えるか、片方をまとめます。
 
@@ -79,7 +79,7 @@ flowchart TD
 
 <a id="to-verify"></a>
 
-### 確認すること
+### 確認する項目
 
 - テーブルごとの行の数が、MySQL と PostgreSQL で同じか
 - 時刻、真偽値、日本語の文字、wiki の本文(圧縮したもの)が、いくつかの行で同じか
@@ -101,7 +101,7 @@ Redmine 6.1 を MySQL 8.0 から PostgreSQL 18 に移した記録があります
 
 <a id="to-verify-1"></a>
 
-## 確認すること
+## 未確認の事項
 
 - 古いバージョンから 7.0 へ、まとめて migration できるか
 - Embulk で、Redmine のすべてのテーブルをコピーできるか(バイナリの列、時刻、真偽値)

@@ -57,7 +57,7 @@ config.session_store :cookie_store, key: '_redmine_session', path: config.relati
 
 <a id="to-verify"></a>
 
-## 確認すること
+## 未確認の事項
 
 - デプロイのあと、CloudFront と関数 URL の後ろで、セッションと自動ログインの Cookie に `Secure` が付いているか
 - 利用者が多いときに、「無操作タイムアウト」でどれだけ書き込みが増えるか

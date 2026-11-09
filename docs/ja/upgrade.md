@@ -80,7 +80,7 @@ Redmine の migration は、RDS for PostgreSQL では標準のまま通ります
 
 <a id="to-verify"></a>
 
-## 確認すること
+## 未確認の事項
 
 - `bin/check-migrations` で、Ruby の構文木から操作を読み分けるか、文字の並びで読み分けるか(条件の分岐で、データベースの種類ごとに違う操作をする migration があるため)
 - 大きなテーブルの migration が、`redmine-task` の 15 分に収まるか

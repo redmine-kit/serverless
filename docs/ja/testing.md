@@ -279,7 +279,7 @@ flowchart TD
 
 <a id="to-verify"></a>
 
-## 確認すること
+## 未確認の事項
 
 - moto が、`x-amz-checksum-sha256` を付けた PUT で `ChecksumSHA256` を保存して返し、合わない中身を断るか
 - moto が、SES v2 の `SendEmail`(全文での送信)を再現できるか

@@ -148,7 +148,7 @@ EBS のボリュームを持つのは、NAT インスタンス(`network.mode` �
 
 <a id="to-verify"></a>
 
-## 確認すること
+## 未確認の事項
 
 - バケットのポリシーの、`aws:PrincipalArn` を使った条件(GuardDuty の資料の `NotPrincipal` の代わり)で、プランのロールが読めてタグを付けられ、ほかのすべてが拒否されるか
 - CloudFront の `incoming/` への `PutObject`(オリジンアクセスコントロール)が、タグの文の影響を受けないか

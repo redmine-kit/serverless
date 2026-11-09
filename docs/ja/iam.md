@@ -262,7 +262,7 @@ bin/deploy --account
 
 <a id="to-verify"></a>
 
-## 確認すること
+## 未確認の事項
 
 - `aws/ssm` の鍵の SecureString を読むのに、`kms:Decrypt` が要るか
 - `s3:ListBucket` に条件(`s3:prefix`)を付けたときに、ないオブジェクトへの `HeadObject` が 404 になるか

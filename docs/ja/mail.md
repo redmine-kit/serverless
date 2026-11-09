@@ -184,7 +184,7 @@ Redmine の管理画面で、「送信元メールアドレス」を Redmine 全
 
 <a id="to-verify"></a>
 
-## 確認すること
+## 未確認の事項
 
 - Redmine が `configuration.yml` の `ses_v2_settings` を `ActionMailer::Base` に渡したときに、gem の送信方法がすでに登録されているか(gem の Railtie が登録する)
 - 送信元の名前(`Setting.mail_from` の表示名)が、メールの差出人に出るか

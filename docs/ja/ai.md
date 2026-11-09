@@ -97,7 +97,7 @@ Redmine の側で守ることと、AI の側で守ることを分けます。
 
 <a id="to-verify"></a>
 
-## 確認すること
+## 未確認の事項
 
 - Redmine 7.0 の OAuth で使えるスコープと、REST API のどこまでを OAuth で使えるか
 - CloudFront を通したアップロードを、API キーと OAuth で使うときの CSRF の扱い(API では CSRF の確認を外す)

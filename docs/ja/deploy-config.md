@@ -69,7 +69,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | `lambda.webReservedConcurrency` | | 10 | `redmine-web` の同時実行数の予約 |
 | `lambda.workerReservedConcurrency` | | 3 | `redmine-worker` の同時実行数の予約。`redmine-task` は 2 で決め打ち([tasks.md](tasks.md#kinds-of-events)) |
 | `lambda.warmup` | | `false` | 業務時間の温めの呼び出しをするか([lambda.md](lambda.md#waiting-for-start-up))。今は `false` だけ |
-| `uploads.maxBytes` | | 104857600(100 MB) | 添付ファイルの大きさの上限。`/incoming/*` の CloudFront Function が、これより大きいアップロードを 413 で断る |
+| `uploads.maxBytes` | | 104857600(100 MB) | 添付ファイルの大きさの上限。`/incoming/*` の CloudFront Function が、これより大きいアップロードを 413 で断る。段 10 で、Redmine の添付ファイルの最大の大きさ(`attachment_max_size`。KB)も、`redmine.settings` に書いていなければ同じ上限にする |
 | `mail.receive` | | `true` | メールの受信を使うか |
 | `mail.perProjectAddresses` | | `false` | プロジェクトごとのアドレスを使うか。`false` なら Redmine の標準と同じ([mail.md](mail.md#addresses-per-project)) |
 | `mail.globalLocalPart` | | `redmine` | 全体用のアドレスの `@` の前 |

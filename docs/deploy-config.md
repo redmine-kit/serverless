@@ -61,7 +61,7 @@ When several instances are set up in the same account, resources that can be com
 | `lambda.webReservedConcurrency` | | 10 | Reserved concurrency of `redmine-web` |
 | `lambda.workerReservedConcurrency` | | 3 | Reserved concurrency of `redmine-worker`. `redmine-task` is fixed at 2 ([tasks.md](tasks.md#kinds-of-events)) |
 | `lambda.warmup` | | `false` | Whether to send warm-up invocations during business hours ([lambda.md](lambda.md#waiting-for-start-up)). Only `false` for now |
-| `uploads.maxBytes` | | 104857600 (100 MB) | The largest attachment. The CloudFront Function on `/incoming/*` rejects larger uploads with 413 |
+| `uploads.maxBytes` | | 104857600 (100 MB) | The largest attachment. The CloudFront Function on `/incoming/*` rejects larger uploads with 413, and step 10 sets Redmine's maximum attachment size (`attachment_max_size`, in KB) to the same limit unless `redmine.settings` sets it |
 | `mail.receive` | | `true` | Whether to receive email |
 | `mail.perProjectAddresses` | | `false` | Whether to use addresses per project. If `false`, the same as standard Redmine ([mail.md](mail.md#addresses-per-project)) |
 | `mail.globalLocalPart` | | `redmine` | The part before `@` of the global address |

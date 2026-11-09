@@ -209,7 +209,10 @@ fi
 # 10. Redmine's settings and the plugins' settings (redmine.settingsMode).
 if ! $code_only; then
   step "10. Settings"
-  settings=$(jq -c '{mode: (.redmine.settingsMode // "initial"), settings: (.redmine.settings // {}),
+  # Redmine's attachment limit (in KB) follows uploads.maxBytes, the limit of
+  # the CloudFront Function on /incoming/*, unless redmine.settings sets it.
+  settings=$(jq -c '{mode: (.redmine.settingsMode // "initial"),
+    settings: ({attachment_max_size: ((.uploads.maxBytes // 104857600) / 1024 | floor | tostring)} + (.redmine.settings // {})),
     plugins: (.redmine.pluginSettings // {})}' "$config")
   task "$(jq -nc --arg code "$(settings_code "$settings")" '{command: "runner", args: [$code]}')"
 fi

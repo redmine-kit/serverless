@@ -156,6 +156,13 @@ check "secrets: no file of them is left" test -z "$(find /tmp -name parameter.js
 check "the image in the stack is the account's ECR by digest" test \
   "$(value "$(cat "$state/params/redmine.json")" ImageUri)" == \
   "111122223333.dkr.ecr.ap-northeast-1.amazonaws.com/redmine@sha256:$(printf 'b%.0s' {1..64})"
+settings_of() { # <state dir>: the JSON that the settings step sends
+  local hex
+  hex=$(grep '^event {"command":"runner"' "$1/calls" | tail -1 | grep -oE "\['[0-9a-f]+'\]" | tr -dc '0-9a-f')
+  python3.13 -c 'import sys; print(bytes.fromhex(sys.argv[1]).decode())' "$hex"
+}
+check "settings: Redmine's attachment limit follows uploads.maxBytes" test \
+  "$(settings_of "$state" | jq -c '[.mode, .settings.attachment_max_size]')" == '["initial","102400"]'
 check "a note asks to pin image.digest" grep -q "pin it in redmine.json" "$state/output"
 
 cp -r "$state/ssm" "$state/ssm.first"
@@ -218,6 +225,9 @@ check "full.json: its own image and names, Japanese default data, no receipt rul
   grep -q 'stack-name team-a-edge' '$full_state/calls' && grep -q 'function-name team-a-task' '$full_state/calls' &&
   grep -q 'REDMINE_LANG\":\"ja' '$full_state/calls' && ! grep -q set-active-receipt-rule-set '$full_state/calls' &&
   ! grep -q 'crane digest' '$full_state/calls'"
+check "full.json: the settings and the attachment limit" test \
+  "$(settings_of "$full_state" | jq -c '[.mode, .settings.attachment_max_size, .settings.app_title, .plugins.redmine_serverless_s3.download_url_expiry]')" == \
+  '["enforce","51200","Team A","600"]'
 check "full.json: dns.mode external shows the records to add" grep -q "point redmine.example.org to d111111abcdef8.cloudfront.net" "$full_state/output"
 
 echo

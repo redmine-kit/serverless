@@ -112,7 +112,7 @@ flowchart LR
 
 ## Cost Explorer(`costExplorer.enabled` のときだけ)
 
-プラグイン [Redmine Serverless Cost Explorer](https://redmine-kit.github.io/redmine_serverless_costexplorer/ja/) を足したイメージ(派生のイメージ。Serverless のイメージには入っていません)では、このプラグインが、アカウントの費用を読みます。ポリシー `costexplorer` で、`redmine-task`(毎日の更新)と `redmine-worker`(プラグインのタブを開いたときとボタンが、ジョブとして積む更新)に、`*` への `ce:GetCostAndUsage` と `ce:GetCostForecast` を許します。2 つの操作は、請求のビューをリソースに取ります(AWS のサービスのリファレンス、2026-11-10 に確認)。プラグインは主の請求のビューを使います。その ARN にポリシーを絞れるかは未確認です。`redmine-web` は Cost Explorer を呼びません。権限の境界 `redmine-boundary` も、この 2 つの操作を許します。
+プラグイン [Redmine Serverless Cost Explorer](https://redmine-kit.github.io/redmine_serverless_costexplorer/ja/) を足したイメージ(派生のイメージ。Serverless のイメージには入っていません)では、このプラグインが、アカウントの費用を読みます。ポリシー `costexplorer` で、`redmine-task`(毎日の更新。プラグインが呼ぶのはこれだけ)に、`*` への `ce:GetCostAndUsage` と `ce:GetCostForecast` を許します。2 つの操作は、請求のビューをリソースに取ります(AWS のサービスのリファレンス、2026-11-10 に確認)。プラグインは主の請求のビューを使います。その ARN にポリシーを絞れるかは未確認です。`redmine-web` と `redmine-worker` は Cost Explorer を呼びません。権限の境界 `redmine-boundary` も、この 2 つの操作を許します。
 
 <a id="resource-based-policies"></a>
 

@@ -792,7 +792,6 @@ Resources:
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
           REDMINE_COSTEXPLORER_ENABLED: !Ref CostExplorerEnabled
-          REDMINE_COSTEXPLORER_TAG_KEY: !Ref CostExplorerTagKey
           REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_MAIL_BUCKET: !Ref MailBucket
@@ -854,8 +853,6 @@ Resources:
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
-          REDMINE_COSTEXPLORER_ENABLED: !Ref CostExplorerEnabled
-          REDMINE_COSTEXPLORER_TAG_KEY: !Ref CostExplorerTagKey
           REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_MAIL_BUCKET: !Ref MailBucket
@@ -870,14 +867,15 @@ Resources:
       Enabled: true
 
   # Cost Explorer for redmine_serverless_costexplorer (in a derived image):
-  # the refresh runs in the task and in jobs. The actions take the billing view as resource; narrowing to
-  # the primary billing view's ARN is unverified, so the resource is "*".
+  # only the daily refresh in the task calls it. The actions take the billing
+  # view as resource; narrowing to the primary billing view's ARN is
+  # unverified, so the resource is "*".
   CostExplorerPolicy:
     Type: AWS::IAM::Policy
     Condition: ShowsCostExplorer
     Properties:
       PolicyName: costexplorer
-      Roles: [!Ref TaskRole, !Ref WorkerRole]
+      Roles: [!Ref TaskRole]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:

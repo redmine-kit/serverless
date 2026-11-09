@@ -13,6 +13,9 @@ config.active_record.dump_schema_after_migration = false
 config.hosts << ENV['REDMINE_HOST'] if ENV['REDMINE_HOST'].present?
 
 # Redmine's session cookie (config/application.rb) with Secure added, so that
-# it is sent only over HTTPS (docs/session.md).
-config.session_store :cookie_store, key: '_redmine_session', path: config.relative_url_root || '/',
-                                    same_site: :lax, secure: true
+# it is sent only over HTTPS (docs/session.md). Only in production: Redmine's
+# own tests send plain HTTP requests, which would get no session cookie.
+if Rails.env.production?
+  config.session_store :cookie_store, key: '_redmine_session', path: config.relative_url_root || '/',
+                                      same_site: :lax, secure: true
+end

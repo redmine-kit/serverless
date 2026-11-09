@@ -44,7 +44,7 @@ Redmine は、セッションを暗号化した Cookie に入れ、データベ�
 
 Redmine のセッションの Cookie には、HTTPS でも `Secure` の属性が付きません(2026-11-09 にイメージで確認。`X-Forwarded-Proto: https` を付けた要求で、`_redmine_session` には `path`、`httponly`、`samesite=lax` だけが付いた)。Redmine の `session_store` は `secure` を指定せず、Redmine の `production.rb` では `config.force_ssl` がコメントになっています。
 
-イメージで付けています。`image/config/additional_environment.rb` で、Redmine と同じ `session_store` に `secure: true` だけを足して設定します。Redmine の設定のあとに評価されるので、置き換わります。イメージのテストで、`_redmine_session` に `Secure` が付くことを確認します([testing.md](testing.md#image-tests))。
+イメージで付けています。`image/config/additional_environment.rb` で、Redmine と同じ `session_store` に `secure: true` だけを足して設定します。Redmine の設定のあとに評価されるので、置き換わります。設定するのは、イメージが動く本番の環境(production)だけです。Redmine 本体のテストは暗号化なしの HTTP で要求を送るので、セッションの Cookie が書き込まれなくなるためです。イメージのテストで、`_redmine_session` に `Secure` が付くことを確認します([testing.md](testing.md#image-tests))。
 
 ```ruby
 config.session_store :cookie_store, key: '_redmine_session', path: config.relative_url_root || '/',

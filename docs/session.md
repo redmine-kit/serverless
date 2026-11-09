@@ -36,7 +36,7 @@ Changes to the first two are sent to administrators as security notifications by
 
 Redmine's session cookie has no `Secure` attribute, even over HTTPS (checked in the image on 2026-11-09: a request with `X-Forwarded-Proto: https` got `_redmine_session` with only `path`, `httponly` and `samesite=lax`). Redmine's `session_store` does not set `secure`, and `config.force_ssl` is commented out in Redmine's `production.rb`.
 
-The image adds it: `image/config/additional_environment.rb` sets the same `session_store` as Redmine's, with `secure: true` added. It is evaluated after Redmine's setting, so it replaces it. The image tests check that `_redmine_session` has `Secure` ([testing.md](testing.md#image-tests)).
+The image adds it: `image/config/additional_environment.rb` sets the same `session_store` as Redmine's, with `secure: true` added. It is evaluated after Redmine's setting, so it replaces it. It is set only in the production environment, which the image runs: Redmine's own tests send plain HTTP requests and would get no session cookie. The image tests check that `_redmine_session` has `Secure` ([testing.md](testing.md#image-tests)).
 
 ```ruby
 config.session_store :cookie_store, key: '_redmine_session', path: config.relative_url_root || '/',

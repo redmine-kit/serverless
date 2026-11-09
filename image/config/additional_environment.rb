@@ -8,7 +8,9 @@
 # (REDMINE_SSM_PATH).
 
 config.cache_store = :memory_store, { size: 64 * 1024 * 1024 }
-config.active_job.queue_adapter = ENV['REDMINE_ROLE'] ? :sqs : :inline
+# Jobs run in the request unless redmine_serverless_sqs switches them to SQS
+# (when REDMINE_JOBS_QUEUE_URL is set; docs/lambda.md#background-jobs).
+config.active_job.queue_adapter = :inline
 config.active_record.dump_schema_after_migration = false
 config.hosts << ENV['REDMINE_HOST'] if ENV['REDMINE_HOST'].present?
 

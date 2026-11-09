@@ -5,17 +5,21 @@
 # Redmine lists puma only in its test group. Bundler warns that it is listed
 # twice; this entry puts it in the default group too.
 gem 'puma'
-gem 'aws-actionmailer-ses', '~> 1.0'
-gem 'aws-activejob-sqs', '~> 1.2'
 # The Redmine Serverless plugins, as gems from GitHub Packages
 # (docs/architecture.md#distribution). Installing from there needs a token
 # with read:packages (bin/lib/plugin.sh). The image links each installed gem
-# into plugins/, where Redmine loads plugins from. redmine_serverless_ssm
-# reads SSM Parameter Store before Rails reads the configuration, which is why
-# it is a gem loaded by Bundler. The other plugins are loaded by Redmine from
-# plugins/ like any plugin, so Bundler does not require them. The others are
-# added when they are published.
+# into plugins/, where Redmine loads plugins from. Bundler requires the gems
+# that must act before Rails initializes: redmine_serverless_ssm reads SSM
+# Parameter Store before Rails reads the configuration, and the boot/ files of
+# redmine_serverless (the /events middleware), redmine_serverless_sqs (the
+# queue adapter) and redmine_serverless_ses (the SES delivery method). Redmine
+# loads redmine_serverless_s3 and redmine_serverless_cost from plugins/ like
+# any plugin.
 source 'https://rubygems.pkg.github.com/redmine-kit' do
   gem 'redmine_serverless_ssm', '>= 0.1.1'
-  gem 'redmine_serverless_s3', '>= 0.1.0', require: false
+  gem 'redmine_serverless', '>= 0.1.0'
+  gem 'redmine_serverless_sqs', '>= 0.1.2'
+  gem 'redmine_serverless_ses', '>= 0.1.1'
+  gem 'redmine_serverless_s3', '>= 0.1.1', require: false
+  gem 'redmine_serverless_cost', '>= 0.1.0', require: false
 end

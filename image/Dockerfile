@@ -29,8 +29,7 @@ RUN if [ -n "$REDMINE_BRANCH" ]; then \
   fi \
   && rm /tmp/redmine.tar.gz
 WORKDIR /var/task/redmine
-COPY image/config/database.yml image/config/additional_environment.rb image/config/configuration.yml \
-  image/config/aws_active_job_sqs.yml config/
+COPY image/config/database.yml image/config/additional_environment.rb image/config/configuration.yml config/
 COPY image/Gemfile.local ./
 RUN bundle config set --local path vendor/bundle \
   && bundle config set --local without development:test
@@ -38,7 +37,8 @@ RUN bundle config set --local path vendor/bundle \
 # into plugins/, where Redmine loads plugins from, after a local checkout
 # (plugin-overrides) has replaced it if one is given. Bundler's credential for
 # GitHub Packages is a build secret (bin/lib/plugin.sh), never in a layer.
-ENV PLUGIN_GEMS="redmine_serverless_ssm redmine_serverless_s3"
+ENV PLUGIN_GEMS="redmine_serverless_ssm redmine_serverless redmine_serverless_sqs redmine_serverless_ses redmine_serverless_s3 \
+  redmine_serverless_cost"
 RUN printf '%s\n' '#!/bin/sh' 'set -e' \
     'for gem in $PLUGIN_GEMS; do' \
     '  dir="$(bundle info --path "$gem")"' \

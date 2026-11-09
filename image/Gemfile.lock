@@ -107,6 +107,9 @@ GEM
       jmespath (~> 1, >= 1.6.1)
       logger
       rexml (~> 3.4, >= 3.4.2)
+    aws-sdk-costexplorer (1.164.0)
+      aws-sdk-core (~> 3, >= 3.265.0)
+      aws-sigv4 (~> 1.5)
     aws-sdk-kms (1.140.0)
       aws-sdk-core (~> 3, >= 3.265.0)
       aws-sigv4 (~> 1.5)
@@ -431,9 +434,19 @@ GEM
 GEM
   remote: https://rubygems.pkg.github.com/redmine-kit/
   specs:
-    redmine_serverless_s3 (0.1.0)
-      aws-sdk-cloudfront (~> 1.164)
-      aws-sdk-s3 (~> 1.239)
+    redmine_serverless (0.1.0)
+    redmine_serverless_cost (0.1.0)
+      aws-sdk-costexplorer (~> 1.160)
+    redmine_serverless_s3 (0.1.1)
+      aws-sdk-cloudfront (~> 1.0)
+      aws-sdk-s3 (~> 1.178)
+    redmine_serverless_ses (0.1.1)
+      aws-actionmailer-ses (~> 1.2)
+      aws-sdk-s3 (~> 1.0)
+      aws-sdk-sesv2 (~> 1.0)
+    redmine_serverless_sqs (0.1.2)
+      aws-activejob-sqs (~> 1.2)
+      aws-sdk-sqs (~> 1.0)
     redmine_serverless_ssm (0.1.1)
       aws-sdk-ssm (~> 1.0)
 
@@ -443,8 +456,6 @@ PLATFORMS
 DEPENDENCIES
   actionpack-xml_parser
   addressable
-  aws-actionmailer-ses (~> 1.0)
-  aws-activejob-sqs (~> 1.2)
   bcrypt
   bullet
   bundle-audit
@@ -477,7 +488,11 @@ DEPENDENCIES
   rails (= 8.1.4)
   rails-dom-testing (>= 2.3.0)
   rbpdf (~> 1.21.4)
-  redmine_serverless_s3 (>= 0.1.0)!
+  redmine_serverless (>= 0.1.0)!
+  redmine_serverless_cost (>= 0.1.0)!
+  redmine_serverless_s3 (>= 0.1.1)!
+  redmine_serverless_ses (>= 0.1.1)!
+  redmine_serverless_sqs (>= 0.1.2)!
   redmine_serverless_ssm (>= 0.1.1)!
   requestjs-rails (~> 0.0.13)
   roadie-rails (~> 3.4.0)
@@ -521,6 +536,7 @@ CHECKSUMS
   aws-partitions (1.1303.0) sha256=4debb9488e514ab87ee68cf55184cb8db9bd0256668883c3fe6e8bb76f32929c
   aws-sdk-cloudfront (1.164.0) sha256=dbb1a2c75ba1b91a55a485d90cf0d34233a074d6119d7b6f7b23b7f44bde60be
   aws-sdk-core (3.265.0) sha256=6e2910a8d9d4ff155351e5bed6b19f97edf7d01fcd7bf5bc524bd36695fdbc1a
+  aws-sdk-costexplorer (1.164.0) sha256=3ff2b8b97859b63429b0fde8ec9e21ec9d82eb92f2731e50c865b180a842dbd1
   aws-sdk-kms (1.140.0) sha256=1ba7cf795e5680fe5041a10d636aca01f1d2b6fa18e7b5d60ec6197319bce1c9
   aws-sdk-s3 (1.239.0) sha256=f6c1a952066e0103863b25a35ba391b3a8c08443a604c777e549eaa553621ad0
   aws-sdk-ses (1.111.0) sha256=119b21f166f0ab55d861f40d94f082e15d83a247ded1ef3f45a2d5c76e733e3c
@@ -614,7 +630,11 @@ CHECKSUMS
   rbpdf-font (1.19.1) sha256=3b3498ea4f9e71bea0f7a069408d50c3c4e85b1aa496e22f2ee8b84d28c8b45f
   rbs (4.2.0) sha256=51f7b886dcc05bc09e10b901daa6a81829f6adc03101d6ca9ea4aac6103e0674
   rdoc (8.1.0) sha256=befc37880a5cfd36dcb176c748b5fd5ee39dd3536a75e81824e4972ce230f60a
-  redmine_serverless_s3 (0.1.0) sha256=aca6868bc596201982aaea7d61f1b9f7d4c9bfe7cb2da6ea20d50c12879b2ec5
+  redmine_serverless (0.1.0) sha256=2fecb69c64d22e042e71442d75330bdc6daf3d567091248c90e49dde49b5a954
+  redmine_serverless_cost (0.1.0) sha256=7105cbb2d39cf5b51a427dc7015931b77f652dd7f82e4a613787547db26ab89b
+  redmine_serverless_s3 (0.1.1) sha256=49e89ba4ecb396f25f003306cd1d484e556c08519905dd005e8cf03c9a917489
+  redmine_serverless_ses (0.1.1) sha256=916f1540909e23f4d63a432dced08f953a59a4fe4c0f440d26b5faf421af5e45
+  redmine_serverless_sqs (0.1.2) sha256=b18f36ed95e942aad7b5b5e08bae54fd3b2904ff8b43dd3d4c8ead2d6b5a0437
   redmine_serverless_ssm (0.1.1) sha256=f5c791e06bfb480e09423d9585f22114aeffd7805079a93b627732172ab951d8
   regexp_parser (2.13.1) sha256=5aedb6b7c35688f51e86eef17a15374dfd287c83f4ca644b2c5f3ec50a33b44b
   reline (0.7.0) sha256=5b012d8e55dbf9d450f12bde2cf7d15ff546ae80b3f8f3b30e570d431815583d

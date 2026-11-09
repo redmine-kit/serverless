@@ -105,8 +105,8 @@ ENTRYPOINT ["/var/task/bin/start"]
 | --- | --- | --- |
 | 置き場所 | `/var/task/redmine` | Lambda のベースイメージは、関数のコードを `/var/task`(`LAMBDA_TASK_ROOT`)に置く |
 | `config/database.yml` | ビルドのときに入れる。`adapter:` は文字で `postgresql` と書く。接続先、データベースの名前、ユーザーの名前、パスワードは、環境変数から ERB で読む(`REDMINE_DB_HOST`、`REDMINE_DB_NAME`、`REDMINE_DB_USERNAME`、`REDMINE_DB_PASSWORD`)。TLS は、イメージの中の RDS の CA の証明書の束で `verify-full` にする(`sslrootcert: /var/task/rds-global-bundle.pem`) | Redmine の `Gemfile` は、`config/database.yml` の `adapter:` の値で、入れるデータベースの gem を決める。`adapter:` の値を ERB にすると、Gemfile も ERB を評価するので、文字で書いておく方が確か。RDS for PostgreSQL なので、`pg` の gem を使う |
-| `Gemfile.local` | `puma`(Redmine はテスト用のグループにしか入れていない)、`aws-actionmailer-ses`(メール)、`aws-activejob-sqs`(ジョブ)、GitHub Packages のプラグインの gem(今は、Bundler が早く読み込む `redmine_serverless_ssm` と、`require: false` の `redmine_serverless_s3`。[architecture.md](architecture.md#distribution)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem(`redmine_serverless_s3` の `aws-sdk-s3` など)は、そのプラグインの gemspec の依存に書く |
-| 自前のプラグイン | 今は `plugins/redmine_serverless_ssm` と `plugins/redmine_serverless_s3`。`redmine_serverless`、`redmine_serverless_ses`、`redmine_serverless_sqs` は、公開したら足す。どれも GitHub Packages の gem で、入れたディレクトリを、アセットを作る前に `plugins/` にリンクするので、プラグインのスクリプトもマニフェストに入る | 拡張の部分を自前のプラグインにする([architecture.md](architecture.md#the-plugins)) |
+| `Gemfile.local` | `puma`(Redmine はテスト用のグループにしか入れていない)と、GitHub Packages のプラグインの gem。Bundler が早く読み込む(その `boot/` のファイル)`redmine_serverless_ssm`、`redmine_serverless`、`redmine_serverless_sqs`、`redmine_serverless_ses` と、`require: false` の `redmine_serverless_s3` と `redmine_serverless_cost`([architecture.md](architecture.md#distribution)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem(`redmine_serverless_sqs` の `aws-activejob-sqs`、`redmine_serverless_ses` の `aws-actionmailer-ses`、`redmine_serverless_s3` の `aws-sdk-s3` など)は、そのプラグインの gemspec の依存にする |
+| 自前のプラグイン | `redmine_serverless`、`redmine_serverless_cost`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`、`redmine_serverless_ssm`。どれも GitHub Packages の gem で、インストールしたディレクトリを、アセットをビルドする前に `plugins/` にリンクし、プラグインのスクリプトがマニフェストに入るようにする | 拡張は自前のプラグインにする([architecture.md](architecture.md#the-plugins)) |
 | gem | ビルドのときに `vendor/bundle` に入れ、実行のときは入れない(`BUNDLE_DEPLOYMENT`、`BUNDLE_WITHOUT=development:test`) | 実行のときには書き込めない |
 | ファイルの権限 | どのユーザーからも読めるようにする | Lambda は、既定の権限の少ないユーザーで動かす。このユーザーが、実行に要るすべてのファイルを読める必要がある |
 | `HOME` | `/tmp` | Bundler、ImageMagick、Pandoc がホームに書くことがある(推測) |
@@ -217,7 +217,7 @@ Rails の設定は、どこに書くかで効くかどうかが変わります�
 | 設定 | 値 | 書く場所 | 理由 |
 | --- | --- | --- | --- |
 | `config.cache_store` | `:memory_store`(環境ごと、上限 64 MB) | `additional_environment.rb` | Rails 8.1 の既定は `tmp/cache/` のファイル。`production.rb` は設定していない。キャッシュするもの、調整、共有のキャッシュは [cache.md](cache.md)、セッションは [session.md](session.md) |
-| `config.active_job.queue_adapter` | Lambda の上(`REDMINE_ROLE` があるとき)は `:sqs`、手元では `:inline` | `additional_environment.rb` | 既定の `:async` は、環境が止まるとジョブが失われる(下記)。`production.rb` は設定していない |
+| `config.active_job.queue_adapter` | `:inline`。`REDMINE_JOBS_QUEUE_URL` があると(Lambda の上)、`redmine_serverless_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン | 既定の `:async` は、環境が止まるとジョブが失われる(下記)。`production.rb` は設定していない |
 | `config.active_record.dump_schema_after_migration` | `false` | `additional_environment.rb` | migration のあとの `db/schema.rb` の書き出しを止める。`production.rb` ではコメントアウトされている |
 | `config.hosts` | Redmine のドメイン | `additional_environment.rb` | — |
 | `config.filter_redirect` | パスの `/files/`、`/thumbnails/`、`/tmp/bulk/` | `additional_environment.rb` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と書かせる([security.md](security.md#logs)) |

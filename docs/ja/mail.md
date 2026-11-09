@@ -36,7 +36,7 @@ sequenceDiagram
 | --- | --- |
 | gem | `aws-actionmailer-ses` 1.2.0(2026-05-21)。AWS の公式(aws/aws-actionmailer-ses-ruby) |
 | 依存 | `actionmailer` 7.1 以上、`aws-sdk-sesv2` |
-| インストール | Redmine の `Gemfile.local` に書き、イメージのビルドのときに入れる |
+| インストール | プラグイン `redmine_serverless_ses` の依存で、イメージのビルドのときにいっしょにインストールする |
 | 送信方法 | `:ses_v2`(SES v2 の API)。`:ses`(SES v1 の API)もあるが使わない |
 | Bcc | gem が、メールの Bcc を SES の `bcc_addresses` に渡す。Bcc の宛先は、メールの本文には出ない |
 
@@ -72,7 +72,7 @@ production:
 
 SES の API の呼び出しに失敗したメールは、自動でやり直し、それでも送れないメールは記録して、管理画面から送り直せます。プラグイン `redmine_serverless_ses` が、`redmine-worker` でだけ配送のエラーを出し、SES のエラーを種類ごとに扱います。詳しいことと送り直しの手順は、プラグインの [sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html) にあります。Serverless では、次のとおりです。
 
-- **キューでのやり直し:** アカウントのエラーと、ジョブの中のやり直しを使い切った一時的なエラーは、例外になります。SQS がメッセージを配り直し、3 回受け取ったあとにデッドレターキューに移し([lambda.md](lambda.md#background-jobs))、`redmine_serverless_sqs` が記録します。
+- **キューでのやり直し:** アカウントのエラーと、ジョブの中のやり直しを使い切った一時的なエラーは、例外を発生させます。SQS がメッセージを配り直し、3 回受け取ったあとにデッドレターキューに移し([lambda.md](lambda.md#background-jobs))、`redmine_serverless_sqs` が記録します。
 - **通知を受ける:** デッドレターキューか失敗の記録が 1 件以上になると、CloudWatch のアラームが通知します。送信のエラーはログにも出し、メトリクスフィルターで数えます。
 - **送り直す:** 管理画面の「メールの送信」(SES)と「ジョブ」(SQS)です。
 

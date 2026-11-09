@@ -30,7 +30,7 @@ sequenceDiagram
 | --- | --- |
 | gem | `aws-actionmailer-ses` 1.2.0 (2026-05-21). Official from AWS (aws/aws-actionmailer-ses-ruby) |
 | Dependencies | `actionmailer` 7.1 or later, `aws-sdk-sesv2` |
-| Installation | Listed in Redmine's `Gemfile.local` and installed when the image is built |
+| Installation | A dependency of the plugin `redmine_serverless_ses`, installed with it when the image is built |
 | Delivery method | `:ses_v2` (SES v2 API). `:ses` (SES v1 API) also exists but is not used |
 | Bcc | The gem passes the message's Bcc to SES `bcc_addresses`. Bcc recipients do not appear in the message |
 

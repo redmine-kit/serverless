@@ -34,7 +34,7 @@
 - **migration と rake:** タスク用の関数で、手元のコマンド(`bin/rake`)から実行します。
 - **テスト:** 差し替えた処理ごとのテスト、Redmine 本体のテスト、イメージのテスト、Lambda の結合のテスト(LocalStack)、デプロイしたあとの確認を、CI で順に実行します([docs/testing.md](docs/ja/testing.md))。
 
-<a id="license"></a>
+<a id="sponsors"></a>
 
 ## スポンサー
 
@@ -44,6 +44,8 @@
     <img alt="LocalStack" src=".github/assets/localstack-logo.svg" width="120" height="28">
   </picture>
 </a>
+
+<a id="license"></a>
 
 ## ライセンス
 

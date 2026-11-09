@@ -55,6 +55,14 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | [migration.md](migration.md) | 古い Redmine(ほかの環境で動いているもの)からの移行。MySQL からの移し方 |
 | [sources.md](sources.md) | 参照した情報と確認日 |
 
+<a id="sponsors"></a>
+
 ## スポンサー
 
 <Sponsors><a href="https://localstack.cloud">LocalStack</a></Sponsors>
+
+<a id="license"></a>
+
+## ライセンス
+
+Serverless は、GNU General Public License バージョン 2 またはそれ以降のバージョンで公開しています。[LICENSE](../../LICENSE) を参照してください。Redmine projectとは関係ありません。

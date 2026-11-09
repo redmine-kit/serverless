@@ -95,11 +95,25 @@ The plugin tests the jobs on SQS through `aws-activejob-sqs`, the allowlist, the
 
 The plugins replace Redmine code with `prepend`. Redmine's tests check that Redmine's own behavior is not broken.
 
-- **How they run:** `bin/test-core` runs them in the `core-test` stage of the image's Dockerfile, which has the same Redmine source, `config/` files and `Gemfile.lock` as the image, plus the test gems and ImageMagick. The database is the PostgreSQL of `bin/test-services`, and the tests run in parallel with one worker per processor (`PARALLEL_WORKERS` changes the number). The image does not write `db/schema.rb` after migrations, because the file system on Lambda is read-only, but parallel tests load it, so `bin/test-core` writes it before the tests, after Redmine's and the plugins' migrations (`redmine:plugins:migrate`, as the deployment runs). Redmine skips the tests that need SCM repositories or an LDAP server, which this stage does not set up. The tests run with the plugins of the image installed: `redmine_serverless`, `redmine_serverless_s3`, `redmine_serverless_ses`, `redmine_serverless_sqs` and `redmine_serverless_ssm`.
-- **Known failures are listed with the reason:** Tests that fail because of a gem and not because of this image are listed in `test/core/known_failures.txt` with the reason, and `bin/test-core` leaves them out. A line is removed when the cause is fixed upstream. The gems are not held back to make such tests pass, because the newer versions can carry security fixes. For example, Nokogiri 1.19.5 changed how CSS selectors are read, which breaks `:match` with a regular expression in rails-dom-testing 2.3.0 ([rails/rails-dom-testing#136](https://github.com/rails/rails-dom-testing/issues/136)).
-- **When the plugins are inactive, Redmine's own tests pass as is:** The plugins do not enable replacements when their enabling conditions are not met (no S3 bucket settings, no `REDMINE_ROLE`, no SES settings). With the plugins installed, run Redmine's unit, functional and integration tests and check that all pass.
-- **When `redmine_serverless_s3` is active, the attachment tests pass with S3:** Of Redmine's attachment tests (`test/unit/attachment_test.rb`, `test/unit/attachment_transaction_test.rb`, `test/functional/attachments_controller_test.rb`, `test/functional/attachments_visibility_test.rb`, `test/integration/attachments_test.rb`), those that do not assume local files are run on moto with the plugin enabled. Those that assume local files (that check paths on disk directly) are excluded, with the reason written down.
-- **Watch the original code that is replaced:** For each replaced Redmine method, record the SHA256 of the original code and compare it with the current code in a test. If upgrading Redmine changes the original code, the test fails, which prompts a review of the replacement.
+### How they run
+
+`bin/test-core` runs them in the `core-test` stage of the image's Dockerfile, which has the same Redmine source, `config/` files and `Gemfile.lock` as the image, plus the test gems and ImageMagick. The tests run with the plugins of the image installed: `redmine_serverless`, `redmine_serverless_s3`, `redmine_serverless_ses`, `redmine_serverless_sqs` and `redmine_serverless_ssm`. The database is the PostgreSQL of `bin/test-services`, and the tests run in parallel with one worker per processor (`PARALLEL_WORKERS` changes the number).
+
+The image does not write `db/schema.rb` after migrations, because the file system on Lambda is read-only, but parallel tests load that file. So `bin/test-core` writes it before the tests, after Redmine's and the plugins' migrations (`redmine:plugins:migrate`, as the deployment runs). Redmine skips the tests that need SCM repositories or an LDAP server, which this stage does not set up.
+
+### Known failures
+
+Tests that fail because of a gem, not because of this image, are listed in `test/core/known_failures.txt` with the reason, and `bin/test-core` leaves them out. A line is removed when the cause is fixed upstream. The gems are not held back to make such tests pass, because newer versions can carry security fixes. For example, Nokogiri 1.19.5 changed how CSS selectors are read, which breaks `:match` with a regular expression in rails-dom-testing 2.3.0 ([rails/rails-dom-testing#136](https://github.com/rails/rails-dom-testing/issues/136)).
+
+### With the plugins inactive and active
+
+When their enabling conditions are not met (no S3 bucket settings, no `REDMINE_ROLE`, no SES settings), the plugins do not enable their replacements, so Redmine's unit, functional and integration tests must all pass with the plugins installed.
+
+With `redmine_serverless_s3` enabled, Redmine's attachment tests (`test/unit/attachment_test.rb`, `test/unit/attachment_transaction_test.rb`, `test/functional/attachments_controller_test.rb`, `test/functional/attachments_visibility_test.rb`, `test/integration/attachments_test.rb`) run on moto, except those that assume local files (that check paths on disk directly). These are excluded, with the reason written down.
+
+### Watching the replaced code
+
+For each replaced Redmine method, the SHA256 of the original code is recorded, and a test compares it with the current code. If a Redmine upgrade changes the original code, the test fails, which prompts a review of the replacement.
 
 ## Which substitute to use
 
@@ -216,8 +230,7 @@ CI sends the coverage of what this repository tests to Codecov, with a flag for 
 | `edge` | The functions that run at CloudFront (`edge/`) | Node.js's own coverage in `bin/test-edge` (`--experimental-test-coverage`, LCOV). No npm packages |
 | `image` | The image's own Ruby files (`image/*.rb`; now the task handler) | Ruby's `Coverage` in the task handler's unit tests in `bin/test-image` (`test/image/coverage.rb`, LCOV). No gem is added to the image |
 
-- **Upload:** `codecov/codecov-action` with an OIDC token, so no secret is needed. Until the Codecov GitHub App is installed for the repository, a failed upload does not fail the run.
-- **Not measured:** `bin/deploy` and the other shell scripts, which `bin/test-deploy` tests against a fake AWS CLI ([Deployment tests](#deployment-tests)); Redmine and the plugins in the image.
+The coverage is uploaded with `codecov/codecov-action` and an OIDC token, so no secret is needed. Until the Codecov GitHub App is installed for the repository, a failed upload does not fail the run. Not measured are `bin/deploy` and the other shell scripts, which `bin/test-deploy` tests against a fake AWS CLI ([Deployment tests](#deployment-tests)), and Redmine and the plugins in the image.
 
 ## Order in CI
 
@@ -237,13 +250,25 @@ flowchart TD
 
 Deployment is not part of CI: `bin/deploy` runs when an administrator decides to deploy ([deploy-config.md](deploy-config.md#deployment-commands)).
 
-- **Redmine versions (matrix):** The image tests and Redmine's own tests run twice: on the Redmine release the image uses (now 7.0.3, from the release tar.gz checked by SHA256, with `image/Gemfile.lock`), and on Redmine's `master` branch, which becomes the next release (7.1; there is no `7.1-stable` branch yet, checked on 2026-11-09). `master` is taken from GitHub without pinning (`REDMINE_BRANCH=master` for `bin/build-image` and `bin/test-core`), its gems are resolved without the lock, and its jobs do not fail the run (`continue-on-error`): they show early what the next release breaks. CI also runs weekly for that reason. An image built from `master` is never deployed. When 7.1 is released, the matrix moves to 7.1 (pinned) and the next `master`.
-- **Updates:** Dependabot opens weekly pull requests for the actions (with `.github/workflows/actions.lock`), the Docker images and the lint gems, for versions published at least 3 days ago (patches) or 7 days ago (others). `image/Gemfile.lock` cannot be updated by Dependabot: it is resolved from Redmine's Gemfile, which is not in this repository, together with `image/Gemfile.local` and the plugins' Gemfiles, inside the image. A weekly workflow (`.github/workflows/update-gems.yml`) runs `bin/update-gems --update` with Bundler's `--cooldown=7` and opens a pull request, and starts CI on its branch. The lock is committed so that every build installs the same, reviewed gem versions with their checksums.
-- **Database:** Plugin tests, Redmine's own tests and the image tests run on a PostgreSQL container of the same major version as RDS (the version is checked when building; [rds.md](rds.md#database)).
-- **On Redmine upgrades:** Reviewing the new migrations and running them on test databases are done in a separate workflow ([upgrade.md](upgrade.md)).
-- **AWS:** Tests on every commit use no AWS credentials. Only deployment and the checks after deployment connect to AWS, with roles in the production account assumed through OIDC ([iam.md](iam.md#role-for-deploying-code-github-actions)).
-- **LocalStack's auth token:** LocalStack needs an auth token in `LOCALSTACK_AUTH_TOKEN`. It is never written to the repository. Locally it is set in the shell (for example, read from the macOS Keychain); in CI it is the repository secret `LOCALSTACK_AUTH_TOKEN`. Without the token, `bin/test-services` skips LocalStack. Pull requests from forks get no secrets, so LocalStack is skipped there.
-- **Stop on failure:** If any step fails, nothing after it runs. If the checks after deployment fail, roll back to the previous image.
+If any step fails, nothing after it runs. If the checks after deployment fail, the deployment rolls back to the previous image.
+
+### Redmine versions
+
+The image tests and Redmine's own tests run twice (a matrix): on the Redmine release the image uses (now 7.0.3, from the release tar.gz checked by SHA256, with `image/Gemfile.lock`), and on Redmine's `master` branch, which becomes the next release (7.1; there is no `7.1-stable` branch yet, checked on 2026-11-09).
+
+`master` is taken from GitHub without pinning (`REDMINE_BRANCH=master` for `bin/build-image` and `bin/test-core`), its gems are resolved without the lock, and its jobs do not fail the run (`continue-on-error`). They are there to show early what the next release breaks, which is also why CI runs weekly. An image built from `master` is never deployed. When 7.1 is released, the matrix moves to 7.1 (pinned) and the next `master`. Reviewing the new migrations of an upgrade and running them on test databases is a separate workflow ([upgrade.md](upgrade.md)).
+
+### Updates
+
+Dependabot opens weekly pull requests for the actions (with `.github/workflows/actions.lock`), the Docker images and the lint gems, for versions published at least 3 days ago (patches) or 7 days ago (others).
+
+Dependabot cannot update `image/Gemfile.lock`, because it is resolved inside the image from Redmine's Gemfile, which is not in this repository, together with `image/Gemfile.local` and the plugins' Gemfiles. Instead, a weekly workflow (`.github/workflows/update-gems.yml`) runs `bin/update-gems --update` with Bundler's `--cooldown=7`, opens a pull request and starts CI on its branch. The lock is committed so that every build installs the same, reviewed gem versions with their checksums.
+
+### Services and credentials
+
+Plugin tests, Redmine's own tests and the image tests run on a PostgreSQL container of the same major version as RDS (the version is checked when building; [rds.md](rds.md#database)). The tests on every commit use no AWS credentials: only the deployment and the checks after deployment connect to AWS, with roles in the production account assumed through OIDC ([iam.md](iam.md#role-for-deploying-code-github-actions)).
+
+LocalStack needs an auth token in `LOCALSTACK_AUTH_TOKEN`, which is never written to the repository. Locally it is set in the shell (for example, read from the macOS Keychain); in CI it is the secret `LOCALSTACK_AUTH_TOKEN`. Without the token, `bin/test-services` skips LocalStack, and pull requests from forks get no secrets, so LocalStack is skipped there too.
 
 ## To verify
 

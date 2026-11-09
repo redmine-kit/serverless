@@ -117,11 +117,33 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 
 プラグインは、`prepend` で Redmine の処理を差し替えます。本体の動きを壊していないかを、Redmine のテストで確認します。
 
-- **実行のしかた:** `bin/test-core` は、イメージの Dockerfile の `core-test` の段で実行します。この段は、イメージと同じ Redmine のソース、`config/` のファイル、`Gemfile.lock` に、テスト用の gem と ImageMagick を足したものです。データベースは `bin/test-services` の PostgreSQL で、プロセッサーの数だけのワーカーで並列に実行します(数は `PARALLEL_WORKERS` で変えられます)。イメージは、Lambda のファイルシステムが読み取り専用なので、migration のあとに `db/schema.rb` を書きません。並列のテストはこのファイルを読むので、`bin/test-core` が、Redmine とプラグインの migration(デプロイと同じく `redmine:plugins:migrate` も)のあと、テストの前に書きます。SCM のリポジトリや LDAP のサーバーが要るテストは、この段で用意しないので、Redmine が飛ばします。テストは、イメージのプラグインを入れた状態で実行します。`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`、`redmine_serverless_ssm` です。
-- **理由の分かっている失敗は、理由と一緒に一覧にする:** このイメージのせいではなく、gem のせいで失敗するテストは、理由と一緒に `test/core/known_failures.txt` に載せ、`bin/test-core` はそれを外して実行します。原因が上流で直ったら、その行を消します。新しいバージョンにはセキュリティの修正が入ることがあるので、テストを通すために gem を古いバージョンに留めることはしません。たとえば、Nokogiri 1.19.5 で CSS のセレクターの読み方が変わり、rails-dom-testing 2.3.0 で正規表現を渡す `:match` が当たらなくなりました([rails/rails-dom-testing#136](https://github.com/rails/rails-dom-testing/issues/136))。
-- **プラグインが動かないときは、本体のテストがそのまま通る:** プラグインは、有効にする条件がそろわないとき(S3 のバケットの設定、`REDMINE_ROLE`、SES の設定がない)は、差し替えを有効にしません。プラグインを入れた状態で、Redmine のユニット、機能、統合のテストを実行し、すべて通ることを確認します。
-- **`redmine_serverless_s3` が動くときは、添付ファイルのテストを S3 の形で通す:** Redmine の添付ファイルのテスト(`test/unit/attachment_test.rb`、`test/unit/attachment_transaction_test.rb`、`test/functional/attachments_controller_test.rb`、`test/functional/attachments_visibility_test.rb`、`test/integration/attachments_test.rb`)のうち、ローカルのファイルを前提にしないものを、プラグインを有効にして moto の上で実行します。ローカルのファイルを前提にするもの(ディスクの上のパスを直接確認するもの)は、外す理由を書いて外します。
-- **差し替えた元のコードを見張る:** 差し替えた Redmine のメソッドごとに、元のコードの SHA256 を記録しておき、テストで今のコードと比べます。Redmine のバージョンアップで元のコードが変わったら、テストが失敗するので、差し替えを見直すきっかけになります。
+<a id="how-they-run"></a>
+
+### 実行のしかた
+
+`bin/test-core` は、イメージの Dockerfile の `core-test` の段で実行します。この段は、イメージと同じ Redmine のソース、`config/` のファイル、`Gemfile.lock` に、テスト用の gem と ImageMagick を足したものです。テストは、イメージのプラグイン(`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`、`redmine_serverless_ssm`)を入れた状態で実行します。データベースは `bin/test-services` の PostgreSQL で、プロセッサーの数だけのワーカーで並列に実行します(数は `PARALLEL_WORKERS` で変えられます)。
+
+イメージは、Lambda のファイルシステムが読み取り専用なので、migration のあとに `db/schema.rb` を書きません。しかし並列のテストはこのファイルを読むので、`bin/test-core` が、Redmine とプラグインの migration(デプロイと同じく `redmine:plugins:migrate` も)のあと、テストの前に書きます。SCM のリポジトリや LDAP のサーバーが要るテストは、この段で用意しないので、Redmine が飛ばします。
+
+<a id="known-failures"></a>
+
+### 理由の分かっている失敗
+
+このイメージのせいではなく gem のせいで失敗するテストは、理由と一緒に `test/core/known_failures.txt` に載せ、`bin/test-core` はそれを外して実行します。原因が上流で直ったら、その行を消します。新しいバージョンにはセキュリティの修正が入ることがあるので、テストを通すために gem を古いバージョンに留めることはしません。たとえば、Nokogiri 1.19.5 で CSS のセレクターの読み方が変わり、rails-dom-testing 2.3.0 で正規表現を渡す `:match` が当たらなくなりました([rails/rails-dom-testing#136](https://github.com/rails/rails-dom-testing/issues/136))。
+
+<a id="with-the-plugins-inactive-and-active"></a>
+
+### プラグインが動かないときと動くとき
+
+プラグインは、有効にする条件がそろわないとき(S3 のバケットの設定、`REDMINE_ROLE`、SES の設定がない)は、差し替えを有効にしません。そのため、プラグインを入れた状態でも、Redmine のユニット、機能、統合のテストがすべて通る必要があります。
+
+`redmine_serverless_s3` を有効にしたときは、Redmine の添付ファイルのテスト(`test/unit/attachment_test.rb`、`test/unit/attachment_transaction_test.rb`、`test/functional/attachments_controller_test.rb`、`test/functional/attachments_visibility_test.rb`、`test/integration/attachments_test.rb`)を moto の上で実行します。ローカルのファイルを前提にするもの(ディスクの上のパスを直接確認するもの)は、外す理由を書いて外します。
+
+<a id="watching-the-replaced-code"></a>
+
+### 差し替えた元のコードを見張る
+
+差し替えた Redmine のメソッドごとに、元のコードの SHA256 を記録しておき、テストで今のコードと比べます。Redmine のバージョンアップで元のコードが変わるとテストが失敗するので、差し替えを見直すきっかけになります。
 
 <a id="which-substitute-to-use"></a>
 
@@ -259,8 +281,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 | `edge` | CloudFront で動く関数(`edge/`) | `bin/test-edge` で、Node.js の標準の機能で測る(`--experimental-test-coverage`、LCOV)。npm のパッケージは使わない |
 | `image` | イメージに入れる自前の Ruby のファイル(`image/*.rb`。いまはタスクのハンドラー) | `bin/test-image` のハンドラーの単体テストで、Ruby の `Coverage` で測る(`test/image/coverage.rb`、LCOV)。イメージに gem は足さない |
 
-- **送り方:** `codecov/codecov-action` で、OIDC のトークンを使って送ります。シークレットは要りません。リポジトリに Codecov の GitHub App を入れるまでは、送るのに失敗しても CI を失敗にしません。
-- **測らないもの:** `bin/deploy` などのシェルスクリプト(`bin/test-deploy` が偽の AWS CLI でテストします。[デプロイのテスト](#deployment-tests))。イメージの中の Redmine とプラグイン。
+カバレッジは、`codecov/codecov-action` で OIDC のトークンを使って送るので、シークレットは要りません。リポジトリに Codecov の GitHub App を入れるまでは、送るのに失敗しても CI を失敗にしません。`bin/deploy` などのシェルスクリプト(`bin/test-deploy` が偽の AWS CLI でテストします。[デプロイのテスト](#deployment-tests))と、イメージの中の Redmine とプラグインは、測りません。
 
 <a id="order-in-ci"></a>
 
@@ -282,13 +303,31 @@ flowchart TD
 
 デプロイは CI に含めません。`bin/deploy` は、管理者がデプロイを決めたときに動かします([deploy-config.md](deploy-config.md#deployment-commands))。
 
-- **Redmine のバージョン(matrix):** イメージのテストと Redmine 本体のテストは、2 通りで実行します。イメージが使う Redmine のリリース(今は 7.0.3。SHA256 を確認したリリースの tar.gz と `image/Gemfile.lock`)と、次のリリース(7.1)になる Redmine の `master` のブランチです(`7.1-stable` のブランチはまだない。2026-11-09 に確認)。`master` は GitHub から固定せずに取り(`bin/build-image` と `bin/test-core` に `REDMINE_BRANCH=master`)、gem は lock を使わずに解決し、そのジョブは失敗しても実行全体を失敗にしません(`continue-on-error`)。次のリリースで壊れるところを、早めに見るためです。そのために、CI は毎週も動かします。`master` から作ったイメージは、デプロイしません。7.1 が出たら、matrix を 7.1(固定)と次の `master` に移します。
-- **更新:** Dependabot が、Actions(`.github/workflows/actions.lock` も)、Docker のイメージ、検査用の gem について、公開から 3 日(パッチ)か 7 日(ほか)たったバージョンへの更新の PR を毎週作ります。`image/Gemfile.lock` は、Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージの中で解決するためです。毎週のワークフロー(`.github/workflows/update-gems.yml`)が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作り、そのブランチで CI を動かします。lock をコミットしておくのは、どの組み立ても、確認済みの同じバージョンの gem を、チェックサムと一緒に入れるためです。
-- **データベース:** プラグイン、Redmine 本体、イメージのテストは、RDS と同じメジャーバージョンの PostgreSQL のコンテナで実行します(バージョンは作るときに確認する。[rds.md](rds.md#database))。
-- **Redmine のバージョンアップ:** 増えた migration の読み分けと、試験用のデータベースでの実行を、別のワークフローで行います([upgrade.md](upgrade.md))。
-- **AWS:** コミットのたびのテストは、AWS の認証情報を使いません。AWS に接続するのは、デプロイとデプロイしたあとの確認だけで、本番のアカウントのロールを OIDC で引き受けます([iam.md](iam.md#role-for-deploying-code-github-actions))。
-- **LocalStack の認証のトークン:** LocalStack は、`LOCALSTACK_AUTH_TOKEN` に認証のトークンが必要です。トークンはリポジトリに書きません。手元ではシェルで設定し(macOS のキーチェーンから読むなど)、CI ではリポジトリのシークレット `LOCALSTACK_AUTH_TOKEN` に置きます。トークンがないとき、`bin/test-services` は LocalStack を飛ばします。フォークからのプルリクエストにはシークレットが渡されないので、そこでも LocalStack を飛ばします。
-- **失敗したら止める:** どこかで失敗したら、それより後は実行しません。デプロイしたあとの確認で失敗したら、前のイメージに戻します。
+どこかの段で失敗したら、それより後は実行しません。デプロイしたあとの確認で失敗したら、前のイメージに戻します。
+
+<a id="redmine-versions"></a>
+
+### Redmine のバージョン
+
+イメージのテストと Redmine 本体のテストは、2 通り(matrix)で実行します。イメージが使う Redmine のリリース(今は 7.0.3。SHA256 を確認したリリースの tar.gz と `image/Gemfile.lock`)と、次のリリース(7.1)になる Redmine の `master` のブランチです(`7.1-stable` のブランチはまだない。2026-11-09 に確認)。
+
+`master` は GitHub から固定せずに取り(`bin/build-image` と `bin/test-core` に `REDMINE_BRANCH=master`)、gem は lock を使わずに解決し、そのジョブは失敗しても実行全体を失敗にしません(`continue-on-error`)。次のリリースで壊れるところを早めに見るためで、CI を毎週も動かすのはそのためです。`master` から作ったイメージは、デプロイしません。7.1 が出たら、matrix を 7.1(固定)と次の `master` に移します。バージョンアップで増えた migration の読み分けと、試験用のデータベースでの実行は、別のワークフローで行います([upgrade.md](upgrade.md))。
+
+<a id="updates"></a>
+
+### 更新
+
+Dependabot が、Actions(`.github/workflows/actions.lock` も)、Docker のイメージ、検査用の gem について、公開から 3 日(パッチ)か 7 日(ほか)たったバージョンへの更新の PR を毎週作ります。
+
+`image/Gemfile.lock` は Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージの中で解決するためです。代わりに、毎週のワークフロー(`.github/workflows/update-gems.yml`)が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作り、そのブランチで CI を動かします。lock をコミットしておくのは、どのビルドも、確認済みの同じバージョンの gem をチェックサムと一緒にインストールするためです。
+
+<a id="services-and-credentials"></a>
+
+### サービスと認証情報
+
+プラグイン、Redmine 本体、イメージのテストは、RDS と同じメジャーバージョンの PostgreSQL のコンテナで実行します(バージョンは作るときに確認する。[rds.md](rds.md#database))。コミットのたびのテストは、AWS の認証情報を使いません。AWS に接続するのはデプロイとデプロイしたあとの確認だけで、本番のアカウントのロールを OIDC で引き受けます([iam.md](iam.md#role-for-deploying-code-github-actions))。
+
+LocalStack は、`LOCALSTACK_AUTH_TOKEN` に認証のトークンが必要です。トークンはリポジトリに書きません。手元ではシェルで設定し(macOS のキーチェーンから読むなど)、CI ではシークレット `LOCALSTACK_AUTH_TOKEN` に置きます。トークンがないとき、`bin/test-services` は LocalStack を飛ばします。フォークからのプルリクエストにはシークレットが渡されないので、そこでも LocalStack を飛ばします。
 
 <a id="to-verify"></a>
 

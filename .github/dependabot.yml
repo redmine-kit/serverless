@@ -1,0 +1,34 @@
+# Update pull requests for the dependencies. New versions wait a few days
+# (3 for patches, 7 otherwise) before an update is proposed. Action updates
+# also update .github/workflows/actions.lock. image/Gemfile.lock is resolved
+# from Redmine's Gemfile inside the image, so bin/update-gems updates it.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+      semver-patch-days: 3
+  - package-ecosystem: docker
+    directory: /image
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+      semver-patch-days: 3
+  - package-ecosystem: docker-compose
+    directory: /test
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+      semver-patch-days: 3
+  - package-ecosystem: bundler
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+      semver-patch-days: 3

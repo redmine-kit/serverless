@@ -38,6 +38,13 @@
 
 ## スポンサー
 
+<a href="https://www.keyselect.co.jp/">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/keyselect-logo-dark.svg">
+    <img alt="KEY SELECT" src=".github/assets/keyselect-logo.svg" width="113" height="24">
+  </picture>
+</a>
+
 <a href="https://localstack.cloud">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/localstack-logo-dark.svg">

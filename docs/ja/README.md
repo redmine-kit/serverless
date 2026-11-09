@@ -59,7 +59,7 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 
 ## スポンサー
 
-<Sponsors><a href="https://localstack.cloud">LocalStack</a></Sponsors>
+<Sponsors><a href="https://www.keyselect.co.jp/">KEY SELECT</a> <a href="https://localstack.cloud">LocalStack</a></Sponsors>
 
 <a id="license"></a>
 

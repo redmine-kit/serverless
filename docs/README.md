@@ -53,7 +53,7 @@ Design documentation for Serverless. It describes a design that runs the latest 
 
 ## Sponsors
 
-<Sponsors><a href="https://localstack.cloud">LocalStack</a></Sponsors>
+<Sponsors><a href="https://www.keyselect.co.jp/">KEY SELECT</a> <a href="https://localstack.cloud">LocalStack</a></Sponsors>
 
 ## License
 

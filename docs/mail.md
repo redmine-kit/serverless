@@ -133,7 +133,11 @@ SES receipt rules are grouped in rule sets, and only one rule set can be active 
 - **Lambda permission:** The resource-based policy of `redmine-task` allows invocation by SES from the receipt rule. A Lambda function invoked from an SES rule must be in the same Region as SES (both Tokyo).
 - **Execution role:** Give the execution role of `redmine-task` read and write access to the mail bucket.
 - **Permission details:** In [iam.md](iam.md).
-- **Retention period:** Email moved to `processed/` and email left in `inbound/` (discarded or failed) are both deleted after 30 days by a lifecycle rule ([security.md](security.md#retention-periods)). Re-imports must be done within this period. A re-import is run locally with `bin/rake redmine_serverless_ses:receive_mail MESSAGE_ID=<message ID>` (runs in `redmine-task`), or from "Receiving email" in the administration screen (runs in `redmine-worker` as a job; [admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#receiving-email)).
+- **Retention period:** Email moved to `processed/` and email left in `inbound/` (discarded or failed) are both deleted after 30 days by a lifecycle rule ([security.md](security.md#retention-periods)). Re-imports must be done within this period. A re-import is run from "Receiving email" in the administration screen, where it runs in `redmine-worker` as a job ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#receiving-email)), or locally with this command, which runs in `redmine-task`:
+
+  ```sh
+  bin/rake redmine_serverless_ses:receive_mail MESSAGE_ID=<message ID>
+  ```
 
 ### Importing
 

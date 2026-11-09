@@ -25,7 +25,13 @@ Prices are for the Tokyo Region (ap-northeast-1), from the AWS price list (the d
 GuardDuty analyzes CloudTrail management events, VPC flow logs and DNS logs, and reports findings such as credentials used from unusual places, calls to known malicious hosts, and crypto mining.
 
 - **Who:** The adopter turns it on once per account and Region. A detector is one per account and Region, and an organization often turns it on for every account, so the templates do not create it.
-- **Steps:** In each Region used (the instance's Region, and us-east-1 for CloudFront's stacks): `aws guardduty create-detector --enable --region <Region>`. Send its findings to the alarm topic with an EventBridge rule if needed.
+- **Steps:** Turn it on in each Region used (the instance's Region, and us-east-1 for CloudFront's stacks):
+
+  ```sh
+  aws guardduty create-detector --enable --region <Region>
+  ```
+
+  Send its findings to the alarm topic with an EventBridge rule if needed.
 - **Cost:** CloudTrail events analyzed, USD 4.72 per million; VPC flow log and DNS log data analyzed, by volume (AWS price list for GuardDuty of 2026-10-30). The first 30 days are free. For a small instance, an estimate is under USD 1 per month; the 30-day trial shows the real figure on the GuardDuty usage page.
 - **Optional protection plans:** S3 protection (data events of all buckets), Lambda protection (network activity of the functions) and RDS protection cost extra and are not needed for this design. Malware Protection for S3 below is separate and does not need a detector.
 
@@ -60,7 +66,13 @@ A trail keeps the account's API calls (management events) as log files in S3, fo
 Security Hub (CSPM) checks the account against the AWS Foundational Security Best Practices standard and collects the findings of GuardDuty and IAM Access Analyzer in one place.
 
 - **Who:** The adopter, optionally. An organization often manages it centrally.
-- **Steps:** `aws securityhub enable-security-hub --enable-default-standards --region <Region>`. Its checks need AWS Config recording (below).
+- **Steps:** Turn it on in each Region used:
+
+  ```sh
+  aws securityhub enable-security-hub --enable-default-standards --region <Region>
+  ```
+
+  Its checks need AWS Config recording (below).
 - **Cost:** USD 0.001 per security check for the first 100,000 per account and Region per month (AWS price list for Security Hub of 2026-11-08), free for 30 days. The number of checks depends on the resources; the trial shows it (unchecked for this design).
 
 ## AWS Config
@@ -74,14 +86,26 @@ Config records the configuration of the resources and their changes.
 
 The templates turn on Block Public Access for every bucket they create. At the account level it also covers buckets made by hand.
 
-- **Steps:** Once per account: `aws s3control put-public-access-block --account-id <account> --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true`.
+- **Steps:** Once per account:
+
+  ```sh
+  aws s3control put-public-access-block --account-id <account> \
+    --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+  ```
+
 - **Cost:** Free.
 
 ## EBS default encryption
 
 Only the NAT instance (`network.mode` `nat`) has an EBS volume. The launch template encrypts it whatever the account's setting is.
 
-- **Account default (optional):** Per Region: `aws ec2 enable-ebs-encryption-by-default --region <Region>`. It uses the AWS managed key `aws/ebs`.
+- **Account default (optional):** Turn it on per Region:
+
+  ```sh
+  aws ec2 enable-ebs-encryption-by-default --region <Region>
+  ```
+
+  It uses the AWS managed key `aws/ebs`.
 - **Cost:** Free.
 
 ## The root user

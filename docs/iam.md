@@ -169,7 +169,11 @@ This role applies the shared base and instance stacks with `bin/deploy`. `deploy
 
 ## Account roles
 
-`infra/account.yaml` (the stack `redmine-account`) creates the roles above that are not per instance. An administrator applies it once per account with their own credentials (`bin/deploy --account`; [deploy-config.md](deploy-config.md#deployment-commands)).
+`infra/account.yaml` (the stack `redmine-account`) creates the roles above that are not per instance. An administrator applies it once per account with their own credentials ([deploy-config.md](deploy-config.md#deployment-commands)):
+
+```sh
+bin/deploy --account
+```
 
 | Resource | Contents |
 | --- | --- |

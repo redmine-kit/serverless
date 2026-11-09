@@ -29,7 +29,13 @@ AWS の側のセキュリティの設定をまとめます。それぞれにつ�
 GuardDuty は、CloudTrail の管理イベント、VPC のフローログ、DNS のログを分析し、ふだんと違う場所からの認証情報の利用、知られた悪いホストへの通信、暗号資産の採掘などを検出します。
 
 - **用意するもの:** 使う側が、アカウントとリージョンごとに 1 回有効にします。ディテクターはアカウントとリージョンごとに 1 つで、組織ですべてのアカウントに有効にすることも多いので、テンプレートでは作りません。
-- **手順:** 使うリージョン(インスタンスのリージョンと、CloudFront のスタックの us-east-1)ごとに `aws guardduty create-detector --enable --region <リージョン>`。要るなら、EventBridge のルールで、検出の結果をアラームのトピックに送ります。
+- **手順:** 使うリージョン(インスタンスのリージョンと、CloudFront のスタックの us-east-1)ごとに有効にします。
+
+  ```sh
+  aws guardduty create-detector --enable --region <リージョン>
+  ```
+
+  要るなら、EventBridge のルールで、検出の結果をアラームのトピックに送ります。
 - **費用:** 分析した CloudTrail のイベント 100 万件あたり USD 4.72。VPC のフローログと DNS のログは、分析した量に応じて(GuardDuty の AWS の価格表、2026-10-30)。最初の 30 日は無料です。小さなインスタンスなら、月に USD 1 未満の見込みです。30 日の無料の期間に、GuardDuty の使用量の画面で実際の額がわかります。
 - **任意の保護のプラン:** S3 の保護(すべてのバケットのデータイベント)、Lambda の保護(関数の通信)、RDS の保護は別に費用がかかり、この設計には要りません。下の Malware Protection for S3 は別のもので、ディテクターは要りません。
 
@@ -72,7 +78,13 @@ GuardDuty は、CloudTrail の管理イベント、VPC のフローログ、DNS 
 Security Hub(CSPM)は、AWS の基礎的なセキュリティのベストプラクティスの基準に照らしてアカウントを確認し、GuardDuty と IAM Access Analyzer の結果を 1 か所に集めます。
 
 - **用意するもの:** 使う側が、任意で有効にします。組織でまとめて管理することも多いです。
-- **手順:** `aws securityhub enable-security-hub --enable-default-standards --region <リージョン>`。その確認には、AWS Config の記録(下)が要ります。
+- **手順:** 使うリージョンごとに有効にします。
+
+  ```sh
+  aws securityhub enable-security-hub --enable-default-standards --region <リージョン>
+  ```
+
+  その確認には、AWS Config の記録(下)が要ります。
 - **費用:** アカウントとリージョンごとに、月の最初の 100,000 回の確認は 1 回 USD 0.001(Security Hub の AWS の価格表、2026-11-08)。30 日は無料です。確認の回数はリソースの数で変わり、無料の期間にわかります(この設計での額は未確認)。
 
 <a id="aws-config"></a>
@@ -90,7 +102,13 @@ Config は、リソースの構成とその変化を記録します。
 
 テンプレートは、作るどのバケットにも、パブリックアクセスのブロックを有効にします。アカウントで有効にすると、手で作ったバケットも含みます。
 
-- **手順:** アカウントごとに 1 回、`aws s3control put-public-access-block --account-id <account> --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true`。
+- **手順:** アカウントごとに 1 回、実行します。
+
+  ```sh
+  aws s3control put-public-access-block --account-id <account> \
+    --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+  ```
+
 - **費用:** 無料です。
 
 <a id="ebs-default-encryption"></a>
@@ -99,7 +117,13 @@ Config は、リソースの構成とその変化を記録します。
 
 EBS のボリュームを持つのは、NAT インスタンス(`network.mode` が `nat`)だけです。起動テンプレートが、アカウントの設定にかかわらず、そのボリュームを暗号化します。
 
-- **アカウントの既定(任意):** リージョンごとに `aws ec2 enable-ebs-encryption-by-default --region <リージョン>`。AWS 管理の鍵 `aws/ebs` を使います。
+- **アカウントの既定(任意):** リージョンごとに有効にします。
+
+  ```sh
+  aws ec2 enable-ebs-encryption-by-default --region <リージョン>
+  ```
+
+  AWS 管理の鍵 `aws/ebs` を使います。
 - **費用:** 無料です。
 
 <a id="the-root-user"></a>

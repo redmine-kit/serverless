@@ -195,7 +195,11 @@ flowchart LR
 
 ## アカウントのロール
 
-`infra/account.yaml`(スタック `redmine-account`)が、上のロールのうち、インスタンスごとではないものを作ります。管理者が、自分の認証情報で、アカウントごとに 1 回当てます(`bin/deploy --account`。[deploy-config.md](deploy-config.md#deployment-commands))。
+`infra/account.yaml`(スタック `redmine-account`)が、上のロールのうち、インスタンスごとではないものを作ります。管理者が、自分の認証情報で、アカウントごとに 1 回当てます([deploy-config.md](deploy-config.md#deployment-commands))。
+
+```sh
+bin/deploy --account
+```
 
 | リソース | 中身 |
 | --- | --- |

@@ -155,7 +155,11 @@ SES の受信のルールは、ルールのセットにまとめ、リージョ�
 - **Lambda の権限:** `redmine-task` のリソースベースのポリシーで、受信のルールからの SES の呼び出しを許します。SES のルールから呼ぶ Lambda は、SES と同じリージョンに置く必要があります(同じ東京)。
 - **実行ロール:** `redmine-task` の実行ロールに、メールのバケットの読み書きを付けます。
 - **権限の詳しい内容:** [iam.md](iam.md) にあります。
-- **残す期間:** `processed/` に移したメールも、`inbound/` に残ったメール(捨てたもの、失敗したもの)も、ライフサイクルで 30 日後に消します([security.md](security.md#retention-periods))。取り込み直しは、この期間のうちに行います。取り込み直しは、手元から `bin/rake redmine_serverless_ses:receive_mail MESSAGE_ID=<メッセージ ID>`(`redmine-task` で動く)か、管理画面の「メールの受信」(ジョブとして `redmine-worker` で動く。[admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#receiving-email))で行います。
+- **残す期間:** `processed/` に移したメールも、`inbound/` に残ったメール(捨てたもの、失敗したもの)も、ライフサイクルで 30 日後に消します([security.md](security.md#retention-periods))。取り込み直しは、この期間のうちに行います。取り込み直しは、管理画面の「メールの受信」から行うか(ジョブとして `redmine-worker` で動く。[admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#receiving-email))、手元から次のコマンドで行います(`redmine-task` で動く)。
+
+  ```sh
+  bin/rake redmine_serverless_ses:receive_mail MESSAGE_ID=<メッセージ ID>
+  ```
 
 <a id="importing"></a>
 

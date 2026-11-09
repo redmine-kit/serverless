@@ -14,7 +14,13 @@ Serverless のテストの計画です。自前のプラグイン、Redmine 本�
 - **このプロジェクトの LocalStack:** このプロジェクトの CI は、redmine-kit の組織の LocalStack のライセンス(2026-11-09 から Ultimate)を使い、シークレット `LOCALSTACK_AUTH_TOKEN` でジョブに渡します。Serverless を使う側がテストを動かすときは、その使い方を認める自分の LocalStack のライセンスが要ります。なければ、このプロジェクトの CI の結果と、自分のデプロイしたあとの確認で確認します。
 - **本物の AWS では、デプロイしたあとに確認する:** Lambda、CloudFront、SES の受信など、手元で再現できないものは、デプロイしたあとの確認で確認します。
 - **`bin/test` にまとめるまで:** ここまでに作った段は、別々のスクリプトです。`bin/lint`(静的な検査)、`bin/test-services`(PostgreSQL、moto、LocalStack を立て、それぞれ応答するか確認する)、`bin/build-image`、`bin/test-image`(イメージのテスト)、`bin/test-core`(Redmine 本体のテスト)、`bin/update-gems`(`image/Gemfile.lock` を書く)です。
-- **プラグインも同時に直すとき:** イメージは、プラグインを、`image/Gemfile.lock` のバージョンの gem として、GitHub Packages から入れます([architecture.md](architecture.md#distribution))。`REDMINE_SERVERLESS_SSM_DIR` か `REDMINE_SERVERLESS_S3_DIR` にプラグインのチェックアウトを指定すると、イメージを作るスクリプトは、入れた gem を、その作業ツリーで置き換えます(`bin/lib/plugin.sh`)。たとえば `REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image` です。スクリプトは、GitHub Packages のための Bundler の認証情報を、`gh` のログインか、`BUNDLE_RUBYGEMS__PKG__GITHUB__COM` から取ります(CI はそれを `GITHUB_TOKEN` から設定します)。
+- **プラグインも同時に直すとき:** イメージは、プラグインを、`image/Gemfile.lock` のバージョンの gem として、GitHub Packages から入れます([architecture.md](architecture.md#distribution))。`REDMINE_SERVERLESS_SSM_DIR` か `REDMINE_SERVERLESS_S3_DIR` にプラグインのチェックアウトを指定すると、イメージを作るスクリプトは、入れた gem を、その作業ツリーで置き換えます(`bin/lib/plugin.sh`)。たとえば、このリポジトリの隣にある SSM のプラグインのチェックアウトでイメージをテストするときは、次のようにします。
+
+  ```sh
+  REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
+  ```
+
+  スクリプトは、GitHub Packages のための Bundler の認証情報を、`gh` のログインか、`BUNDLE_RUBYGEMS__PKG__GITHUB__COM` から取ります(CI はそれを `GITHUB_TOKEN` から設定します)。
 - **手元のテストは `bin/test`:** 手元のテストは、このリポジトリの `bin/test` で実行します。Makefile は置きません。`bin/test` は、Docker で、テスト用のイメージと、PostgreSQL、moto、LocalStack のコンテナを立てて動かすので、手元に Ruby や PostgreSQL が無くても実行できます。このリポジトリの `bin/rake` と `bin/rails` は、デプロイした Redmine に向けて動くので、テストには使いません([tasks.md](tasks.md#usage-planned))。
 
 ```sh

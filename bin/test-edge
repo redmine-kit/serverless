@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Tests of the functions that run at CloudFront (edge/): redmine-body-hash
+# (Lambda@Edge) and redmine-incoming-size (CloudFront Functions), with
+# node:test in the Node.js image. No npm packages.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+NODE=node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f
+docker run --rm -v "$PWD:/work:ro" -w /work "$NODE" sh -c '
+  node --check edge/body-hash/index.js &&
+  node --check edge/incoming-size/index.js &&
+  node --test "edge/**/*.test.mjs"'

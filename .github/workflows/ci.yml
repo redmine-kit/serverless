@@ -27,6 +27,16 @@ jobs:
           persist-credentials: false
       - run: bin/lint
 
+  # The functions that run at CloudFront (edge/).
+  edge:
+    needs: static
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: bin/test-edge
+
   services:
     needs: static
     runs-on: ubuntu-24.04

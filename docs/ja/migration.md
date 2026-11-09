@@ -49,7 +49,7 @@ flowchart TD
   a["1. 止めて<br>書き出す"] --> b["2. 一時の<br>MySQL 8 に<br>戻す"]
   b --> c["3. MySQL のまま<br>7.0.3 に上げる"]
   c --> d["4. 一時の<br>PostgreSQL に<br>空のスキーマ"]
-  d --> e["5. データ<br>だけを写す"]
+  d --> e["5. データ<br>だけをコピーする"]
   e --> f["6. 確認する"]
 ```
 
@@ -57,25 +57,25 @@ flowchart TD
 2. **一時の MySQL 8 に戻す:** 書き出したものを、一時の MySQL 8.0 か 8.4(Docker か、スナップショットから作った一時の RDS for MySQL)に戻します。移行元が MySQL 5.7 なら、ここで 8 に上がります。文字コードが `utf8`(3 バイト)のテーブルは、`utf8mb4` に替えます。
 3. **MySQL のまま 7.0.3 に上げる:** 一時の MySQL の上で、Redmine 7.0.3 の `db:migrate` を実行します。Redmine 7.0 は MySQL 8.0〜8.4 に対応しているので、古い Redmine を動かさずに、新しい Redmine で上げられます。古いバージョンから一気に上げてよいかは、Redmine の更新の手順(RedmineUpgrade の wiki)で確認します。
 4. **一時の PostgreSQL に空のスキーマ:** 一時の PostgreSQL に、Redmine 7.0.3 の標準の `db:migrate` と `redmine:plugins:migrate` で、空のスキーマを作ります(初めのデータは入れない)。スキーマは、変換のツールに作らせず、Redmine の migration で作ります。
-5. **データだけを写す:** 一時の MySQL(7.0.3 のスキーマ)から、一時の PostgreSQL の空のスキーマに、データだけを写します(下の「写し方」)。
+5. **データだけをコピーする:** 一時の MySQL(7.0.3 のスキーマ)から、一時の PostgreSQL の空のスキーマに、データだけをコピーします(下の「コピーの方法」)。
 6. **確認する:** 下の「確認すること」を通します。
 
-写す前に、一時の MySQL で、ログイン名が大文字と小文字だけ違う利用者がいないかを調べます(`SELECT LOWER(login), COUNT(*) FROM users GROUP BY LOWER(login) HAVING COUNT(*) > 1`)。Redmine 7.0 は、PostgreSQL に `lower(login)` の一意の索引を作る(migration `20260319062845`)ので、そういう利用者がいると、写すときに失敗します。いれば、移行前に、どちらかのログイン名を変えるか、片方をまとめます。
+コピーする前に、一時の MySQL で、ログイン名が大文字と小文字だけ違う利用者がいないかを調べます(`SELECT LOWER(login), COUNT(*) FROM users GROUP BY LOWER(login) HAVING COUNT(*) > 1`)。Redmine 7.0 は、PostgreSQL に `lower(login)` の一意の索引を作る(migration `20260319062845`)ので、そういう利用者がいると、コピーするときに失敗します。いれば、移行前に、どちらかのログイン名を変えるか、片方をまとめます。
 
 <a id="how-to-copy"></a>
 
-### 写し方
+### コピーの方法
 
 | 項目 | 決まり |
 | --- | --- |
 | ツール | Embulk(`embulk-input-mysql`、`embulk-output-postgresql`)を候補にする。テーブルごとに、PostgreSQL の側のテーブルを空にしてから入れる(`truncate_insert`)。pgloader の最後のリリースは 3.6.9(2022-10)で、Redmine での実践の記録では上手くいかなかったとされている(下の「参考」) |
-| 写さないテーブル | `schema_migrations` と `ar_internal_metadata`(手順 4 の migration で作られている)、入れないプラグインのテーブル(プラグインのデータは移らない) |
-| バイナリの列 | `wiki_content_versions.data`(圧縮した wiki の本文)は、MySQL で base64 の文字にして写し、PostgreSQL で戻す |
+| コピーしないテーブル | `schema_migrations` と `ar_internal_metadata`(手順 4 の migration で作られている)、入れないプラグインのテーブル(プラグインのデータは移らない) |
+| バイナリの列 | `wiki_content_versions.data`(圧縮した wiki の本文)は、MySQL で base64 の文字にしてコピーし、PostgreSQL で戻す |
 | 真偽値 | MySQL の `tinyint(1)` の 0 と 1 を、PostgreSQL の `boolean` に入れる |
-| 時刻 | Redmine は時刻を UTC で保存する。ツールの時刻の扱いで、写したあとに時刻がずれないようにする(写したあとに、いくつかの行の `created_on` を比べる) |
+| 時刻 | Redmine は時刻を UTC で保存する。ツールの時刻の扱いで、コピーしたあとに時刻がずれないようにする(コピーしたあとに、いくつかの行の `created_on` を比べる) |
 | 0 の日付 | `0000-00-00` のような値があれば、`NULL` にする |
-| ID の続き | 写したあと、ID を持つテーブルごとに、ID の続きの番号(シーケンス)を、ID の最大に合わせる(`setval`) |
-| 順番 | 外部キーのあるテーブル(OAuth の表など)は、参照される側を先に写す |
+| ID の続き | コピーしたあと、ID を持つテーブルごとに、ID の続きの番号(シーケンス)を、ID の最大に合わせる(`setval`) |
+| 順番 | 外部キーのあるテーブル(OAuth の表など)は、参照される側を先にコピーする |
 
 <a id="to-verify"></a>
 
@@ -90,7 +90,7 @@ flowchart TD
 
 ### 参考
 
-Redmine 6.1 を MySQL 8.0 から PostgreSQL 18 に移した記録があります(@SKYS 氏「Redmine の DB を MySQL から PostgreSQL へ移行」、Qiita、2026-08-09。公式の情報ではありません)。スキーマを Redmine の migration で作り、Embulk でデータだけを写し、`schema_migrations` を除き、シーケンスを直し、`wiki_content_versions.data` を base64 で写す、という進め方です。この資料の「写し方」は、これを参考にしています。
+Redmine 6.1 を MySQL 8.0 から PostgreSQL 18 に移した記録があります(@SKYS 氏「Redmine の DB を MySQL から PostgreSQL へ移行」、Qiita、2026-08-09。公式の情報ではありません)。スキーマを Redmine の migration で作り、Embulk でデータだけをコピーし、`schema_migrations` を除き、シーケンスを直し、`wiki_content_versions.data` を base64 でコピーする、という進め方です。この資料の「コピーの方法」は、これを参考にしています。
 
 <a id="plugins-and-themes"></a>
 
@@ -104,5 +104,5 @@ Redmine 6.1 を MySQL 8.0 から PostgreSQL 18 に移した記録があります
 ## 確認すること
 
 - 古いバージョンから 7.0 へ、まとめて migration できるか
-- Embulk で、Redmine のすべてのテーブルを写せるか(バイナリの列、時刻、真偽値)
-- S3 のプラグインのバケットのキーの形と、新しいキーの形への写し方
+- Embulk で、Redmine のすべてのテーブルをコピーできるか(バイナリの列、時刻、真偽値)
+- S3 のプラグインのバケットのキーの形と、新しいキーの形へのコピーの方法

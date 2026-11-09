@@ -146,7 +146,7 @@ bin/deploy path/to/redmine.json --code-only  # イメージだけを更新する
 | 2 | 共有の土台のスタック(`redmine-shared` と、us-east-1 の `redmine-shared-edge`)を、作るか更新する。`mail.receive` なら、共有の受信のルールのセットを有効にする |
 | 3 | 秘密の値が SSM に無ければ作る。あれば変えない(下の「秘密の値」)。RDS は作るときにデータベースのパスワードを SSM から読むので、インスタンスのスタックより先に行う |
 | 4 | us-east-1 の `<instance>-edge`(証明書と Web ACL)を、作るか更新する。Lambda@Edge が各リージョンに作ったロググループに、`logs.retentionDays` を当てる([security.md](security.md#retention-periods)) |
-| 5 | イメージを、crane で digest のまま、そのアカウントの ECR に写す(Lambda は、同じリージョンの ECR のイメージしか使えない)。リポジトリのタグは変えられないので、タグは digest から作る(`sha256-<hex>`)。すでにあるイメージは写さない |
+| 5 | イメージを、crane で digest のまま、そのアカウントの ECR にコピーする(Lambda は、同じリージョンの ECR のイメージしか使えない)。リポジトリのタグは変えられないので、タグは digest から作る(`sha256-<hex>`)。すでにあるイメージはコピーしない |
 | 6 | イメージの中のアセットを、保守の画面(`deploy/maintenance.html`)と一緒に S3(`/assets/`)に同期する。ブラウザーで開いたままのページのために、古いファイルは残す |
 | 7 | 初めてのときは、インスタンスのスタック `<instance>` を、そのイメージで作る。2 回目からは、`redmine-task` が今動かしているイメージのままスタックを更新し、そのあと `redmine-task` に新しいイメージを入れる。それから `redmine-task` で `db:migrate` と `redmine:plugins:migrate` を実行する |
 | 8 | 初めてのときは、`redmine-task` で初めのデータを入れる(`redmine:load_default_data`。言語は `redmine.settings.default_language`。なければ英語) |
@@ -160,9 +160,9 @@ bin/deploy path/to/redmine.json --code-only  # イメージだけを更新する
 - **`--account`:** `infra/account.yaml`(スタック `redmine-account`)を、管理者の自分の認証情報で当てます。それより前には、デプロイ用のロールも CloudFormation のサービスロールも無いからです。アカウントごとに 1 回、最初のデプロイの前に行います。
 - **CloudFormation のロール:** どのスタックも、サービスロール `redmine-cfn-exec` を付けた変更セットで当てます。デプロイ用のロールは、自分ではリソースを作れません([iam.md](iam.md#role-for-deploying-infrastructure))。
 - **保守の画面:** `redmine-web` と `redmine-worker` の同時実行数の予約を 0 にすると、書き込みを止められます(事故のときなど。[security.md](security.md))。CloudFront は、関数 URL からの 502、503、504 に、S3 の保守の画面(`/assets/maintenance.html`)を返します。`redmine-web` の同時実行数の予約が 0 のあいだ、関数 URL は 429 を返します。CloudFront のエラーの応答の設定は 429 を扱えないので、ブラウザーにはその 429 が届きます(下の「確認すること」)。
-- **同じ設定なら何も変えない:** 変更のない変更セットは消し、スタックはそのままにします。イメージは写し直さず、マイグレーションも何もしません。
+- **同じ設定なら何も変えない:** 変更のない変更セットは消し、スタックはそのままにします。イメージはコピーし直さず、マイグレーションも何もしません。
 - **多くのインスタンスを立てるとき:** インスタンスの数だけ、同じコマンドを繰り返します。順番(先に試す小さなインスタンスから)は、使う側で決めます。
-- **イメージ:** このプロジェクトの CI が、イメージを GitHub Packages のコンテナのレジストリ(`ghcr.io`)に公開します([architecture.md](architecture.md#distribution))。デプロイのコマンドは digest のまま写すので、ECR のイメージも同じ digest です。
+- **イメージ:** このプロジェクトの CI が、イメージを GitHub Packages のコンテナのレジストリ(`ghcr.io`)に公開します([architecture.md](architecture.md#distribution))。デプロイのコマンドは digest のままコピーするので、ECR のイメージも同じ digest です。
 
 <a id="secrets"></a>
 
@@ -201,6 +201,6 @@ CloudFormation は SecureString のパラメーターを作れないので、`bi
 
 - SES の受信のルールのセットを共有の土台に置き、インスタンスのスタックからルールを足す形が、CloudFormation で作れるか
 - RDS のインスタンスが、作るときと更新のときに、`ssm-secure` の動的な参照でパスワードを受け取れるか(CloudFormation の資料では対応しているプロパティ。まだ試していない)
-- crane が `ghcr.io` から写したイメージ(同じ digest)を、Lambda が動かせるか。初めて写すときにかかる時間
+- crane が `ghcr.io` からコピーしたイメージ(同じ digest)を、Lambda が動かせるか。初めてコピーするときにかかる時間
 - 本物のアカウントでの `bin/deploy` の全体。今は、偽の AWS CLI と LocalStack でだけテストしている([testing.md](testing.md#deployment-tests))
 - `redmine-web` の同時実行数の予約が 0 のあいだ、ブラウザーに何が見えるか(CloudFront を通った関数 URL の 429)。保守の画面を出す別の方法が要るか

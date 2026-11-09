@@ -89,7 +89,7 @@
 | [Route 53 の価格表](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/current/index.json) | ホストゾーン 1 つで月 0.50 ドル(25 個まで)、別名のレコードへの AWS の中の問い合わせは無料、ほかの問い合わせは 100 万件あたり 0.40 ドル(2026-11-04 公開) |
 | [Cloudflare の CNAME の平坦化の設定](https://developers.cloudflare.com/dns/cname-flattening/set-up-cname-flattening/) | 頂点とプロキシを通すレコードは、どのプランでも平坦化される。有料のプランでは、すべての CNAME か、レコードごとに平坦化できる。同じ名前の MX については書かれていない |
 | 価格表(東京。AmazonEC2 2026-11-07、AmazonECS 2026-10-19、AWSELB 2026-11-05、AmazonLightsail 2026-09-15 公開) | EC2 t4g.small 1 時間 0.0216 ドル、gp3 1 GB あたり月 0.096 ドル、Fargate の Arm の vCPU 1 時間 0.04045 ドルとメモリ 1 GB 1 時間 0.00442 ドル、ALB 1 時間 0.0243 ドルと LCU 1 時間 0.008 ドル、Lightsail 2 GB 1 時間 0.01612 ドル(パブリック IPv4 を含む)。[comparison.md](comparison.md) |
-| [Redmine の DB を MySQL から PostgreSQL へ移行(Qiita)](https://qiita.com/SKYS/items/2004c60000ddfeaa20b3) | 公式でない実践の記録(@SKYS 氏、2026-08-09)。Redmine 6.1、MySQL 8.0 から PostgreSQL 18。スキーマは Redmine の migration で作り、Embulk でデータだけを写す。`schema_migrations` を除く、シーケンスを直す、`wiki_content_versions.data` を base64 で写す。pgloader 3.6.9 では上手くいかなかった。[migration.md](migration.md#migrating-from-mysql) |
+| [Redmine の DB を MySQL から PostgreSQL へ移行(Qiita)](https://qiita.com/SKYS/items/2004c60000ddfeaa20b3) | 公式でない実践の記録(@SKYS 氏、2026-08-09)。Redmine 6.1、MySQL 8.0 から PostgreSQL 18。スキーマは Redmine の migration で作り、Embulk でデータだけをコピーする。`schema_migrations` を除く、シーケンスを直す、`wiki_content_versions.data` を base64 でコピーする。pgloader 3.6.9 では上手くいかなかった。[migration.md](migration.md#migrating-from-mysql) |
 | [dimitri/pgloader](https://github.com/dimitri/pgloader) | 最後のリリースは v3.6.9(2022-10-24)。リポジトリは更新が続いている(2026-09-14) |
 | [CloudFront の料金](https://aws.amazon.com/cloudfront/pricing/) | 定額プランの Free は月 0 ドル、月 100 万リクエストと 100 GB、WAF のルール 5 つまで。ログ、独自のキャッシュのルール、VPC の中のオリジンは含まれない |
 | [CloudFront の quotas](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html) | オリジンの応答の待ち時間は 1〜120 秒 |
@@ -129,7 +129,7 @@
 | [GitHub Packages の権限](https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages)、[RubyGems のレジストリ](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-rubygems-registry) | 公開のパッケージを認証なしで取れるのは、コンテナのレジストリだけ。RubyGems のレジストリは、公開の gem でも、入れるのにトークンが要る(2026-11-09 に確認)。[architecture.md](architecture.md#distribution) |
 | [localstack/localstack](https://github.com/localstack/localstack) | GitHub のリポジトリがアーカイブされている(2026-03)。リポジトリの代わりに、料金のプランのある製品(LocalStack for AWS)を使う |
 | [minio/minio](https://github.com/minio/minio) | GitHub のリポジトリがアーカイブされている(2026-04)。テストの道具には選ばない |
-| [Embulk](https://www.embulk.org/)、[embulk-input-mysql と embulk-output-postgresql](https://github.com/embulk/embulk-input-jdbc) | MySQL から PostgreSQL にデータだけを写す道具([migration.md](migration.md#migrating-from-mysql))。使うバージョンは、作るときに確認する(未確認) |
+| [Embulk](https://www.embulk.org/)、[embulk-input-mysql と embulk-output-postgresql](https://github.com/embulk/embulk-input-jdbc) | MySQL から PostgreSQL にデータだけをコピーする道具([migration.md](migration.md#migrating-from-mysql))。使うバージョンは、作るときに確認する(未確認) |
 | [LocalStack の Lambda](https://docs.localstack.cloud/aws/services/lambda/) | Lambda と関数 URL は Hobby から使える。コンテナイメージのプランの決まりは書かれていない(2026-11-09 に確認) |
 | [LocalStack の料金](https://www.localstack.cloud/pricing) | Hobby は無料で、非商用の利用に限る(商用の目的での利用を規約で禁じる)。Hobby には Lambda、S3、SQS、SSM、IAM、SES(v1)があり、SES v2、RDS、CloudFront はない。CI の利用は、プランごとの決まりと Fair Use の範囲(2026-11-09 に確認) |
 

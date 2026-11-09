@@ -70,7 +70,7 @@ flowchart LR
 
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
-| `s3:GetObject`、`s3:PutObject`、`s3:DeleteObject` | 添付ファイルのバケットの `files/*`、`thumbnails/*`、`imports/*`、`incoming/*`、`tmp/*` | 添付ファイルの保存、登録のときのチェックサム付きの `HeadObject` と写し、`/tmp` のキャッシュ、削除、一括のダウンロードの仮のファイル([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html)) |
+| `s3:GetObject`、`s3:PutObject`、`s3:DeleteObject` | 添付ファイルのバケットの `files/*`、`thumbnails/*`、`imports/*`、`incoming/*`、`tmp/*` | 添付ファイルの保存、登録のときのチェックサム付きの `HeadObject` とコピー、`/tmp` のキャッシュ、削除、一括のダウンロードの仮のファイル([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html)) |
 | `s3:ListBucket` | 添付ファイルのバケット | ないオブジェクトへの `HeadObject` を、403 ではなく 404 として受け取る。サムネイルをプレフィックスで消す |
 | `sqs:SendMessage` | ジョブのキュー | ジョブを積む([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | ジョブのキューとデッドレターキュー | 管理画面の「ジョブ」 |
@@ -165,7 +165,7 @@ flowchart LR
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
 | `ecr:GetAuthorizationToken` | `*`(対象を絞れない) | ECR へのログイン |
-| `ecr:DescribeImages`、`ecr:BatchCheckLayerAvailability`、`ecr:InitiateLayerUpload`、`ecr:UploadLayerPart`、`ecr:CompleteLayerUpload`、`ecr:PutImage`、`ecr:BatchGetImage`、`ecr:GetDownloadUrlForLayer` | Redmine のリポジトリ | イメージを写す(すでにあるイメージは写さない) |
+| `ecr:DescribeImages`、`ecr:BatchCheckLayerAvailability`、`ecr:InitiateLayerUpload`、`ecr:UploadLayerPart`、`ecr:CompleteLayerUpload`、`ecr:PutImage`、`ecr:BatchGetImage`、`ecr:GetDownloadUrlForLayer` | Redmine のリポジトリ | イメージをコピーする(すでにあるイメージはコピーしない) |
 | `s3:PutObject`、`s3:GetObject`、`s3:ListBucket` | アセットのバケット(`*-assets-<account>-*` と、その `assets/` の下のオブジェクト) | アセットの同期([lambda.md](lambda.md#serving-assets)) |
 | `lambda:UpdateFunctionCode`、`lambda:GetFunction`、`lambda:GetFunctionConfiguration`、`lambda:InvokeFunction` | タグ `redmine:instance` を持つ関数 | イメージの更新、更新が終わるのを待つこと、`redmine-task` での migration([tasks.md](tasks.md#migrations-during-deployment)) |
 | `cloudformation:DescribeStacks` | アカウントのスタック | 出力(リポジトリ、バケット、ディストリビューション)を読む |

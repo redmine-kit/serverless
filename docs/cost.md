@@ -39,6 +39,7 @@ The route from the VPC to AWS services is added to the subtotal ([rds.md](rds.md
 | --- | --- | --- |
 | Provisioned Concurrency (one 2 GB environment) | about $23 | To remove the wait for start-up |
 | CloudFront flat-rate Pro plan | $15 (log storage and search are charged separately) | To keep CloudFront and WAF logs ([security.md](security.md#plan-and-cost)) |
+| A shared cache (ElastiCache Serverless for Valkey) | about $7.4 (one `cache.t4g.micro` node: $14.60) | To share formatted text and search results across environments ([cache.md](cache.md#when-a-shared-cache-is-worth-it)) |
 
 What to add to the database and the route (Multi-AZ, a NAT Gateway, RDS Proxy and so on) is in [rds.md](rds.md#cost).
 

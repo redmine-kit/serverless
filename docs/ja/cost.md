@@ -43,6 +43,7 @@
 | --- | --- | --- |
 | Provisioned Concurrency(2 GB を 1 つ) | 約 23 ドル | 起動待ちをなくしたいとき |
 | CloudFront の定額プラン Pro | 15 ドル(ログの保存と検索は別料金) | CloudFront と WAF のログを残したいとき([security.md](security.md#plan-and-cost)) |
+| 共有のキャッシュ(ElastiCache Serverless for Valkey) | 約 7.4 ドル(`cache.t4g.micro` のノード 1 台なら 14.60 ドル) | 整形済みのテキストと検索の結果を、環境をまたいで使い回したいとき([cache.md](cache.md#when-a-shared-cache-is-worth-it)) |
 
 データベースと経路に足すもの(Multi-AZ、NAT Gateway、RDS Proxy など)は、[rds.md](rds.md#cost) にあります。
 

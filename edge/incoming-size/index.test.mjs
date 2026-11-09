@@ -22,14 +22,14 @@ const handler = load(1000);
 const put = (length) => ({
   request: {
     method: 'PUT',
-    uri: '/incoming/a',
+    uri: '/tmp/incoming/a',
     headers: length === undefined ? {} : { 'content-length': { value: String(length) } },
   },
 });
 
 test('a PUT within the limit passes', () => {
-  assert.equal(handler(put(1000)).uri, '/incoming/a');
-  assert.equal(handler(put(0)).uri, '/incoming/a');
+  assert.equal(handler(put(1000)).uri, '/tmp/incoming/a');
+  assert.equal(handler(put(0)).uri, '/tmp/incoming/a');
 });
 
 test('a PUT over the limit gets 413', () => {
@@ -43,8 +43,8 @@ test('a PUT without a valid Content-Length gets 411', () => {
 });
 
 test('other methods pass', () => {
-  const event = { request: { method: 'OPTIONS', uri: '/incoming/a', headers: {} } };
-  assert.equal(handler(event).uri, '/incoming/a');
+  const event = { request: { method: 'OPTIONS', uri: '/tmp/incoming/a', headers: {} } };
+  assert.equal(handler(event).uri, '/tmp/incoming/a');
 });
 
 test('the template carries the same source', () => {

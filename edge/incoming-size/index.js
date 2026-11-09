@@ -1,13 +1,14 @@
 // redmine-incoming-size: CloudFront Function (cloudfront-js-2.0) on the
-// viewer request of /incoming/*, where browsers PUT attachments to S3
-// through signed URLs. A signed URL cannot limit the size, so this rejects a
-// request whose Content-Length is over the limit before it reaches S3. The
+// viewer request of /tmp/*. Browsers PUT attachments to S3 under
+// /tmp/incoming/ through signed URLs; a signed URL cannot limit the size, so
+// this rejects such a request whose Content-Length is over the limit before it
+// reaches S3. Other requests (signed GETs of thumbnails and zips) pass. The
 // limit is written in when the deployment creates the function.
 var MAX_BYTES = __MAX_BYTES__;
 
 function handler(event) {
   var request = event.request;
-  if (request.method !== 'PUT') {
+  if (request.method !== 'PUT' || request.uri.indexOf('/tmp/incoming/') !== 0) {
     return request;
   }
   var header = request.headers['content-length'];

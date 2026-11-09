@@ -54,7 +54,8 @@ Parameters:
     Default: 104857600
     MinValue: 1
     Description: >-
-      The upload limit that the CloudFront Function on /incoming/* applies;
+      The upload limit that the CloudFront Function on /tmp/* applies to
+      uploads (/tmp/incoming/);
       the same as Redmine's attachment_max_size.
   DbMajorVersion:
     Type: String
@@ -106,7 +107,7 @@ Parameters:
     AllowedValues: ["true", "false"]
     Description: >-
       uploads.malwareScan in redmine.json: GuardDuty Malware Protection for S3
-      on incoming/ and imports/ of the attachment bucket
+      on tmp/incoming/ and imports/ of the attachment bucket
       (docs/aws-security.md#guardduty).
   CostExplorerEnabled:
     Type: String
@@ -261,13 +262,20 @@ Resources:
       # https://redmine-kit.github.io/redmine_serverless_s3/setup.html#the-bucket
       LifecycleConfiguration:
         Rules:
-          - Id: incoming
+          # Temporary objects: uploads before they become attachments, the
+          # zips of "download all" and the objects of the checks. Thumbnails
+          # (tmp/thumbnails/) stay until their attachment is deleted.
+          - Id: tmp-incoming
             Status: Enabled
-            Prefix: incoming/
+            Prefix: tmp/incoming/
             ExpirationInDays: 1
-          - Id: tmp
+          - Id: tmp-bulk
             Status: Enabled
-            Prefix: tmp/
+            Prefix: tmp/bulk/
+            ExpirationInDays: 1
+          - Id: tmp-healthcheck
+            Status: Enabled
+            Prefix: tmp/healthcheck/
             ExpirationInDays: 1
           - Id: imports
             Status: Enabled
@@ -304,7 +312,7 @@ Resources:
             Action: s3:GetObject
             Resource:
               - !Sub ${AttachmentsBucket.Arn}/files/*
-              - !Sub ${AttachmentsBucket.Arn}/thumbnails/*
+              - !Sub ${AttachmentsBucket.Arn}/tmp/thumbnails/*
               - !Sub ${AttachmentsBucket.Arn}/tmp/bulk/*
             Condition:
               StringEquals:
@@ -314,7 +322,7 @@ Resources:
             Principal:
               Service: cloudfront.amazonaws.com
             Action: s3:PutObject
-            Resource: !Sub ${AttachmentsBucket.Arn}/incoming/*
+            Resource: !Sub ${AttachmentsBucket.Arn}/tmp/incoming/*
             Condition:
               StringEquals:
                 AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
@@ -329,7 +337,7 @@ Resources:
               Principal: "*"
               Action: [s3:GetObject, s3:GetObjectVersion]
               Resource:
-                - !Sub ${AttachmentsBucket.Arn}/incoming/*
+                - !Sub ${AttachmentsBucket.Arn}/tmp/incoming/*
                 - !Sub ${AttachmentsBucket.Arn}/imports/*
               Condition:
                 StringNotEquals:
@@ -344,7 +352,7 @@ Resources:
               Principal: "*"
               Action: [s3:PutObjectTagging, s3:PutObjectVersionTagging, s3:DeleteObjectTagging, s3:DeleteObjectVersionTagging]
               Resource:
-                - !Sub ${AttachmentsBucket.Arn}/incoming/*
+                - !Sub ${AttachmentsBucket.Arn}/tmp/incoming/*
                 - !Sub ${AttachmentsBucket.Arn}/imports/*
               Condition:
                 ArnNotEquals:
@@ -352,7 +360,7 @@ Resources:
             - !Ref AWS::NoValue
 
   # GuardDuty Malware Protection for S3 on the prefixes where files arrive
-  # from users: browser uploads (incoming/) and imports (imports/). files/
+  # from users: browser uploads (tmp/incoming/) and imports (imports/). files/
   # holds only copies of scanned objects, so it is not scanned again. The
   # role is the one in the GuardDuty documentation for this bucket.
   MalwareScanRole:
@@ -417,7 +425,7 @@ Resources:
       ProtectedResource:
         S3Bucket:
           BucketName: !Ref AttachmentsBucket
-          ObjectPrefixes: [incoming/, imports/]
+          ObjectPrefixes: [tmp/incoming/, imports/]
       Actions:
         Tagging:
           Status: ENABLED
@@ -615,16 +623,14 @@ Resources:
             Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
             Resource:
               - !Sub ${AttachmentsBucket.Arn}/files/*
-              - !Sub ${AttachmentsBucket.Arn}/thumbnails/*
               - !Sub ${AttachmentsBucket.Arn}/imports/*
-              - !Sub ${AttachmentsBucket.Arn}/incoming/*
               - !Sub ${AttachmentsBucket.Arn}/tmp/*
           # The scan result that GuardDuty puts on uploads and imports.
           - Sid: ScanResults
             Effect: Allow
             Action: s3:GetObjectTagging
             Resource:
-              - !Sub ${AttachmentsBucket.Arn}/incoming/*
+              - !Sub ${AttachmentsBucket.Arn}/tmp/incoming/*
               - !Sub ${AttachmentsBucket.Arn}/imports/*
           - Sid: ListAttachments
             Effect: Allow
@@ -1033,15 +1039,16 @@ Resources:
       # edge/incoming-size/index.js; bin/test-edge checks that this is the same.
       FunctionCode: !Sub |
           // redmine-incoming-size: CloudFront Function (cloudfront-js-2.0) on the
-          // viewer request of /incoming/*, where browsers PUT attachments to S3
-          // through signed URLs. A signed URL cannot limit the size, so this rejects a
-          // request whose Content-Length is over the limit before it reaches S3. The
+          // viewer request of /tmp/*. Browsers PUT attachments to S3 under
+          // /tmp/incoming/ through signed URLs; a signed URL cannot limit the size, so
+          // this rejects such a request whose Content-Length is over the limit before it
+          // reaches S3. Other requests (signed GETs of thumbnails and zips) pass. The
           // limit is written in when the deployment creates the function.
           var MAX_BYTES = ${MaxUploadBytes};
 
           function handler(event) {
             var request = event.request;
-            if (request.method !== 'PUT') {
+            if (request.method !== 'PUT' || request.uri.indexOf('/tmp/incoming/') !== 0) {
               return request;
             }
             var header = request.headers['content-length'];
@@ -1113,6 +1120,7 @@ Resources:
               IncludeBody: true
               LambdaFunctionARN: !Ref BodyHashFunctionArn
         CacheBehaviors:
+          # Attachments' files: signed GETs.
           - PathPattern: /files/*
             TargetOriginId: attachments
             ViewerProtocolPolicy: redirect-to-https
@@ -1121,28 +1129,19 @@ Resources:
             CachePolicyId: !Ref AttachmentsCachePolicy
             ResponseHeadersPolicyId: !Ref AttachmentsHeaders
             TrustedKeyGroups: [!Ref CloudFrontKeyGroup]
-          - PathPattern: /thumbnails/*
-            TargetOriginId: attachments
-            ViewerProtocolPolicy: redirect-to-https
-            AllowedMethods: [GET, HEAD]
-            CachedMethods: [GET, HEAD]
-            CachePolicyId: !Ref AttachmentsCachePolicy
-            ResponseHeadersPolicyId: !Ref AttachmentsHeaders
-            TrustedKeyGroups: [!Ref CloudFrontKeyGroup]
-          - PathPattern: /tmp/bulk/*
-            TargetOriginId: attachments
-            ViewerProtocolPolicy: redirect-to-https
-            AllowedMethods: [GET, HEAD]
-            CachedMethods: [GET, HEAD]
-            CachePolicyId: !Ref AttachmentsCachePolicy
-            ResponseHeadersPolicyId: !Ref AttachmentsHeaders
-            TrustedKeyGroups: [!Ref CloudFrontKeyGroup]
-          - PathPattern: /incoming/*
+          # Thumbnails (/tmp/thumbnails/) and the zips of "download all"
+          # (/tmp/bulk/): signed GETs. Uploads (/tmp/incoming/): signed PUTs,
+          # whose size the function checks. One behavior keeps the
+          # distribution within the 5 behaviors of the Free plan. GETs use the
+          # attachments' cache (the objects never change at a key), and PUTs
+          # are never cached; the bucket policy lets CloudFront only read
+          # thumbnails and zips and only write uploads.
+          - PathPattern: /tmp/*
             TargetOriginId: attachments
             ViewerProtocolPolicy: https-only
             AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
             CachedMethods: [GET, HEAD]
-            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            CachePolicyId: !Ref AttachmentsCachePolicy
             OriginRequestPolicyId: !Ref UploadsOriginRequestPolicy
             ResponseHeadersPolicyId: !Ref AttachmentsHeaders
             TrustedKeyGroups: [!Ref CloudFrontKeyGroup]

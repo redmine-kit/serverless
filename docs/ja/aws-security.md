@@ -45,14 +45,15 @@ GuardDuty は、CloudTrail の管理イベント、VPC のフローログ、DNS 
 
 インスタンスのスタックが、添付ファイルのバケットに Amazon GuardDuty Malware Protection のプランを作ります。Redmine は、ファイルを使う前に結果を待ちます。待ち方と利用者に見えるものは、S3 のプラグインの資料にあります([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#malware-scan))。
 
-- **スキャンするもの:** `incoming/`(CloudFront と Lambda を通したアップロード)と `imports/`(CSV のインポートのファイル)の下の新しいオブジェクト。`files/` には、問題がないとわかったオブジェクトのコピーしか置かないので、もう一度スキャンはしません。スキャンすると費用が 2 倍になります。
-- **タグ:** プランは、スキャンしたオブジェクトに `GuardDutyMalwareScanStatus` のタグ(`NO_THREATS_FOUND`、`THREATS_FOUND`、`UNSUPPORTED`、`ACCESS_DENIED`、`FAILED`)を付けます。
-- **タグによるアクセスの制御:** バケットのポリシーで、プランのロール(`<instance>-malware-scan`)のほかは、`incoming/*` と `imports/*` のオブジェクトのタグが `NO_THREATS_FOUND` でなければ、`s3:GetObject` と `s3:GetObjectVersion` を拒否します。そこでのタグの書き込みと削除も、そのロールのほかは拒否します。タグ付きの `PutObject` も止まるので、スキャンの前にタグを偽れません。条件には、IAM の資料が勧めるとおり、`NotPrincipal` ではなく `aws:PrincipalArn` を使います。
-- **関数:** 結果を読むために、`incoming/*` と `imports/*` の `s3:GetObjectTagging` を持ちます。`REDMINE_S3_MALWARE_SCAN=true` で、プラグインが待つようになります。
-- **ロール:** `<instance>-malware-scan`。`malware-protection-plan.guardduty.amazonaws.com` が引き受けます。権限は、GuardDuty の資料の 1 つのバケットのためのものです。GuardDuty が管理する EventBridge のルール(`DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*`)、バケットの通知、オブジェクトを読むこと、タグを付けること、検証のためのオブジェクト。バケットは、イベントを EventBridge に送ります(テンプレートで設定するので、スタックを更新しても残ります)。
-- **受け取ったメール:** GuardDuty ではスキャンしません。SES が受け取ったメールをスキャンしてウイルスの判定を付け、`PASS` のメールだけを取り込みます([mail.md](mail.md))。
-- **費用:** スキャンした量 1 GB あたり USD 0.1185(月に最初の 1 GB は無料)と、オブジェクト 1 つあたり USD 0.000282(月に最初の 1,000 は無料)(GuardDuty の AWS の価格表、2026-10-30)。たとえば、月に 3,000 ファイル、6 GB なら、(6 − 1) × 0.1185 + (3,000 − 1,000) × 0.000282 ≈ USD 1.2 です([cost.md](cost.md))。
-- **止めるとき:** `redmine.json` に `"uploads": {"malwareScan": false}`([deploy-config.md](deploy-config.md#fields-of-redminejson))。プラン、そのロール、バケットのポリシーの文は作らず、関数には `REDMINE_S3_MALWARE_SCAN=false` を渡します。
+プランは、`incoming/`(CloudFront と Lambda を通したアップロード)と `imports/`(CSV のインポートのファイル)の下の新しいオブジェクトをスキャンします。`files/` には、問題がないとわかったオブジェクトのコピーしか置かないので、もう一度スキャンはしません。スキャンすると費用が 2 倍になります。受信したメールも GuardDuty ではスキャンしません。SES が受信したメールをスキャンしてウイルスの判定を付け、`PASS` のメールだけを取得します([mail.md](mail.md))。
+
+プランは、スキャンしたオブジェクトに `GuardDutyMalwareScanStatus` のタグ(`NO_THREATS_FOUND`、`THREATS_FOUND`、`UNSUPPORTED`、`ACCESS_DENIED`、`FAILED`)を付けます。バケットポリシーは、このタグでアクセスを制御します。`incoming/*` と `imports/*` では、プランのロール(`<instance>-malware-scan`)のほかは、タグが `NO_THREATS_FOUND` でなければ `s3:GetObject` と `s3:GetObjectVersion` を拒否します。そこでのタグの書き込みと削除も、そのロールのほかは拒否します。これでタグ付きの `PutObject` も止まるので、スキャンの前にタグを偽れません。条件には、IAM の資料が勧めるとおり、`NotPrincipal` ではなく `aws:PrincipalArn` を使います。
+
+関数は、結果を読むために `incoming/*` と `imports/*` の `s3:GetObjectTagging` を持ち、`REDMINE_S3_MALWARE_SCAN=true` でプラグインが結果を待つようになります。プランのロール `<instance>-malware-scan` は、`malware-protection-plan.guardduty.amazonaws.com` が引き受け、GuardDuty の資料が 1 つのバケットのために挙げる権限を持ちます。GuardDuty が管理する EventBridge のルール(`DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*`)、バケットの通知、オブジェクトを読むことと、タグを付けること、検証のためのオブジェクトです。バケットはイベントを EventBridge に送ります。これはテンプレートで設定するので、スタックを更新しても残ります。
+
+費用は、スキャンした量 1 GB あたり USD 0.1185(月に最初の 1 GB は無料)と、オブジェクト 1 つあたり USD 0.000282(月に最初の 1,000 は無料)です(GuardDuty の AWS の価格表、2026-10-30)。たとえば、月に 3,000 ファイル、6 GB なら、(6 − 1) × 0.1185 + (3,000 − 1,000) × 0.000282 ≈ USD 1.2 です([cost.md](cost.md))。
+
+スキャンを止めるときは、`redmine.json` に `"uploads": {"malwareScan": false}` を書きます([deploy-config.md](deploy-config.md#fields-of-redminejson))。そのときは、プラン、そのロール、バケットポリシーの文を作らず、関数には `REDMINE_S3_MALWARE_SCAN=false` を渡します。
 
 <a id="cloudtrail"></a>
 

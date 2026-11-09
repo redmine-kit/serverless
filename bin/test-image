@@ -191,12 +191,20 @@ event=$(jq -nc --arg body "$job" '{Records: [{messageId: "image-test", receiptHa
 # builds from the event's ARN (https://sqs.<region>.amazonaws.com/...). The
 # emulator has no such endpoint and the network has no way out, so here the
 # only failure allowed is that deletion; LocalStack covers it.
+# The runtime may write the job's log after the invocation returns, so the
+# log is read for a few seconds.
+job_logged() {
+  for _ in $(seq 1 10); do
+    docker logs "$prefix-worker" 2>&1 | grep -q 'Running job: .*\[DestroyProjectJob\]' && return 0
+    sleep 1
+  done
+  return 1
+}
 worker_runs() {
   local response
   response=$(invoke worker "$event")
-  if docker logs "$prefix-worker" 2>&1 | grep -q 'Running job: .*\[DestroyProjectJob\]' &&
-    jq -e '.errorType == "Function<Seahorse::Client::NetworkingError>" and
-      (.errorMessage | contains("sqs.us-east-1.amazonaws.com"))' <<<"$response" >/dev/null; then
+  if jq -e '.errorType == "Function<Seahorse::Client::NetworkingError>" and
+      (.errorMessage | contains("sqs.us-east-1.amazonaws.com"))' <<<"$response" >/dev/null && job_logged; then
     return 0
   fi
   echo "$response" >&2

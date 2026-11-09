@@ -143,7 +143,7 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 | [`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses) | SES でのメール。送信のやり直し、受けたメールの取り込み、プロジェクトごとのアドレス、メールの管理画面 | SES の設定がある | [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/ja/) |
 | [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | 設定と秘密の値。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。その時機に動くように gem でもあり、`image/Gemfile.local` で道筋を指定して足す | `REDMINE_SSM_PATH` がある | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) |
 
-- **4 つに分ける理由:** S3 の添付ファイル、SES でのメール、SSM の設定は、Lambda でなくても動きます。プラグインを分けると、ふつうのサーバーの Redmine でも、Lambda のための部分なしで片方だけを使えます。Lambda では、ファイルシステムに書けず、メールの受信箱もないので、イメージに 4 つとも入れます。
+- **4 つに分ける理由:** S3 の添付ファイル、SES でのメール、SSM の設定は、Lambda 以外でも動きます。プラグインを分けると、ふつうのサーバーの Redmine でも、Lambda のための部分なしで片方だけを使えます。Lambda では、ファイルシステムに書けず、メールの受信箱もないので、イメージに 4 つとも入れます。
 - **名前:** GitHub のリポジトリの検索では、`redmine_serverless` という名前の Redmine のプラグインは見つかりませんでした(2026-11-08。見つかったのは関係のない Slack のボットだけ)。S3 と SES のプラグインの名前は、まだ確認していません。
 
 <a id="features"></a>

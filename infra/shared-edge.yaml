@@ -17,6 +17,8 @@ Resources:
   Role:
     Type: AWS::IAM::Role
     Properties:
+      Path: /redmine/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
       RoleName: redmine-body-hash
       AssumeRolePolicyDocument:
         Version: "2012-10-17"

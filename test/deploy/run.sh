@@ -51,6 +51,7 @@ matches_template() { # <parameters JSON> <template>
 arn=arn:aws:acm:us-east-1:111122223333:certificate/x
 for file in test/deploy/valid/*.json; do
   name=$(basename "$file")
+  check "$name: account.yaml" matches_template "$(params account_params "$file")" infra/account.yaml
   check "$name: shared.yaml" matches_template "$(params shared_params "$file")" infra/shared.yaml
   check "$name: shared-edge.yaml" matches_template "$(params 'shared_edge_params("0")' -n)" infra/shared-edge.yaml
   check "$name: instance-edge.yaml" matches_template "$(params instance_edge_params "$file")" infra/instance-edge.yaml
@@ -195,6 +196,14 @@ FAKE_TASK_FAIL=db:migrate check "a failed migration stops the deployment" bash -
 check "a failed migration: web and worker keep their image" bash -c \
   "[[ \$(grep -c 'create-change-set .*--stack-name redmine ' '$state/calls') -le 2 ]] && grep -q 'task failed' '$state/output'"
 FAKE_HSTS=0 check "a missing Strict-Transport-Security fails the checks" bash -c "! FAKE='$state' deploy/deploy.sh $config >/dev/null 2>&1"
+
+account=$(mktemp -d)
+check "--account succeeds" run_deploy "$account" test/deploy/valid/full.json --account
+check "--account: only the account stack, with the caller's credentials" bash -c "
+  [[ \$(grep -c create-change-set '$account/calls') == 1 ]] && grep -q 'stack-name redmine-account .*CAPABILITY_NAMED_IAM' '$account/calls' &&
+  ! grep -q -e assume-role -e --role-arn '$account/calls'"
+check "--account: the GitHub settings" test "$(value "$(cat "$account/params/redmine-account.json")" GitHubRepository) $(value "$(cat "$account/params/redmine-account.json")" GitHubCodeEnvironment)" == "example/redmine-deploy redmine"
+check "--account with --code-only is refused" bash -c "! FAKE='$account' deploy/deploy.sh $config --account --code-only >/dev/null 2>&1"
 
 fresh=$(mktemp -d)
 check "--code-only before the first deployment fails" bash -c "! FAKE='$fresh' deploy/deploy.sh $config --code-only >/dev/null 2>&1"

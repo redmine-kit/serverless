@@ -25,7 +25,7 @@ deploy_stack() {
   aws cloudformation create-change-set "${cs[@]}" --change-set-type "$type" \
     --template-body "file://$template" --parameters "file://$work/params.json" \
     --tags "file://$work/tags.json" --capabilities CAPABILITY_NAMED_IAM \
-    --role-arn "$cfn_role_arn" >/dev/null
+    ${cfn_role_arn:+--role-arn "$cfn_role_arn"} >/dev/null
   if ! aws cloudformation wait change-set-create-complete "${cs[@]}" 2>/dev/null; then
     reason=$(aws cloudformation describe-change-set "${cs[@]}" --query StatusReason --output text)
     aws cloudformation delete-change-set "${cs[@]}"

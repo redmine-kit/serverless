@@ -230,6 +230,8 @@ Resources:
     Type: AWS::IAM::Role
     Condition: UseNat
     Properties:
+      Path: /redmine/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
       RoleName: redmine-shared-nat
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -265,6 +267,7 @@ Resources:
     Type: AWS::IAM::InstanceProfile
     Condition: UseNat
     Properties:
+      Path: /redmine/
       Roles: [!Ref NatRole]
   NatLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate

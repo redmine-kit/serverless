@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The steps of bin/deploy (docs/deploy-config.md#deployment-commands). Runs
 # in the tools image (deploy/Dockerfile) with the repository at /work.
-#   deploy.sh <redmine.json> [--dry-run] [--code-only]
+#   deploy.sh <redmine.json> [--dry-run] [--code-only | --account]
 # jq programs are in single quotes on purpose.
 # shellcheck disable=SC2016
 set -euo pipefail
@@ -10,17 +10,19 @@ root=${DEPLOY_ROOT:-/work}
 # shellcheck source=deploy/lib.sh
 source "$root/deploy/lib.sh"
 
-usage() { echo "usage: bin/deploy <redmine.json> [--dry-run] [--code-only]" >&2; exit 64; }
-config="" dry_run=false code_only=false
+usage() { echo "usage: bin/deploy <redmine.json> [--dry-run] [--code-only | --account]" >&2; exit 64; }
+config="" dry_run=false code_only=false account_only=false
 for arg in "$@"; do
   case "$arg" in
     --dry-run) dry_run=true ;;
     --code-only) code_only=true ;;
+    --account) account_only=true ;;
     -*) usage ;;
     *) [[ -z "$config" ]] || usage; config="$arg" ;;
   esac
 done
 [[ -n "$config" ]] || usage
+! $code_only || ! $account_only || usage
 cfg() { jq -r "$1" "$config"; }
 params() { jq -c -L "$root/deploy" "include \"params\"; $1" "${@:2}"; }
 
@@ -41,6 +43,16 @@ tags=$(params stack_tags "$config")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export AWS_DEFAULT_REGION="$region" AWS_PAGER=""
+
+# The account's roles (infra/account.yaml), once per account by an
+# administrator with their own credentials, before everything else: the
+# role for deploying and the CloudFormation service role do not exist yet.
+if $account_only; then
+  step "Account roles"
+  cfn_role_arn="" deploy_stack redmine-account "$region" "$root/infra/account.yaml" "$(params account_params "$config")"
+  note "done; deployRoleArn is $(cfg '.deployRoleArn')"
+  exit 0
+fi
 
 # The role for deploying infrastructure
 # (docs/iam.md#role-for-deploying-infrastructure), unless the credentials

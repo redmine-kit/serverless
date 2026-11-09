@@ -6,6 +6,7 @@
 #   bin/deploy redmine.json              # deploy
 #   bin/deploy redmine.json --dry-run    # show the change sets, change nothing
 #   bin/deploy redmine.json --code-only  # only the image of the functions
+#   bin/deploy redmine.json --account    # the account's roles, once, as an administrator
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -17,7 +18,7 @@ for arg in "$@"; do
   esac
 done
 if [[ -z "$config" || ! -f "$config" ]]; then
-  echo "usage: bin/deploy <redmine.json> [--dry-run] [--code-only]" >&2
+  echo "usage: bin/deploy <redmine.json> [--dry-run] [--code-only | --account]" >&2
   exit 64
 fi
 

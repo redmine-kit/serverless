@@ -442,6 +442,7 @@ Resources:
   CommonPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
+      Path: /redmine/
       Description: !Sub ${InstanceName} functions, common permissions
       PolicyDocument:
         Version: "2012-10-17"
@@ -495,6 +496,8 @@ Resources:
   WebRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: /redmine/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
       RoleName: !Sub ${InstanceName}-web
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -532,6 +535,8 @@ Resources:
   WorkerRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: /redmine/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
       RoleName: !Sub ${InstanceName}-worker
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -565,6 +570,8 @@ Resources:
   TaskRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: /redmine/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
       RoleName: !Sub ${InstanceName}-task
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -1090,6 +1097,8 @@ Resources:
   SchedulerRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: /redmine/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
       RoleName: !Sub ${InstanceName}-scheduler
       AssumeRolePolicyDocument:
         Version: "2012-10-17"

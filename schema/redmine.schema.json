@@ -20,6 +20,18 @@
         "hostedZoneId": { "type": "string", "pattern": "^Z[A-Z0-9]+$" }
       }
     },
+    "account": {
+      "description": "The account's roles (infra/account.yaml), applied with bin/deploy --account.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ssoPermissionSet": { "type": "string", "pattern": "^[\\w+=,.@-]+$", "default": "AdministratorAccess" },
+        "githubRepository": { "type": "string", "pattern": "^[\\w.-]+/[\\w.-]+$" },
+        "githubInfraEnvironment": { "type": "string", "minLength": 1, "default": "infrastructure" },
+        "githubCodeEnvironment": { "type": "string", "minLength": 1, "default": "production" },
+        "githubOidcProviderArn": { "type": "string", "pattern": "^arn:aws[a-z-]*:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$" }
+      }
+    },
     "network": {
       "type": "object",
       "additionalProperties": false,

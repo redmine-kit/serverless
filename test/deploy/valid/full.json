@@ -4,6 +4,7 @@
   "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-infra-deploy",
   "domain": "redmine.example.org",
   "dns": { "mode": "external" },
+  "account": { "githubRepository": "example/redmine-deploy", "githubCodeEnvironment": "redmine" },
   "network": { "mode": "nat", "shared": true },
   "database": { "majorVersion": "17", "instanceClass": "db.t4g.small", "storageGb": 50 },
   "lambda": { "webMemoryMb": 3008, "webReservedConcurrency": 20, "workerReservedConcurrency": 5, "warmup": false },

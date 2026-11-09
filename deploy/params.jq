@@ -6,6 +6,13 @@
 def instance: .instance // "redmine";
 def p($key; $value): {ParameterKey: $key, ParameterValue: ($value | tostring)};
 
+def account_params:
+  [ p("SsoPermissionSet"; .account.ssoPermissionSet // "AdministratorAccess"),
+    p("GitHubRepository"; .account.githubRepository // ""),
+    p("GitHubInfraEnvironment"; .account.githubInfraEnvironment // "infrastructure"),
+    p("GitHubCodeEnvironment"; .account.githubCodeEnvironment // "production"),
+    p("GitHubOidcProviderArn"; .account.githubOidcProviderArn // "") ];
+
 def shared_params:
   [ p("NetworkMode"; .network.mode // "endpoints") ];
 

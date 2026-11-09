@@ -1,0 +1,390 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Serverless account roles (stack redmine-account): the permissions boundary
+  redmine-boundary, the CloudFormation service role redmine-cfn-exec, the
+  role for deploying infrastructure redmine-infra-deploy and the role for
+  deploying code redmine-github-deploy (docs/iam.md). Applied once per
+  account by an administrator (bin/deploy --account), before the other
+  stacks.
+
+Parameters:
+  SsoPermissionSet:
+    Type: String
+    Default: AdministratorAccess
+    AllowedPattern: ^[\w+=,.@-]+$
+    Description: >-
+      The IAM Identity Center permission set whose users can assume
+      redmine-infra-deploy.
+  GitHubRepository:
+    Type: String
+    Default: ""
+    AllowedPattern: ^([\w.-]+/[\w.-]+)?$
+    Description: >-
+      owner/repository of the workflows that deploy. Empty: no GitHub Actions
+      roles (redmine-github-deploy is not created).
+  GitHubInfraEnvironment:
+    Type: String
+    Default: infrastructure
+    Description: The GitHub Environment (with required approvers) that can assume redmine-infra-deploy.
+  GitHubCodeEnvironment:
+    Type: String
+    Default: production
+    Description: The GitHub Environment that can assume redmine-github-deploy.
+  GitHubOidcProviderArn:
+    Type: String
+    Default: ""
+    Description: >-
+      The account's IAM OIDC provider for token.actions.githubusercontent.com
+      if it exists. Empty creates one (with GitHubRepository).
+
+Conditions:
+  UsesGitHub: !Not [!Equals [!Ref GitHubRepository, ""]]
+  CreatesOidcProvider: !And [!Condition UsesGitHub, !Equals [!Ref GitHubOidcProviderArn, ""]]
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreatesOidcProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  # The ceiling of every role that the stacks create: the actions of the
+  # roles in docs/iam.md and nothing in IAM. A role's own policy narrows it
+  # to its resources.
+  Boundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: redmine-boundary
+      Description: Permissions boundary of the roles that the Redmine stacks create
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Logs
+            Effect: Allow
+            Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+            Resource: "*"
+          - Sid: Settings
+            Effect: Allow
+            Action: [ssm:GetParameter, ssm:GetParameters, ssm:GetParametersByPath, kms:Decrypt]
+            Resource: "*"
+          - Sid: Network
+            Effect: Allow
+            Action:
+              - ec2:CreateNetworkInterface
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DeleteNetworkInterface
+              - ec2:AssignPrivateIpAddresses
+              - ec2:UnassignPrivateIpAddresses
+              - ec2:AssociateAddress
+              - ec2:CreateRoute
+              - ec2:ReplaceRoute
+              - ec2:ModifyInstanceAttribute
+            Resource: "*"
+          - Sid: Data
+            Effect: Allow
+            Action:
+              - s3:GetObject*
+              - s3:PutObject*
+              - s3:DeleteObject*
+              - s3:ListBucket
+              - s3:AbortMultipartUpload
+              - s3:ListMultipartUploadParts
+              - sqs:*
+              - ses:*
+              - lambda:InvokeFunction
+            Resource: "*"
+          # AmazonSSMManagedInstanceCore, for the NAT instance.
+          - Sid: SystemsManager
+            Effect: Allow
+            Action:
+              - ssm:DescribeAssociation
+              - ssm:GetDeployablePatchSnapshotForInstance
+              - ssm:GetDocument
+              - ssm:DescribeDocument
+              - ssm:GetManifest
+              - ssm:ListAssociations
+              - ssm:ListInstanceAssociations
+              - ssm:PutInventory
+              - ssm:PutComplianceItems
+              - ssm:PutConfigurePackageResult
+              - ssm:UpdateAssociationStatus
+              - ssm:UpdateInstanceAssociationStatus
+              - ssm:UpdateInstanceInformation
+              - ssmmessages:*
+              - ec2messages:*
+            Resource: "*"
+
+  CfnExecRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: redmine-cfn-exec
+      Description: CloudFormation service role of the Redmine stacks
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: resources
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # The services of the stacks (docs/iam.md#role-for-deploying-infrastructure).
+              - Sid: Services
+                Effect: Allow
+                Action:
+                  - acm:*
+                  - autoscaling:*
+                  - cloudfront:*
+                  - cloudwatch:*
+                  - ec2:*
+                  - ecr:*
+                  - lambda:*
+                  - logs:*
+                  - rds:*
+                  - route53:*
+                  - s3:*
+                  - scheduler:*
+                  - ses:*
+                  - sqs:*
+                  - ssm:*
+                  - wafv2:*
+                Resource: "*"
+              # Only roles and policies under the path /redmine/, which the
+              # templates give theirs, and roles only with the boundary; it
+              # cannot be removed.
+              - Sid: RolesWithBoundary
+                Effect: Allow
+                Action: [iam:CreateRole, iam:PutRolePermissionsBoundary, iam:AttachRolePolicy, iam:PutRolePolicy]
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/redmine/*
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref Boundary
+              - Sid: Roles
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:DeleteRole
+                  - iam:DeleteRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:UpdateRole
+                  - iam:UpdateRoleDescription
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:GetInstanceProfile
+                  - iam:AddRoleToInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:TagInstanceProfile
+                Resource:
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/redmine/*
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/redmine/*
+              - Sid: Policies
+                Effect: Allow
+                Action:
+                  - iam:CreatePolicy
+                  - iam:DeletePolicy
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicyVersion
+                  - iam:GetPolicy
+                  - iam:GetPolicyVersion
+                  - iam:ListPolicyVersions
+                  - iam:TagPolicy
+                  - iam:UntagPolicy
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine/*
+              - Sid: PassRoles
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/redmine/*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService:
+                      - lambda.amazonaws.com
+                      - edgelambda.amazonaws.com
+                      - scheduler.amazonaws.com
+                      - ec2.amazonaws.com
+              # Attaching the Lambda@Edge function version to CloudFront, and
+              # the service-linked roles of RDS, Auto Scaling and Lambda@Edge.
+              - Sid: EdgeAndServiceLinkedRoles
+                Effect: Allow
+                Action: [iam:CreateServiceLinkedRole, lambda:EnableReplication*]
+                Resource: "*"
+              - Sid: KeepBoundaries
+                Effect: Deny
+                Action: iam:DeleteRolePermissionsBoundary
+                Resource: "*"
+
+  # What bin/deploy does besides the stacks; the stacks are applied by
+  # redmine-cfn-exec. The same as redmine-github-deploy, plus these.
+  InfraDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: redmine-infra-deploy
+      Description: Applies the Redmine stacks with bin/deploy
+      MaxSessionDuration: 7200
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: [sts:AssumeRole, sts:TagSession]
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_${SsoPermissionSet}_*
+          - !If
+            - UsesGitHub
+            - Effect: Allow
+              Principal:
+                Federated: !If [CreatesOidcProvider, !Ref GitHubOidcProvider, !Ref GitHubOidcProviderArn]
+              Action: sts:AssumeRoleWithWebIdentity
+              Condition:
+                StringEquals:
+                  token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                  token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepository}:environment:${GitHubInfraEnvironment}
+            - !Ref AWS::NoValue
+      ManagedPolicyArns: [!Ref CodeDeployPolicy]
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Stacks only through change sets that use redmine-cfn-exec.
+              - Sid: ChangeSets
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:*:${AWS::AccountId}:stack/*
+                Condition:
+                  StringEquals:
+                    cloudformation:RoleArn: !GetAtt CfnExecRole.Arn
+              - Sid: Stacks
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DeleteStack
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:*:${AWS::AccountId}:stack/*
+              - Sid: PassCfnExec
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CfnExecRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+              # Secrets, created once (docs/deploy-config.md#secrets).
+              - Sid: Secrets
+                Effect: Allow
+                Action: [ssm:GetParameter, ssm:PutParameter]
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/*/env/*
+                  - !Sub arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/*/deploy/*
+              - Sid: SecretsKey
+                Effect: Allow
+                Action: kms:Encrypt
+                Resource: "*"
+                Condition:
+                  StringLike:
+                    kms:ViaService: ssm.*.amazonaws.com
+              - Sid: EdgeLogRetention
+                Effect: Allow
+                Action: logs:PutRetentionPolicy
+                Resource: !Sub arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws/lambda/us-east-1.redmine-body-hash
+              - Sid: Lookups
+                Effect: Allow
+                Action: [ec2:DescribeRegions, logs:DescribeLogGroups, ses:SetActiveReceiptRuleSet]
+                Resource: "*"
+
+  # bin/deploy --code-only (docs/iam.md#role-for-deploying-code-github-actions).
+  # Functions and buckets of any instance in the account, found by their
+  # names and the tag redmine:instance.
+  CodeDeployPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: redmine-code-deploy
+      Description: Updates the image of the Redmine functions
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EcrLogin
+            Effect: Allow
+            Action: ecr:GetAuthorizationToken
+            Resource: "*"
+          - Sid: Image
+            Effect: Allow
+            Action:
+              - ecr:DescribeImages
+              - ecr:BatchCheckLayerAvailability
+              - ecr:InitiateLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:CompleteLayerUpload
+              - ecr:PutImage
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
+            Resource: !Sub arn:${AWS::Partition}:ecr:*:${AWS::AccountId}:repository/redmine
+          - Sid: Assets
+            Effect: Allow
+            Action: [s3:PutObject, s3:GetObject, s3:ListBucket]
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::*-assets-${AWS::AccountId}-*
+              - !Sub arn:${AWS::Partition}:s3:::*-assets-${AWS::AccountId}-*/assets/*
+          - Sid: Functions
+            Effect: Allow
+            Action:
+              - lambda:GetFunction
+              - lambda:GetFunctionConfiguration
+              - lambda:UpdateFunctionCode
+              - lambda:InvokeFunction
+            Resource: !Sub arn:${AWS::Partition}:lambda:*:${AWS::AccountId}:function:*
+            Condition:
+              "Null":
+                aws:ResourceTag/redmine:instance: "false"
+          # The outputs of the stacks: the repository, the buckets and the
+          # distribution.
+          - Sid: StackOutputs
+            Effect: Allow
+            Action: cloudformation:DescribeStacks
+            Resource: !Sub arn:${AWS::Partition}:cloudformation:*:${AWS::AccountId}:stack/*
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Condition: UsesGitHub
+    Properties:
+      RoleName: redmine-github-deploy
+      Description: Updates the image of the Redmine functions from GitHub Actions
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If [CreatesOidcProvider, !Ref GitHubOidcProvider, !Ref GitHubOidcProviderArn]
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepository}:environment:${GitHubCodeEnvironment}
+      ManagedPolicyArns: [!Ref CodeDeployPolicy]
+
+Outputs:
+  BoundaryArn:
+    Value: !Ref Boundary
+  CfnExecRoleArn:
+    Value: !GetAtt CfnExecRole.Arn
+  InfraDeployRoleArn:
+    Value: !GetAtt InfraDeployRole.Arn
+  GitHubDeployRoleArn:
+    Condition: UsesGitHub
+    Value: !GetAtt GitHubDeployRole.Arn

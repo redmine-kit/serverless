@@ -109,9 +109,11 @@ jobs:
           persist-credentials: false
       - run: bin/build-image
       - run: bin/test-image
-      # The functions as Lambda on LocalStack, with the release only.
+      # The functions as Lambda on LocalStack, with the release only. Its
+      # LocalStack takes the same port as the image tests' one, which stops
+      # first.
       - if: matrix.redmine != 'master'
-        run: bin/test-lambda
+        run: bin/test-services --down && bin/test-lambda
       - if: matrix.redmine != 'master'
         uses: codecov/codecov-action@v7.1.1
         with:

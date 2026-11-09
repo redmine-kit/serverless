@@ -210,6 +210,7 @@ flowchart TD
   g --> h["Checks after<br>deployment"]
 ```
 
+- **Redmine versions (matrix):** The image tests and Redmine's own tests run twice: on the Redmine release the image uses (now 7.0.3, from the release tar.gz checked by SHA256, with `image/Gemfile.lock`), and on Redmine's `master` branch, which becomes the next release (7.1; there is no `7.1-stable` branch yet, checked on 2026-11-09). `master` is taken from GitHub without pinning (`REDMINE_BRANCH=master` for `bin/build-image` and `bin/test-core`), its gems are resolved without the lock, and its jobs do not fail the run (`continue-on-error`): they show early what the next release breaks. CI also runs weekly for that reason. An image built from `master` is never deployed. When 7.1 is released, the matrix moves to 7.1 (pinned) and the next `master`.
 - **Database:** Plugin tests, Redmine's own tests and the image tests run on a PostgreSQL container of the same major version as RDS (the version is checked when building; [rds.md](rds.md#database)).
 - **On Redmine upgrades:** Reviewing the new migrations and running them on test databases are done in a separate workflow ([upgrade.md](upgrade.md)).
 - **AWS:** Tests on every commit use no AWS credentials. Only deployment and the checks after deployment connect to AWS, with roles in the production account assumed through OIDC ([iam.md](iam.md#role-for-deploying-code-github-actions)).

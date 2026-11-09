@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 image=serverless-core-test
 
 bin/test-services >/dev/null 2>&1 || bin/test-services
-docker buildx build --platform linux/arm64 "${plugin_context[@]}" --load -q -t "$image" --target core-test -f image/Dockerfile . >/dev/null
+docker buildx build --platform linux/arm64 "${plugin_context[@]}" --build-arg REDMINE_BRANCH="${REDMINE_BRANCH:-}" --load -q -t "$image" --target core-test -f image/Dockerfile . >/dev/null
 
 # Tests that fail with this image's gems for known reasons, as one pattern.
 known=$(grep -v -e '^#' -e '^$' test/core/known_failures.txt | sed 's/[.]/\\./g' | paste -sd '|' -)

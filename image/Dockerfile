@@ -28,10 +28,20 @@ FROM base AS source
 RUN dnf install -y gcc gcc-c++ make libpq-devel libyaml-devel tar gzip && dnf clean all
 ARG REDMINE_VERSION=7.0.3
 ARG REDMINE_SHA256=0b6b24c033341a9d7ad52cfcfa7b1bc913c191c7a604f740d863f16249dd3c15
-RUN curl -fsSLo /tmp/redmine.tar.gz "https://www.redmine.org/releases/redmine-${REDMINE_VERSION}.tar.gz" \
-  && echo "${REDMINE_SHA256}  /tmp/redmine.tar.gz" | sha256sum -c - \
-  && tar -xzf /tmp/redmine.tar.gz -C /var/task \
-  && mv "/var/task/redmine-${REDMINE_VERSION}" /var/task/redmine \
+# A branch of Redmine (master, before the next release) instead of the
+# release, for the CI matrix (docs/testing.md#order-in-ci). It is not pinned,
+# its gems are resolved without image/Gemfile.lock, and its image is never
+# deployed.
+ARG REDMINE_BRANCH=
+RUN if [ -n "$REDMINE_BRANCH" ]; then \
+    curl -fsSLo /tmp/redmine.tar.gz "https://github.com/redmine/redmine/archive/refs/heads/${REDMINE_BRANCH}.tar.gz" \
+    && mkdir /var/task/redmine && tar -xzf /tmp/redmine.tar.gz -C /var/task/redmine --strip-components 1; \
+  else \
+    curl -fsSLo /tmp/redmine.tar.gz "https://www.redmine.org/releases/redmine-${REDMINE_VERSION}.tar.gz" \
+    && echo "${REDMINE_SHA256}  /tmp/redmine.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/redmine.tar.gz -C /var/task \
+    && mv "/var/task/redmine-${REDMINE_VERSION}" /var/task/redmine; \
+  fi \
   && rm /tmp/redmine.tar.gz
 WORKDIR /var/task/redmine
 COPY image/config/database.yml image/config/additional_environment.rb image/config/configuration.yml \
@@ -58,15 +68,18 @@ FROM source AS core-test
 RUN dnf install -y ImageMagick ghostscript urw-base35-fonts && dnf clean all
 COPY image/Gemfile.lock ./
 COPY test/core/database.yml config/database.yml
+# A branch resolves its gems afresh (see the source stage).
+ARG REDMINE_BRANCH=
 RUN bundle config set --local without development \
-  && bundle config set --local deployment true \
+  && if [ -n "$REDMINE_BRANCH" ]; then rm Gemfile.lock; else bundle config set --local deployment true; fi \
   && bundle install --jobs 4
 ENV RAILS_ENV=test
 ENTRYPOINT []
 
 FROM source AS build
 COPY image/Gemfile.lock ./
-RUN bundle config set --local deployment true \
+ARG REDMINE_BRANCH=
+RUN if [ -n "$REDMINE_BRANCH" ]; then rm Gemfile.lock; else bundle config set --local deployment true; fi \
   && bundle install --jobs 4 \
   && rm -rf vendor/bundle/ruby/*/cache
 RUN SECRET_KEY_BASE_DUMMY=1 RAILS_ENV=production bin/rails assets:precompile

@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Weekly, to see the next Redmine (master) changing under the tests.
+  schedule:
+    - cron: "0 3 * * 1"
 
 permissions:
   contents: read
@@ -37,10 +40,20 @@ jobs:
       - if: always()
         run: bin/test-services --down
 
+  # Redmine's release, and master before the next release (7.1). master is
+  # not pinned and does not fail the run (docs/testing.md#order-in-ci).
   image:
     needs: static
+    name: image (Redmine ${{ matrix.redmine }})
     # Lambda runs the image on arm64.
     runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        redmine: ["7.0.3", master]
+    continue-on-error: ${{ matrix.redmine == 'master' }}
+    env:
+      REDMINE_BRANCH: ${{ matrix.redmine == 'master' && 'master' || '' }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -52,7 +65,15 @@ jobs:
 
   core:
     needs: static
+    name: core (Redmine ${{ matrix.redmine }})
     runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        redmine: ["7.0.3", master]
+    continue-on-error: ${{ matrix.redmine == 'master' }}
+    env:
+      REDMINE_BRANCH: ${{ matrix.redmine == 'master' && 'master' || '' }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:

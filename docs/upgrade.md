@@ -14,6 +14,7 @@ flowchart TD
   f --> g["Upgrade<br>the version and<br>deploy"]
 ```
 
+0. **Before the release:** The CI matrix already runs the image tests and Redmine's own tests on Redmine's `master`, which becomes the next release, so what breaks shows up before the release ([testing.md](testing.md#order-in-ci)).
 1. **Find:** Every week, a scheduled GitHub Actions workflow compares the latest stable Redmine version (the redmine.org downloads and the tags of `redmine/redmine` on GitHub) with the version this project uses. If there is a new version, it creates an issue.
 2. **List:** Compare `db/migrate/` of the current version and the new version, and list the new migrations.
 3. **Sort:** Sort each migration into one of the categories below by the operations it uses ("Sorting migrations" below).

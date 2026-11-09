@@ -16,6 +16,7 @@ flowchart TD
   f --> g["バージョンを<br>上げて<br>デプロイ"]
 ```
 
+0. **リリースの前:** CI の matrix で、次のリリースになる Redmine の `master` でも、イメージのテストと Redmine 本体のテストを実行しているので、壊れるところがリリースの前に分かります([testing.md](testing.md#order-in-ci))。
 1. **見つける:** 毎週、GitHub Actions の定期のワークフローが、Redmine の最新の安定バージョン(redmine.org のダウンロードと、GitHub の `redmine/redmine` のタグ)と、このプロジェクトが使っているバージョンを比べます。新しいバージョンがあれば、Issue を作ります。
 2. **一覧にする:** 今のバージョンと新しいバージョンの `db/migrate/` を比べ、増えた migration を一覧にします。
 3. **読み分ける:** migration ごとに、使っている操作から、次の扱いに分けます(下の「読み分け」)。

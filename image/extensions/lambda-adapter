@@ -1,0 +1,20 @@
+#!/bin/sh
+# Lambda starts every file in /opt/extensions as an extension. Lambda Web
+# Adapter also talks to the Runtime API, so only web starts it. The other
+# roles register an extension that receives no events and waits, because an
+# extension that exits makes Lambda recreate the environment (docs/tasks.md).
+set -eu
+
+if [ "${REDMINE_ROLE:-}" = web ]; then
+  exec /opt/lambda-web-adapter/lambda-adapter
+fi
+
+api="http://${AWS_LAMBDA_RUNTIME_API}/2020-01-01/extension"
+id=$(curl -fsS -D - -o /dev/null -X POST \
+  -H 'Lambda-Extension-Name: lambda-adapter' -d '{"events":[]}' "$api/register" |
+  tr -d '\r' | sed -n 's/^[Ll]ambda-[Ee]xtension-[Ii]dentifier: //p')
+[ -n "$id" ] || { echo "lambda-adapter: registration failed" >&2; exit 1; }
+
+while :; do
+  curl -fsS -o /dev/null -H "Lambda-Extension-Identifier: $id" "$api/event/next"
+done

@@ -1,0 +1,10 @@
+# frozen_string_literal: true
+
+# Gems added to Redmine for running on Lambda (docs/lambda.md). Redmine's
+# Gemfile loads this file. Gems used only by the plugin go in its Gemfile.
+# Redmine lists puma only in its test group. Bundler warns that it is listed
+# twice; this entry puts it in the default group too.
+gem 'puma'
+gem 'aws-sdk-ssm', '~> 1.0'
+gem 'aws-actionmailer-ses', '~> 1.0'
+gem 'aws-activejob-sqs', '~> 1.2'

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Redmine's own tests (docs/testing.md#redmines-own-tests): unit,
+# functional and integration tests of Redmine with this image's configuration
+# and gems, on the PostgreSQL of bin/test-services. System tests are separate.
+# The image does not write db/schema.rb after migrations (Lambda cannot), but
+# parallel tests load it, so it is written here.
+#   bin/test-core                      # all of them
+#   bin/test-core test/unit/user_test.rb   # some files
+set -euo pipefail
+cd "$(dirname "$0")/.."
+. bin/lib/plugin.sh
+image=serverless-core-test
+
+bin/test-services >/dev/null 2>&1 || bin/test-services
+docker buildx build --platform linux/arm64 "${plugin_context[@]}" --load -q -t "$image" --target core-test -f image/Dockerfile . >/dev/null
+
+# Tests that fail with this image's gems for known reasons, as one pattern.
+known=$(grep -v -e '^#' -e '^$' test/core/known_failures.txt | sed 's/[.]/\\./g' | paste -sd '|' -)
+
+workers="${PARALLEL_WORKERS:-$(getconf _NPROCESSORS_ONLN)}"
+docker run --rm --network serverless-test_default -e PARALLEL_WORKERS="$workers" "$image" \
+  sh -c 'bin/rails db:drop db:create db:migrate db:schema:dump >/dev/null && bin/rails test "$@"' test-core \
+  --exclude "/^($known)\$/" "$@"

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Builds the arm64 image as a single-architecture image (Lambda does not
+# accept an index, so provenance is off).
+#   bin/build-image [tag]   # default tag: serverless:test
+set -euo pipefail
+cd "$(dirname "$0")/.."
+. bin/lib/plugin.sh
+docker buildx build --platform linux/arm64 --provenance=false --sbom=false "${plugin_context[@]}" \
+  --load -t "${1:-serverless:test}" -f image/Dockerfile .

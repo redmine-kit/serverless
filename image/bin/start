@@ -1,0 +1,29 @@
+#!/bin/sh
+# Entry point of the image. REDMINE_ROLE chooses what starts (docs/tasks.md).
+set -eu
+
+for d in files thumbnails imports cache pids; do
+  mkdir -p "/tmp/redmine/$d"
+done
+
+cd /var/task/redmine
+case "${REDMINE_ROLE:-}" in
+  web)
+    exec bundle exec puma --environment production --workers 0 --threads 1:1 \
+      --bind tcp://127.0.0.1:3000 config.ru
+    ;;
+  worker)
+    # The runtime loads default gems such as json and uri before the handler
+    # loads Rails. Setting up Redmine's bundle first makes it use the same
+    # versions as Redmine.
+    export BUNDLE_GEMFILE=/var/task/redmine/Gemfile RUBYOPT=-rbundler/setup
+    exec /lambda-entrypoint.sh redmine/config/environment.Aws::ActiveJob::SQS::LambdaHandler.job_handler
+    ;;
+  task)
+    exec /lambda-entrypoint.sh handler.TaskHandler.process
+    ;;
+  *)
+    echo "REDMINE_ROLE must be web, worker or task" >&2
+    exit 64
+    ;;
+esac

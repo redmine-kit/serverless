@@ -1,0 +1,14 @@
+# adapter is written literally: Redmine's Gemfile chooses the database gem
+# from it (docs/lambda.md). The other values come from environment variables
+# (docs/rds.md). The CA bundle of RDS is in the image.
+production:
+  adapter: postgresql
+  host: <%= ENV["REDMINE_DB_HOST"] %>
+  port: <%= ENV.fetch("REDMINE_DB_PORT", "5432") %>
+  database: <%= ENV.fetch("REDMINE_DB_NAME", "redmine") %>
+  username: <%= ENV.fetch("REDMINE_DB_USERNAME", "redmine") %>
+  password: <%= ENV["REDMINE_DB_PASSWORD"] %>
+  sslmode: <%= ENV.fetch("REDMINE_DB_SSLMODE", "verify-full") %>
+  sslrootcert: /var/task/rds-global-bundle.pem
+  encoding: unicode
+  pool: 1

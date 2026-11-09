@@ -1,0 +1,18 @@
+# Tests of Redmine that fail with this image's gems, with the reason. bin/test-core
+# leaves them out. Remove a line when the cause is fixed upstream.
+
+# Nokogiri 1.19.5 removes CSS escapes from string arguments of custom
+# pseudo-classes. rails-dom-testing 2.3.0 passes a Regexp to :match as such a
+# string, so \w becomes w and the selector matches nothing.
+# https://github.com/rails/rails-dom-testing/issues/136
+IssuesControllerTest#test_get_edit_for_issue_with_transition_warning_should_show_the_warning
+IssuesControllerTest#test_show_should_display_attachment_icons_by_mime_type
+LayoutTest#test_wiki_formatter_header_tags
+ThemesTest#test_application_css
+ThemesTest#test_use_default_favicon_if_theme_provides_none
+ThemesTest#test_with_sub_uri
+
+# Nokogiri 1.19.5's HTML5 serializer writes < and > in attribute values as
+# &lt; and &gt; (whatwg/html#6362). The output is as safe as before; the
+# expected string is the old form.
+Redmine::WikiFormatting::CommonMark::SanitizationFilterTest#test_should_sanitize_html_strings

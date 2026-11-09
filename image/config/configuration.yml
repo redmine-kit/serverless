@@ -1,0 +1,16 @@
+# Evaluated as ERB, so values can come from environment variables
+# (docs/lambda.md).
+production:
+  attachments_storage_path: /tmp/redmine/files
+  email_delivery:
+    delivery_method: :ses_v2
+  minimagick_font_path: /usr/share/fonts/ipa-gothic-fonts/ipag.ttf
+  webhook_blocklist:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - fc00::/7
+    - 127.0.0.0/8
+    - ::1/128
+    - 169.254.0.0/16
+    - fe80::/10

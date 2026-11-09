@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Static checks of the repository, the same locally and in CI. Every tool runs
+# in a container pinned by digest, so only Docker is needed.
+#   bin/lint
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+ACTIONLINT=rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+SHELLCHECK=koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
+RUBY=ruby:4.0@sha256:a69f361db050bb2c65ec66ef75411bfc4ce2e1d993ba1179fac4e4ba6ecfe91f
+PYTHON=python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+CFN_LINT_VERSION=1.60.0
+
+# Called through step, which ShellCheck cannot follow.
+# shellcheck disable=SC2329
+run() { docker run --rm -v "$PWD:/work" -w /work "$@"; }
+failed=0
+step() {
+  echo "== $1"
+  shift
+  if ! "$@"; then
+    failed=1
+  fi
+}
+
+# GitHub Actions workflows
+step actionlint run "$ACTIONLINT" -color
+
+# Shell scripts: files without an extension in bin/, image/bin/ and
+# image/extensions/, and *.sh
+shell_files=()
+while IFS= read -r file; do shell_files+=("$file"); done < <(
+  {
+    find bin image/bin image/extensions -type f ! -name '*.*'
+    git ls-files --cached --others --exclude-standard '*.sh'
+  } 2>/dev/null | sort -u
+)
+if ((${#shell_files[@]})); then
+  step shellcheck run "$SHELLCHECK" "${shell_files[@]}"
+fi
+
+# Ruby: RuboCop with the versions in Gemfile.lock
+if git ls-files --cached --others --exclude-standard '*.rb' 'Gemfile' | grep -q .; then
+  step rubocop run -v serverless-bundle:/usr/local/bundle "$RUBY" \
+    sh -c 'bundle install --quiet && bundle exec rubocop'
+fi
+
+# CloudFormation templates
+templates=()
+while IFS= read -r file; do templates+=("$file"); done < <(
+  git ls-files --cached --others --exclude-standard 'infra/*.yaml' 'infra/**/*.yaml' 2>/dev/null
+)
+if ((${#templates[@]})); then
+  step cfn-lint run "$PYTHON" sh -c \
+    "pip install --quiet --disable-pip-version-check cfn-lint==$CFN_LINT_VERSION && cfn-lint $(printf '%q ' "${templates[@]}")"
+fi
+
+exit "$failed"

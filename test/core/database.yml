@@ -1,0 +1,8 @@
+# Database of Redmine's own tests (bin/test-core): the PostgreSQL of
+# bin/test-services. Parallel workers add -0, -1, ... to the name.
+test:
+  adapter: postgresql
+  host: postgres
+  database: redmine_test
+  username: postgres
+  encoding: unicode

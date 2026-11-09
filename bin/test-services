@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Starts the services that the tests use (PostgreSQL 16, moto, and LocalStack
+# when LOCALSTACK_AUTH_TOKEN is set) and checks that each answers. Later
+# stages run their tests against them.
+#   bin/test-services          # start, check and keep them running
+#   bin/test-services --down   # stop them
+set -euo pipefail
+cd "$(dirname "$0")/.."
+compose=(docker compose -f test/compose.yml -p serverless-test)
+if [[ -n "${LOCALSTACK_AUTH_TOKEN:-}" ]]; then
+  compose+=(--profile localstack)
+fi
+
+if [[ "${1:-}" == "--down" ]]; then
+  "${compose[@]}" down -v
+  exit 0
+fi
+
+if ! "${compose[@]}" up -d --build --wait; then
+  "${compose[@]}" ps -a
+  "${compose[@]}" logs --tail 80
+  exit 1
+fi
+
+psql() { "${compose[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -q -t -A "$@"; }
+
+echo "== PostgreSQL"
+psql -U postgres -c 'SELECT version()'
+
+echo "== moto"
+curl -fsS -X PUT http://127.0.0.1:5000/serverless-test-bucket >/dev/null
+curl -fsS http://127.0.0.1:5000/ | grep -q serverless-test-bucket
+echo "S3 answers"
+
+echo "== LocalStack"
+if [[ -z "${LOCALSTACK_AUTH_TOKEN:-}" ]]; then
+  echo "skipped: LOCALSTACK_AUTH_TOKEN is not set"
+  exit 0
+fi
+curl -fsS http://127.0.0.1:4566/_localstack/health | grep -q '"lambda"' || { echo "LocalStack does not list Lambda" >&2; exit 1; }
+echo "LocalStack answers"

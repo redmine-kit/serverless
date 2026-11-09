@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Writes image/Gemfile.lock: resolves Redmine's Gemfile with image/Gemfile.local
+# and the plugin's Gemfile, starting from the current lock.
+#   bin/update-gems            # add what is new, keep the other versions
+#   bin/update-gems --update   # update every gem
+set -euo pipefail
+cd "$(dirname "$0")/.."
+. bin/lib/plugin.sh
+update=()
+[[ "${1:-}" == "--update" ]] && update=(--build-arg UPDATE=1)
+docker buildx build --platform linux/arm64 "${plugin_context[@]}" "${update[@]}" \
+  -f image/Dockerfile --target lockfile --output type=local,dest=image .

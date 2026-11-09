@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# Image tests (docs/testing.md#image-tests). Starts the image under the same
+# conditions as Lambda: a read-only file system with only /tmp writable, and
+# a user that is not root. The database is the PostgreSQL of
+# bin/test-services, and AWS is moto. worker and task run on the Runtime
+# Interface Emulator in the base image.
+#   bin/test-image [image]          # default: serverless:test (bin/build-image)
+#   KEEP=1 bin/test-image [image]   # leave the containers for inspection
+# Commands that run inside containers are in single quotes on purpose.
+# shellcheck disable=SC2016
+set -euo pipefail
+cd "$(dirname "$0")/.."
+image="${1:-serverless:test}"
+# An internal network: the containers reach PostgreSQL and moto, but not AWS.
+network=serverless-image-test
+prefix=serverless-image-test
+queue_url=http://moto:5000/123456789012/redmine-jobs
+
+bin/test-services >/dev/null 2>&1 || bin/test-services
+compose=(docker compose -f test/compose.yml -p serverless-test)
+
+# moto chooses the service from the credential scope of the Authorization
+# header; the signature itself is not checked.
+sqs() {
+  curl -fsS -X POST http://127.0.0.1:5000/ \
+    -H 'Authorization: AWS4-HMAC-SHA256 Credential=test/20260101/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0' \
+    "$@"
+}
+
+failures=0
+quiet() { "$@" >/dev/null; }
+pass() { echo "ok: $*"; }
+fail() { echo "FAILED: $*" >&2; failures=$((failures + 1)); }
+check() { local name="$1"; shift; if "$@"; then pass "$name"; else fail "$name"; fi; }
+
+cleanup() {
+  docker rm -f "$prefix-web" "$prefix-worker" "$prefix-task" >/dev/null 2>&1 || true
+  for service in postgres moto; do
+    docker network disconnect "$network" "serverless-test-$service-1" >/dev/null 2>&1 || true
+  done
+  docker network rm "$network" >/dev/null 2>&1 || true
+}
+trap '[[ -n "${KEEP:-}" ]] || cleanup' EXIT
+cleanup
+docker network create --internal "$network" >/dev/null
+for service in postgres moto; do
+  docker network connect --alias "$service" "$network" "serverless-test-$service-1"
+done
+
+# Same conditions as Lambda. Settings go in as environment variables; SSM is
+# not read in these tests.
+run() {
+  local role="$1"; shift
+  docker run -d --name "$prefix-$role" --network "$network" \
+    --read-only --tmpfs /tmp:exec --user 993:993 \
+    -e REDMINE_ROLE="$role" \
+    -e REDMINE_DB_HOST=postgres -e REDMINE_DB_NAME=postgres -e REDMINE_DB_USERNAME=postgres -e REDMINE_DB_SSLMODE=disable \
+    -e SECRET_KEY_BASE=image-test-only-secret-key-base \
+    -e AWS_REGION=us-east-1 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test \
+    -e AWS_ENDPOINT_URL=http://moto:5000 \
+    -e REDMINE_JOBS_QUEUE_URL="$queue_url" \
+    "$@" "$image" >/dev/null
+}
+
+# Waits until the emulator inside the container answers (any HTTP status).
+wait_rie() {
+  for _ in $(seq 1 30); do
+    docker exec "$prefix-$1" curl -s -o /dev/null http://127.0.0.1:8080/ 2>/dev/null && return 0
+    sleep 1
+  done
+  echo "the emulator in $prefix-$1 does not answer" >&2
+  return 1
+}
+
+# Invokes a function on the emulator inside its container.
+invoke() {
+  docker exec "$prefix-$1" curl -sS -X POST -d "$2" \
+    http://127.0.0.1:8080/2015-03-31/functions/function/invocations
+}
+
+# Runs a task and prints its output. Fails when the exit code is not 0.
+task() {
+  local response
+  response=$(invoke task "$1")
+  jq -j '.output // .errorMessage // ""' <<<"$response"
+  [[ "$(jq -r '.exit_code // "none"' <<<"$response")" == 0 ]]
+}
+
+echo "== task handler unit tests"
+handler_tests() {
+  docker run --rm --read-only --tmpfs /tmp --user 993:993 -v "$PWD/test/image:/test:ro" \
+    --entrypoint ruby "$image" -r/var/task/handler.rb /test/task_handler_test.rb
+}
+check "task handler" handler_tests
+
+echo "== contents"
+check "arm64 Linux image" test "$(docker image inspect "$image" -f '{{.Os}}/{{.Architecture}}')" = linux/arm64
+contents() {
+  docker run --rm --read-only --tmpfs /tmp --user 993:993 --entrypoint sh "$image" -c "$1"
+}
+check "ImageMagick convert" contents 'convert -version | grep -q "ImageMagick 6"'
+check "Ghostscript" contents 'gs --version >/dev/null'
+check "Pandoc 3.8.3 or later" contents \
+  'v=$(pandoc --version | sed -n "1s/^pandoc //p"); printf "3.8.3\n%s\n" "$v" | sort -V -C'
+check "IPA Gothic font" contents 'test -r /usr/share/fonts/ipa-gothic-fonts/ipag.ttf'
+# Run as the low-privilege user, so File.readable? answers for that user.
+check "everything readable by the low-privilege user" contents \
+  'ruby -rfind -e "Find.find(%q(/var/task), %q(/opt)) { |f| ok = File.directory?(f) ? File.executable?(f) : File.readable?(f); abort(f) unless ok || File.symlink?(f) }"'
+check "compiled assets" contents 'test -r /var/task/redmine/public/assets/.manifest.json'
+check "tmp links to /tmp/redmine" contents 'test "$(readlink /var/task/redmine/tmp)" = /tmp/redmine'
+unknown_role() {
+  local code=0
+  docker run --rm --read-only --tmpfs /tmp --user 993:993 -e REDMINE_ROLE=other "$image" >/dev/null 2>&1 || code=$?
+  [[ "$code" == 64 ]]
+}
+check "unknown REDMINE_ROLE exits with 64" unknown_role
+
+echo "== task"
+"${compose[@]}" exec -T postgres psql -q -U postgres \
+  -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public' >/dev/null 2>&1
+# A new queue each run (SQS allows one PurgeQueue per 60 seconds).
+sqs -d Action=DeleteQueue -d QueueUrl="$queue_url" >/dev/null 2>&1 || true
+sqs -d Action=CreateQueue -d QueueName=redmine-jobs >/dev/null
+run task
+wait_rie task
+check "rake db:migrate" quiet task '{"command":"rake","args":["db:migrate"]}'
+check "rake redmine:load_default_data" \
+  quiet task '{"command":"rake","args":["redmine:load_default_data"],"env":{"REDMINE_LANG":"ja"}}'
+check "rake -T" quiet task '{"command":"rake","args":["-T"]}'
+runner_counts_users() { task '{"command":"runner","args":["puts User.count"]}' | tail -n 1 | grep -qx 2; }
+check "rails runner" runner_counts_users
+rejected() { jq -e '.errorType == "Function<ArgumentError>"' <<<"$(invoke task "$1")" >/dev/null; }
+check "env outside the allowed names is rejected" rejected '{"command":"rake","args":["-T"],"env":{"REDMINE_DB_HOST":"x"}}'
+check "unknown command is rejected" rejected '{"command":"sh","args":["-c","id"]}'
+failed_task() { invoke task '{"command":"rake","args":["no:such:task"]}' | jq -e '.exit_code != 0' >/dev/null; }
+check "failed task returns its exit code" failed_task
+
+echo "== web"
+run web
+web_up() {
+  for _ in $(seq 1 60); do
+    docker exec "$prefix-web" curl -fsS -o /dev/null http://127.0.0.1:3000/login 2>/dev/null && return 0
+    sleep 1
+  done
+  docker logs "$prefix-web" 2>&1 | tail -20 >&2
+  return 1
+}
+check "Puma starts and /login returns 200" web_up
+login_page() { docker exec "$prefix-web" curl -fsS http://127.0.0.1:3000/login | grep -q '<title>Redmine'; }
+check "login page is Redmine's" login_page
+
+echo "== worker"
+run worker
+wait_rie worker
+job=$(task '{"command":"runner","args":["p = Project.create!(name: \"Worker probe\", identifier: \"worker-probe\"); Project.mark_for_deletion(p); puts DestroyProjectJob.new(p.id, 1, \"127.0.0.1\").serialize.to_json"]}' | tail -n 1)
+event=$(jq -nc --arg body "$job" '{Records: [{messageId: "image-test", receiptHandle: "image-test", body: $body,
+  md5OfBody: "", messageAttributes: {}, eventSource: "aws:sqs",
+  eventSourceARN: "arn:aws:sqs:us-east-1:123456789012:redmine-jobs", awsRegion: "us-east-1"}]}')
+# After a job succeeds, the gem deletes the message at the queue URL that it
+# builds from the event's ARN (https://sqs.<region>.amazonaws.com/...). The
+# emulator has no such endpoint and the network has no way out, so here the
+# only failure allowed is that deletion; LocalStack covers it.
+worker_runs() {
+  local response
+  response=$(invoke worker "$event")
+  if docker logs "$prefix-worker" 2>&1 | grep -q 'Running job: .*\[DestroyProjectJob\]' &&
+    jq -e '.errorType == "Function<Seahorse::Client::NetworkingError>" and
+      (.errorMessage | contains("sqs.us-east-1.amazonaws.com"))' <<<"$response" >/dev/null; then
+    return 0
+  fi
+  echo "$response" >&2
+  docker logs "$prefix-worker" 2>&1 | tail -20 >&2
+  return 1
+}
+check "worker runs a job from an SQS event" worker_runs
+project_deleted() {
+  task '{"command":"runner","args":["puts Project.where(identifier: %q(worker-probe)).count"]}' | tail -n 1 | grep -qx 0
+}
+check "the job deleted the project" project_deleted
+queued() {
+  sqs -d Action=GetQueueAttributes -d QueueUrl="$queue_url" -d AttributeName.1=ApproximateNumberOfMessages |
+    grep -o '<Value>[0-9]*' | grep -qv '<Value>0$'
+}
+check "the job queued its notification mail in SQS" queued
+not_allowed() {
+  local response
+  response=$(invoke worker "$(jq -c '.Records[0].body |= (fromjson | .job_class = "ApplicationJob" | tojson)' <<<"$event")")
+  grep -q 'not in the configured job_class_allowlist' <<<"$response"
+}
+check "a job class outside the allowlist is not run" not_allowed
+
+echo
+if [[ "$failures" -gt 0 ]]; then
+  echo "$failures check(s) failed" >&2
+  exit 1
+fi
+echo "all image checks passed"

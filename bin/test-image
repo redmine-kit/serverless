@@ -161,10 +161,10 @@ from_ssm() {
 }
 check "the secrets come from SSM" from_ssm
 plugins_loaded() {
-  task '{"command":"runner","args":["puts %w[redmine_serverless_ssm redmine_serverless_s3].all? { |id| Redmine::Plugin.installed?(id) }"]}' |
-    tail -n 1 | grep -qx true
+  task '{"command":"runner","args":["puts %w[redmine_serverless redmine_serverless_sqs redmine_serverless_ses redmine_serverless_s3 redmine_serverless_ssm].reject { |id| Redmine::Plugin.installed?(id) }.join(%q(,)).presence || %q(all)"]}' |
+    tail -n 1 | grep -qx all
 }
-check "the plugins are loaded (SSM, S3)" plugins_loaded
+check "the plugins are loaded (core, SQS, SES, S3, SSM)" plugins_loaded
 rejected() { jq -e '.errorType == "Function<ArgumentError>"' <<<"$(invoke task "$1")" >/dev/null; }
 check "env outside the allowed names is rejected" rejected '{"command":"rake","args":["-T"],"env":{"REDMINE_DB_HOST":"x"}}'
 check "unknown command is rejected" rejected '{"command":"sh","args":["-c","id"]}'

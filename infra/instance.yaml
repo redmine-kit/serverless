@@ -860,8 +860,9 @@ Resources:
       BatchSize: 1
       Enabled: true
 
-  # Cost Explorer for redmine_serverless_cost: the refresh runs in the task,
-  # and jobs may refresh too. Cost Explorer has no resource-level permissions.
+  # Cost Explorer for redmine_serverless_cost: the refresh runs in the task
+  # and in jobs. The actions take the billing view as resource; narrowing to
+  # the primary billing view's ARN is unverified, so the resource is "*".
   CostPolicy:
     Type: AWS::IAM::Policy
     Condition: ShowsCost

@@ -56,9 +56,9 @@ flowchart LR
 
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
-| `logs:CreateLogStream`、`logs:PutLogEvents` | 関数ごとのロググループ | ログ。ロググループは CloudFormation で、保持の期間を付けて先に作る([security.md](security.md#retention-periods)) |
+| `logs:CreateLogStream`<br>`logs:PutLogEvents` | 関数ごとのロググループ | ログ。ロググループは CloudFormation で、保持の期間を付けて先に作る([security.md](security.md#retention-periods)) |
 | `ssm:GetParametersByPath` | `arn:aws:ssm:<リージョン>:<アカウント>:parameter/redmine/env` と、その下(`parameter/redmine/env/*`) | 起動のときの設定と秘密の値。データベースのパスワードも含む([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store)) |
-| `ec2:CreateNetworkInterface`、`ec2:DescribeNetworkInterfaces`、`ec2:DeleteNetworkInterface`、`ec2:AssignPrivateIpAddresses`、`ec2:UnassignPrivateIpAddresses` | `*`(EC2 の API が対象を絞れない) | VPC の中で動く。AWS の管理ポリシー `AWSLambdaVPCAccessExecutionRole` と同じ内容([rds.md](rds.md#routes-out-of-the-vpc)) |
+| `ec2:CreateNetworkInterface`<br>`ec2:DescribeNetworkInterfaces`<br>`ec2:DeleteNetworkInterface`<br>`ec2:AssignPrivateIpAddresses`<br>`ec2:UnassignPrivateIpAddresses` | `*`(EC2 の API が対象を絞れない) | VPC の中で動く。AWS の管理ポリシー `AWSLambdaVPCAccessExecutionRole` と同じ内容([rds.md](rds.md#routes-out-of-the-vpc)) |
 
 - **SecureString の復号:** SSM の既定の鍵(`aws/ssm`)で暗号化します。この鍵のときに `kms:Decrypt` を IAM で付ける必要があるかは、作るときに確認します。
 
@@ -70,14 +70,14 @@ flowchart LR
 
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
-| `s3:GetObject`、`s3:PutObject`、`s3:DeleteObject` | 添付ファイルのバケットの `files/*`、`thumbnails/*`、`imports/*`、`incoming/*`、`tmp/*` | 添付ファイルの保存、登録のときのチェックサム付きの `HeadObject` とコピー、`/tmp` のキャッシュ、削除、一括のダウンロードの仮のファイル([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html)) |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject` | 添付ファイルのバケットの<br>`files/*`<br>`thumbnails/*`<br>`imports/*`<br>`incoming/*`<br>`tmp/*` | 添付ファイルの保存、登録のときのチェックサム付きの `HeadObject` とコピー、`/tmp` のキャッシュ、削除、一括のダウンロードの仮のファイル([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html)) |
 | `s3:ListBucket` | 添付ファイルのバケット | ないオブジェクトへの `HeadObject` を、403 ではなく 404 として受け取る。サムネイルをプレフィックスで消す |
 | `sqs:SendMessage` | ジョブのキュー | ジョブを積む([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | ジョブのキューとデッドレターキュー | 管理画面の「ジョブ」 |
-| `sqs:StartMessageMoveTask`、`sqs:ListMessageMoveTasks` | ジョブのデッドレターキュー | 管理画面の「ジョブ」から、デッドレターキューを元のキューに戻す |
-| `ses:SendEmail`、`ses:SendRawEmail` | 送信元のドメインの SES の ID | Redmine の標準のテストのメール(画面の要求の中で送る) |
+| `sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks` | ジョブのデッドレターキュー | 管理画面の「ジョブ」から、デッドレターキューを元のキューに戻す |
+| `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元のドメインの SES の ID | Redmine の標準のテストのメール(画面の要求の中で送る) |
 | `ses:GetEmailIdentity` | 送信元のドメインの SES の ID | 管理画面の「メールの送信」 |
-| `ses:GetAccount`、`ses:ListSuppressedDestinations`、`ses:DeleteSuppressedDestination` | `*`(対象を絞れない) | 同上([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email)) |
+| `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*`(対象を絞れない) | 同上([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email)) |
 
 - **送信の権限は 2 つ:** メールは、SES v2 の `SendEmail` に全文(raw)を渡して送ります。AWS の SES の資料の例は、送信の権限として `ses:SendEmail` と `ses:SendRawEmail` の両方を許しているので、それに合わせます。v2 の全文の送信に `ses:SendRawEmail` が欠かせないかは、確認していません(未確認)。
 - **署名付き URL:** ブラウザーはこのロールを使いません。アップロードとダウンロードは、CloudFront の秘密鍵で署名した URL で CloudFront を通ります。関数は、この鍵をほかの秘密の値と一緒に SSM Parameter Store から読みます([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/iam.html))。CloudFront は OAC でバケットに届き、バケットポリシーがそれを許します(下の「リソースベースのポリシー」)。
@@ -88,11 +88,11 @@ flowchart LR
 
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
-| `sqs:ReceiveMessage`、`sqs:DeleteMessage`、`sqs:GetQueueAttributes`、`sqs:ChangeMessageVisibility` | ジョブのキュー | イベントソースマッピングでジョブを受け取る。gem のハンドラーが、成功したメッセージを消す |
+| `sqs:ReceiveMessage`<br>`sqs:DeleteMessage`<br>`sqs:GetQueueAttributes`<br>`sqs:ChangeMessageVisibility` | ジョブのキュー | イベントソースマッピングでジョブを受け取る。gem のハンドラーが、成功したメッセージを消す |
 | `sqs:SendMessage` | ジョブのキュー | ジョブの中でのやり直し(`retry_on`)と、ジョブから積むジョブ |
-| `ses:SendEmail`、`ses:SendRawEmail` | 送信元のドメインの SES の ID | 通知のメール([mail.md](mail.md#sending))。全文(raw)で送る |
-| `s3:GetObject`、`s3:PutObject`、`s3:DeleteObject`、`s3:ListBucket` | 添付ファイルのバケット(`redmine-web` と同じ範囲) | プロジェクトの削除での添付ファイルの削除、突き合わせ([admin.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/admin.html#attachments-in-s3)) |
-| `s3:GetObject`、`s3:DeleteObject` | メールのバケットの `inbound/*`、`processed/*` | 管理画面からのメールの取り込み直し |
+| `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元のドメインの SES の ID | 通知のメール([mail.md](mail.md#sending))。全文(raw)で送る |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | 添付ファイルのバケット(`redmine-web` と同じ範囲) | プロジェクトの削除での添付ファイルの削除、突き合わせ([admin.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/admin.html#attachments-in-s3)) |
+| `s3:GetObject`<br>`s3:DeleteObject` | メールのバケットの<br>`inbound/*`<br>`processed/*` | 管理画面からのメールの取り込み直し |
 | `s3:PutObject` | メールのバケットの `processed/*` | 同上 |
 
 <a id="execution-role-of-redmine-task"></a>
@@ -101,10 +101,10 @@ flowchart LR
 
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
-| `s3:GetObject`、`s3:DeleteObject` | メールのバケットの `inbound/*` | 受信したメールの取り込み([mail.md](mail.md#importing)) |
+| `s3:GetObject`<br>`s3:DeleteObject` | メールのバケットの `inbound/*` | 受信したメールの取り込み([mail.md](mail.md#importing)) |
 | `s3:PutObject` | メールのバケットの `processed/*` | 取り込んだメールを移す |
-| `s3:GetObject`、`s3:PutObject`、`s3:DeleteObject`、`s3:ListBucket` | 添付ファイルのバケット(`redmine-web` と同じ範囲) | 未添付の添付ファイルの削除(`redmine:attachments:prune`)、メールの添付ファイルの保存 |
-| `ses:SendEmail`、`ses:SendRawEmail` | 送信元のドメインの SES の ID | rake のタスクのメール(期日の通知など) |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | 添付ファイルのバケット(`redmine-web` と同じ範囲) | 未添付の添付ファイルの削除(`redmine:attachments:prune`)、メールの添付ファイルの保存 |
+| `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元のドメインの SES の ID | rake のタスクのメール(期日の通知など) |
 | `sqs:SendMessage` | ジョブのキュー | rake の中で積まれるジョブ |
 | `sqs:SendMessage` | 失敗の送り先のキュー(`redmine-task-failures`) | SES からの非同期の呼び出しが失敗したときの送り先。Lambda の送り先は、実行ロールの権限で送る |
 
@@ -112,7 +112,7 @@ flowchart LR
 
 ## Cost Explorer(`cost.enabled` のときだけ)
 
-プラグインの `redmine_serverless_cost` が、アカウントの費用を読みます。ポリシー `cost-explorer` で、`redmine-task`(毎日の更新)と `redmine-worker`(ジョブからの更新)に、`*` への `ce:GetCostAndUsage` と `ce:GetCostForecast` を許します。Cost Explorer にはリソースごとの権限がなく、費用はアカウント全体のものです(`cost.allocationTag` のときだけ、インスタンスに絞ります)。`redmine-web` は Cost Explorer を呼びません。権限の境界 `redmine-boundary` も、この 2 つの操作を許します。
+プラグインの [Redmine Serverless Cost](https://redmine-kit.github.io/redmine_serverless_cost/ja/) が、アカウントの費用を読みます。ポリシー `cost-explorer` で、`redmine-task`(毎日の更新)と `redmine-worker`(プラグインのボタンがジョブとして積む更新)に、`*` への `ce:GetCostAndUsage` と `ce:GetCostForecast` を許します。2 つの操作は、請求のビューをリソースに取ります(AWS のサービスのリファレンス、2026-11-10 に確認)。プラグインは主の請求のビューを使います。その ARN にポリシーを絞れるかは未確認です。`redmine-web` は Cost Explorer を呼びません。権限の境界 `redmine-boundary` も、この 2 つの操作を許します。
 
 <a id="resource-based-policies"></a>
 
@@ -126,7 +126,7 @@ flowchart LR
 | アセットのバケット | CloudFront(`cloudfront.amazonaws.com`) | `s3:GetObject` | `AWS:SourceArn` がこのディストリビューション(OAC) |
 | メールのバケット | SES(`ses.amazonaws.com`) | `inbound/*` への `s3:PutObject` | `aws:SourceAccount` がこのアカウント、`aws:SourceArn` が受信のルール |
 | 3 つのバケット | すべて | すべてを拒否 | `aws:SecureTransport` が `false`(TLS でない要求) |
-| ECR のリポジトリ | Lambda(`lambda.amazonaws.com`) | `ecr:BatchGetImage`、`ecr:GetDownloadUrlForLayer` | `aws:SourceArn` がこのアカウントの関数 |
+| ECR のリポジトリ | Lambda(`lambda.amazonaws.com`) | `ecr:BatchGetImage`<br>`ecr:GetDownloadUrlForLayer` | `aws:SourceArn` がこのアカウントの関数 |
 
 - **関数 URL は CloudFront だけが呼べる:** 関数 URL を IAM の認証にし、CloudFront の OAC が署名した要求だけを受けます。ブラウザーの POST の本文のハッシュは、Lambda@Edge が入れます([lambda.md](lambda.md#cloudfront-and-function-urls))。OAC の関数 URL には、CloudFront の資料のとおり、`lambda:InvokeFunctionUrl` と `lambda:InvokeFunction` の両方を許します。
 - **ECR:** 同じアカウントの関数なら、デプロイする人に `ecr:SetRepositoryPolicy` があれば、Lambda がこのポリシーを自動で足します。CloudFormation で明示しておきます。
@@ -140,7 +140,7 @@ flowchart LR
 
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
-| `logs:CreateLogGroup`、`logs:CreateLogStream`、`logs:PutLogEvents` | すべてのリージョンのロググループ `/aws/lambda/us-east-1.redmine-body-hash`(`arn:aws:logs:*:<アカウント>:log-group:/aws/lambda/us-east-1.redmine-body-hash:*`) | ログ。Lambda@Edge は、動いたエッジに近いリージョンにログを書く |
+| `logs:CreateLogGroup`<br>`logs:CreateLogStream`<br>`logs:PutLogEvents` | すべてのリージョンのロググループ `/aws/lambda/us-east-1.redmine-body-hash`(`arn:aws:logs:*:<アカウント>:log-group:/aws/lambda/us-east-1.redmine-body-hash:*`) | ログ。Lambda@Edge は、動いたエッジに近いリージョンにログを書く |
 
 - **ほかの権限を持たせない:** 本文を読んでハッシュを入れるだけなので、AWS のサービスの権限は付けません。
 - **関数を CloudFront に付ける権限:** Lambda@Edge の関数のバージョンを CloudFront に付けるには、`lambda:EnableReplication*` と `iam:CreateServiceLinkedRole` が要ります。CloudFormation のサービスロールに持たせます(下の「インフラのデプロイ用のロール」)。コードのデプロイ用のロールには持たせません。
@@ -165,9 +165,9 @@ flowchart LR
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
 | `ecr:GetAuthorizationToken` | `*`(対象を絞れない) | ECR へのログイン |
-| `ecr:DescribeImages`、`ecr:BatchCheckLayerAvailability`、`ecr:InitiateLayerUpload`、`ecr:UploadLayerPart`、`ecr:CompleteLayerUpload`、`ecr:PutImage`、`ecr:BatchGetImage`、`ecr:GetDownloadUrlForLayer` | Redmine のリポジトリ | イメージをコピーする(すでにあるイメージはコピーしない) |
-| `s3:PutObject`、`s3:GetObject`、`s3:ListBucket` | アセットのバケット(`*-assets-<account>-*` と、その `assets/` の下のオブジェクト) | アセットの同期([lambda.md](lambda.md#serving-assets)) |
-| `lambda:UpdateFunctionCode`、`lambda:GetFunction`、`lambda:GetFunctionConfiguration`、`lambda:InvokeFunction` | タグ `redmine:instance` を持つ関数 | イメージの更新、更新が終わるのを待つこと、`redmine-task` での migration([tasks.md](tasks.md#migrations-during-deployment)) |
+| `ecr:DescribeImages`<br>`ecr:BatchCheckLayerAvailability`<br>`ecr:InitiateLayerUpload`<br>`ecr:UploadLayerPart`<br>`ecr:CompleteLayerUpload`<br>`ecr:PutImage`<br>`ecr:BatchGetImage`<br>`ecr:GetDownloadUrlForLayer` | Redmine のリポジトリ | イメージをコピーする(すでにあるイメージはコピーしない) |
+| `s3:PutObject`<br>`s3:GetObject`<br>`s3:ListBucket` | アセットのバケット(`*-assets-<account>-*` と、その `assets/` の下のオブジェクト) | アセットの同期([lambda.md](lambda.md#serving-assets)) |
+| `lambda:UpdateFunctionCode`<br>`lambda:GetFunction`<br>`lambda:GetFunctionConfiguration`<br>`lambda:InvokeFunction` | タグ `redmine:instance` を持つ関数 | イメージの更新、更新が終わるのを待つこと、`redmine-task` での migration([tasks.md](tasks.md#migrations-during-deployment)) |
 | `cloudformation:DescribeStacks` | アカウントのスタック | 出力(リポジトリ、バケット、ディストリビューション)を読む |
 
 - **すべてのインスタンスに 1 つのポリシー:** 権限は、管理ポリシー `redmine-code-deploy`(`infra/account.yaml`)に置き、インフラのデプロイ用のロールと共有します。インスタンスの名前は自由なので、関数は、どのスタックもリソースに付けるタグ `redmine:instance` で、バケットは名前で絞ります。
@@ -221,9 +221,9 @@ flowchart LR
 
 | 権限 | 対象 |
 | --- | --- |
-| `lambda:InvokeFunction`、`lambda:GetFunction` | `redmine-task` |
-| `logs:StartQuery`、`logs:GetQueryResults`、`logs:FilterLogEvents` | 3 つの関数のロググループ |
-| `sqs:GetQueueAttributes`、`sqs:StartMessageMoveTask`、`sqs:ListMessageMoveTasks` | ジョブのキューとデッドレターキュー |
+| `lambda:InvokeFunction`<br>`lambda:GetFunction` | `redmine-task` |
+| `logs:StartQuery`<br>`logs:GetQueryResults`<br>`logs:FilterLogEvents` | 3 つの関数のロググループ |
+| `sqs:GetQueueAttributes`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks` | ジョブのキューとデッドレターキュー |
 
 - **rake は強い権限:** `redmine-task` を呼べる人は、rake と `rails runner` で、データベースと S3 のすべてを読み書きできます。呼べる人を絞ります([tasks.md](tasks.md#permissions))。
 
@@ -243,7 +243,7 @@ flowchart LR
 | 権限 | 対象 | 使い道 |
 | --- | --- | --- |
 | AWS の管理ポリシー `AmazonSSMManagedInstanceCore` | — | Session Manager、Patch Manager、インベントリ |
-| `logs:CreateLogStream`、`logs:PutLogEvents` | Session Manager のログのロググループ | 操作のログ |
+| `logs:CreateLogStream`<br>`logs:PutLogEvents` | Session Manager のログのロググループ | 操作のログ |
 | `ec2:ReplaceRoute`、`ec2:AttachNetworkInterface` などの経路の付け替え | プライベートのサブネットの経路表 | 立て直しのときに、経路を自分に向け直す |
 
 - **人の権限:** Session Manager でつなぐ人には、`ssm:StartSession` を、このインスタンスと、決めたドキュメント(シェルと、リモートのホストへのポートフォワーディング)だけに許します。

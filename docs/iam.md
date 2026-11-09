@@ -50,9 +50,9 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 
 | Permission | Resource | Use |
 | --- | --- | --- |
-| `logs:CreateLogStream`, `logs:PutLogEvents` | The log group of each function | Logs. CloudFormation creates the log groups in advance with a retention period ([security.md](security.md#retention-periods)) |
+| `logs:CreateLogStream`<br>`logs:PutLogEvents` | The log group of each function | Logs. CloudFormation creates the log groups in advance with a retention period ([security.md](security.md#retention-periods)) |
 | `ssm:GetParametersByPath` | `arn:aws:ssm:<region>:<account>:parameter/redmine/env` and below it (`parameter/redmine/env/*`) | Settings and secrets at start-up, including the database password ([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store)) |
-| `ec2:CreateNetworkInterface`, `ec2:DescribeNetworkInterfaces`, `ec2:DeleteNetworkInterface`, `ec2:AssignPrivateIpAddresses`, `ec2:UnassignPrivateIpAddresses` | `*` (the EC2 API cannot be scoped) | Running in the VPC. The same as the AWS managed policy `AWSLambdaVPCAccessExecutionRole` ([rds.md](rds.md#routes-out-of-the-vpc)) |
+| `ec2:CreateNetworkInterface`<br>`ec2:DescribeNetworkInterfaces`<br>`ec2:DeleteNetworkInterface`<br>`ec2:AssignPrivateIpAddresses`<br>`ec2:UnassignPrivateIpAddresses` | `*` (the EC2 API cannot be scoped) | Running in the VPC. The same as the AWS managed policy `AWSLambdaVPCAccessExecutionRole` ([rds.md](rds.md#routes-out-of-the-vpc)) |
 
 - **Decrypting SecureString:** Encrypt with the default SSM key (`aws/ssm`). Whether `kms:Decrypt` must be granted in IAM for this key is checked when building it.
 
@@ -62,14 +62,14 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 
 | Permission | Resource | Use |
 | --- | --- | --- |
-| `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` | `files/*`, `thumbnails/*`, `imports/*`, `incoming/*`, `tmp/*` in the attachments bucket | Storing attachments, `HeadObject` with the checksum and copying at registration, the `/tmp` cache, deletion, temporary files for bulk download ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html)) |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject` | In the attachments bucket:<br>`files/*`<br>`thumbnails/*`<br>`imports/*`<br>`incoming/*`<br>`tmp/*` | Storing attachments, `HeadObject` with the checksum and copying at registration, the `/tmp` cache, deletion, temporary files for bulk download ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html)) |
 | `s3:ListBucket` | The attachments bucket | Get 404 instead of 403 for `HeadObject` on a missing object. Delete thumbnails by prefix |
 | `sqs:SendMessage` | The job queue | Enqueuing jobs ([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | The job queue and the dead-letter queue | The "Jobs" admin page |
-| `sqs:StartMessageMoveTask`, `sqs:ListMessageMoveTasks` | The job dead-letter queue | Moving the dead-letter queue back to the source queue from the "Jobs" admin page |
-| `ses:SendEmail`, `ses:SendRawEmail` | The SES identity of the sender domain | Redmine's standard test email (sent within a page request) |
+| `sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks` | The job dead-letter queue | Moving the dead-letter queue back to the source queue from the "Jobs" admin page |
+| `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Redmine's standard test email (sent within a page request) |
 | `ses:GetEmailIdentity` | The SES identity of the sender domain | The "Sending email" admin page |
-| `ses:GetAccount`, `ses:ListSuppressedDestinations`, `ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)) |
+| `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)) |
 
 - **Two sending permissions:** Email is sent by passing the full message (raw) to SES v2 `SendEmail`. The examples in the AWS SES documentation allow both `ses:SendEmail` and `ses:SendRawEmail` as sending permissions, so this design follows them. Whether `ses:SendRawEmail` is required for raw sending with v2 has not been checked (not checked yet).
 - **Signed URLs:** Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/iam.html)). CloudFront reaches the bucket through OAC, allowed by the bucket policy ("Resource-based policies" below).
@@ -78,27 +78,27 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 
 | Permission | Resource | Use |
 | --- | --- | --- |
-| `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:GetQueueAttributes`, `sqs:ChangeMessageVisibility` | The job queue | Receiving jobs through the event source mapping. The gem's handler deletes messages that succeeded |
+| `sqs:ReceiveMessage`<br>`sqs:DeleteMessage`<br>`sqs:GetQueueAttributes`<br>`sqs:ChangeMessageVisibility` | The job queue | Receiving jobs through the event source mapping. The gem's handler deletes messages that succeeded |
 | `sqs:SendMessage` | The job queue | Retries within jobs (`retry_on`) and jobs enqueued by jobs |
-| `ses:SendEmail`, `ses:SendRawEmail` | The SES identity of the sender domain | Notification email ([mail.md](mail.md#sending)). Sent as the full message (raw) |
-| `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting attachments when deleting a project, reconciliation ([admin.md](https://redmine-kit.github.io/redmine_serverless_s3/admin.html#attachments-in-s3)) |
-| `s3:GetObject`, `s3:DeleteObject` | `inbound/*` and `processed/*` in the mail bucket | Re-importing email from the admin pages |
+| `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Notification email ([mail.md](mail.md#sending)). Sent as the full message (raw) |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting attachments when deleting a project, reconciliation ([admin.md](https://redmine-kit.github.io/redmine_serverless_s3/admin.html#attachments-in-s3)) |
+| `s3:GetObject`<br>`s3:DeleteObject` | In the mail bucket:<br>`inbound/*`<br>`processed/*` | Re-importing email from the admin pages |
 | `s3:PutObject` | `processed/*` in the mail bucket | Same as above |
 
 ## Execution role of `redmine-task`
 
 | Permission | Resource | Use |
 | --- | --- | --- |
-| `s3:GetObject`, `s3:DeleteObject` | `inbound/*` in the mail bucket | Importing received email ([mail.md](mail.md#importing)) |
+| `s3:GetObject`<br>`s3:DeleteObject` | `inbound/*` in the mail bucket | Importing received email ([mail.md](mail.md#importing)) |
 | `s3:PutObject` | `processed/*` in the mail bucket | Moving imported email |
-| `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting unattached attachments (`redmine:attachments:prune`), storing attachments from email |
-| `ses:SendEmail`, `ses:SendRawEmail` | The SES identity of the sender domain | Email from rake tasks (due date reminders, etc.) |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting unattached attachments (`redmine:attachments:prune`), storing attachments from email |
+| `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Email from rake tasks (due date reminders, etc.) |
 | `sqs:SendMessage` | The job queue | Jobs enqueued within rake |
 | `sqs:SendMessage` | The failure destination queue (`redmine-task-failures`) | The destination for failed asynchronous invocations from SES. Lambda sends to destinations with the execution role's permissions |
 
 ## Cost Explorer (only with `cost.enabled`)
 
-The plugin `redmine_serverless_cost` reads the account's costs. The policy `cost-explorer` gives `redmine-task` (the daily refresh) and `redmine-worker` (refreshes from jobs) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`: Cost Explorer has no resource-level permissions, and the costs are of the whole account (narrowed to the instance only with `cost.allocationTag`). `redmine-web` does not call Cost Explorer. The boundary `redmine-boundary` allows these two actions.
+The plugin [Redmine Serverless Cost](https://redmine-kit.github.io/redmine_serverless_cost/) reads the account's costs. The policy `cost-explorer` gives `redmine-task` (the daily refresh) and `redmine-worker` (the refresh that the plugin's button queues as a job) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`. The two actions take a billing view as their resource (the AWS service reference, checked 2026-11-10) and the plugin uses the primary billing view; whether the policy can be narrowed to its ARN is unverified. `redmine-web` does not call Cost Explorer. The boundary `redmine-boundary` allows these two actions.
 
 ## Resource-based policies
 
@@ -110,7 +110,7 @@ The plugin `redmine_serverless_cost` reads the account's costs. The policy `cost
 | The assets bucket | CloudFront (`cloudfront.amazonaws.com`) | `s3:GetObject` | `AWS:SourceArn` is this distribution (OAC) |
 | The mail bucket | SES (`ses.amazonaws.com`) | `s3:PutObject` to `inbound/*` | `aws:SourceAccount` is this account, `aws:SourceArn` is the receipt rule |
 | All three buckets | Everyone | Deny everything | `aws:SecureTransport` is `false` (requests not over TLS) |
-| The ECR repository | Lambda (`lambda.amazonaws.com`) | `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer` | `aws:SourceArn` is a function in this account |
+| The ECR repository | Lambda (`lambda.amazonaws.com`) | `ecr:BatchGetImage`<br>`ecr:GetDownloadUrlForLayer` | `aws:SourceArn` is a function in this account |
 
 - **Only CloudFront can call the function URL:** The function URL uses IAM authentication and accepts only requests signed by CloudFront OAC. Lambda@Edge adds the body hash for POST requests from browsers ([lambda.md](lambda.md#cloudfront-and-function-urls)). As the CloudFront documentation describes, a function URL behind OAC allows both `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction`.
 - **ECR:** For functions in the same account, Lambda adds this policy automatically if the person deploying has `ecr:SetRepositoryPolicy`. CloudFormation states it explicitly.
@@ -122,7 +122,7 @@ The trust policy allows both `lambda.amazonaws.com` and `edgelambda.amazonaws.co
 
 | Permission | Resource | Use |
 | --- | --- | --- |
-| `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` | The log group `/aws/lambda/us-east-1.redmine-body-hash` in all regions (`arn:aws:logs:*:<account>:log-group:/aws/lambda/us-east-1.redmine-body-hash:*`) | Logs. Lambda@Edge writes logs to the region close to the edge location where it ran |
+| `logs:CreateLogGroup`<br>`logs:CreateLogStream`<br>`logs:PutLogEvents` | The log group `/aws/lambda/us-east-1.redmine-body-hash` in all regions (`arn:aws:logs:*:<account>:log-group:/aws/lambda/us-east-1.redmine-body-hash:*`) | Logs. Lambda@Edge writes logs to the region close to the edge location where it ran |
 
 - **No other permissions:** It only reads the body and adds the hash, so it gets no permissions for AWS services.
 - **Permissions to attach the function to CloudFront:** Attaching a Lambda@Edge function version to CloudFront needs `lambda:EnableReplication*` and `iam:CreateServiceLinkedRole`. The CloudFormation service role has them ("Role for deploying infrastructure" below). The code deployment role does not.
@@ -143,9 +143,9 @@ The trust policy uses GitHub OIDC (`token.actions.githubusercontent.com`), with 
 | Permission | Resource | Use |
 | --- | --- | --- |
 | `ecr:GetAuthorizationToken` | `*` (cannot be scoped) | Logging in to ECR |
-| `ecr:DescribeImages`, `ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`, `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer` | The Redmine repository | Copying the image (and skipping an image already there) |
-| `s3:PutObject`, `s3:GetObject`, `s3:ListBucket` | The assets buckets (`*-assets-<account>-*`, objects under `assets/`) | Syncing assets ([lambda.md](lambda.md#serving-assets)) |
-| `lambda:UpdateFunctionCode`, `lambda:GetFunction`, `lambda:GetFunctionConfiguration`, `lambda:InvokeFunction` | Functions with the tag `redmine:instance` | Updating the image, waiting for the update to finish, and the migrations in `redmine-task` ([tasks.md](tasks.md#migrations-during-deployment)) |
+| `ecr:DescribeImages`<br>`ecr:BatchCheckLayerAvailability`<br>`ecr:InitiateLayerUpload`<br>`ecr:UploadLayerPart`<br>`ecr:CompleteLayerUpload`<br>`ecr:PutImage`<br>`ecr:BatchGetImage`<br>`ecr:GetDownloadUrlForLayer` | The Redmine repository | Copying the image (and skipping an image already there) |
+| `s3:PutObject`<br>`s3:GetObject`<br>`s3:ListBucket` | The assets buckets (`*-assets-<account>-*`, objects under `assets/`) | Syncing assets ([lambda.md](lambda.md#serving-assets)) |
+| `lambda:UpdateFunctionCode`<br>`lambda:GetFunction`<br>`lambda:GetFunctionConfiguration`<br>`lambda:InvokeFunction` | Functions with the tag `redmine:instance` | Updating the image, waiting for the update to finish, and the migrations in `redmine-task` ([tasks.md](tasks.md#migrations-during-deployment)) |
 | `cloudformation:DescribeStacks` | The account's stacks | Reading the outputs: the repository, the buckets and the distribution |
 
 - **One policy for every instance:** The permissions are in the managed policy `redmine-code-deploy` (`infra/account.yaml`), shared with the role for deploying infrastructure. Instance names are free, so functions are found by the tag `redmine:instance`, which every stack puts on its resources, and buckets by their names.
@@ -193,9 +193,9 @@ If an operations permission set is created, it has the following scope (whether 
 
 | Permission | Resource |
 | --- | --- |
-| `lambda:InvokeFunction`, `lambda:GetFunction` | `redmine-task` |
-| `logs:StartQuery`, `logs:GetQueryResults`, `logs:FilterLogEvents` | The log groups of the three functions |
-| `sqs:GetQueueAttributes`, `sqs:StartMessageMoveTask`, `sqs:ListMessageMoveTasks` | The job queue and the dead-letter queue |
+| `lambda:InvokeFunction`<br>`lambda:GetFunction` | `redmine-task` |
+| `logs:StartQuery`<br>`logs:GetQueryResults`<br>`logs:FilterLogEvents` | The log groups of the three functions |
+| `sqs:GetQueueAttributes`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks` | The job queue and the dead-letter queue |
 
 - **rake is a powerful permission:** Anyone who can invoke `redmine-task` can read and write everything in the database and S3 with rake and `rails runner`. Restrict who can invoke it ([tasks.md](tasks.md#permissions)).
 
@@ -211,7 +211,7 @@ The role is named `redmine-nat` (provisional) and is assumed by EC2. It is used 
 | Permission | Resource | Use |
 | --- | --- | --- |
 | AWS managed policy `AmazonSSMManagedInstanceCore` | — | Session Manager, Patch Manager, Inventory |
-| `logs:CreateLogStream`, `logs:PutLogEvents` | The log group for Session Manager logs | Session logs |
+| `logs:CreateLogStream`<br>`logs:PutLogEvents` | The log group for Session Manager logs | Session logs |
 | Route switching such as `ec2:ReplaceRoute` and `ec2:AttachNetworkInterface` | The route tables of the private subnets | Pointing the routes back to itself during recovery |
 
 - **Permissions of people:** People who connect with Session Manager get `ssm:StartSession` only for this instance and specific documents (shell, and port forwarding to a remote host).

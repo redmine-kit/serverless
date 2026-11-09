@@ -14,7 +14,7 @@ This design uses one configuration file for each Redmine you set up, and the sam
 
 | Resource | Name |
 | --- | --- |
-| Lambda functions | `<instance>-web`, `<instance>-worker`, `<instance>-task` |
+| Lambda functions | `<instance>-web`<br>`<instance>-worker`<br>`<instance>-task` |
 | SSM Parameter Store | `/<instance>/env/…` |
 | S3 buckets | `<instance>-files-<account ID>-<Region>`; `-assets-` and `-mail-` follow the same pattern |
 | SQS queues | `<instance>-jobs`, `<instance>-jobs-dlq`, `<instance>-task-failures` (destination for failed invocations from SES) |
@@ -78,7 +78,7 @@ When several instances are set up in the same account, resources that can be com
 | `redmine.settings` | | none | Values of Redmine administration settings (`host_name`, `default_language`, `mail_from`, etc.) |
 | `redmine.settingsMode` | | `initial` | `initial` (set only the settings not stored yet; can be changed on the page afterwards) or `enforce` (set again on every deployment) |
 | `redmine.pluginSettings` | | none | Setting values for the plugins, by plugin name (`redmine_serverless`, `redmine_serverless_s3`, `redmine_serverless_ses`, `redmine_serverless_sqs`). They are merged into the plugin's stored settings. For example, `{"redmine_serverless_ses": {"import_spam": "0", "import_without_dmarc_pass": "0"}}` keeps spam and email that fails DMARC out (the defaults; [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/receiving.html#spoofing-and-spam)) |
-| `cost.enabled` | | `false` | Whether the plugin `redmine_serverless_cost` shows the account's costs from Cost Explorer on the administration pages. The functions get `REDMINE_COST_ENABLED`, `redmine-task` and `redmine-worker` get `ce:GetCostAndUsage` and `ce:GetCostForecast`, and `redmine_serverless_cost:refresh` runs daily ([tasks.md](tasks.md#scheduled-runs)). Cost Explorer's API (`ce.us-east-1.amazonaws.com`) is reached through the NAT instance (`network.mode` `nat`); whether an interface endpoint for it exists for `endpoints` is unconfirmed. Each request costs USD 0.01 ([cost.md](cost.md#what-adds-cost)) |
+| `cost.enabled` | | `false` | Whether the plugin `redmine_serverless_cost` shows the account's costs from Cost Explorer on the administration pages. The functions get `REDMINE_COST_ENABLED`, `redmine-task` and `redmine-worker` get `ce:GetCostAndUsage` and `ce:GetCostForecast`, and `redmine_serverless_cost:refresh` runs daily ([tasks.md](tasks.md#scheduled-runs)). Cost Explorer's API (`ce.us-east-1.amazonaws.com`) is reached through the NAT instance (`network.mode` `nat`); the PrivateLink guide lists an interface endpoint `com.amazonaws.<region>.ce`, but whether it can be used from a VPC in another Region is unverified ([Redmine Serverless Cost](https://redmine-kit.github.io/redmine_serverless_cost/)). Each request costs USD 0.01 ([cost.md](cost.md#what-adds-cost)) |
 | `cost.allocationTag` | | empty | A cost allocation tag (for example `redmine:instance`) to show the costs of this instance only; the functions get it as `REDMINE_COST_TAG_KEY`. The tag must be activated as a cost allocation tag in the Billing console |
 | `schedule.timezone` | | `UTC` | The time zone of the scheduled rake ([tasks.md](tasks.md#scheduled-runs)) |
 | `schedule.sendReminders` | | `false` | Whether to send the reminder mails (`redmine:send_reminders`) on weekday mornings |

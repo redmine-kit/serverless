@@ -184,32 +184,20 @@ Event Functions で書き込めるのは `/tmp` だけです。Redmine が実行
 
 ### パラメーター
 
-`/<instance>/env/` の下のパラメーターを、名前の最後の部分を環境変数の名前にして読み込みます(下の表は、インスタンスの名前が `redmine` のときの例)。パラメーターを足せば、コードを変えずに環境変数が増えます。
+プラグインの [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) が、Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`/<instance>/env/` のすぐ下のパラメーターを、すべて環境変数に読み込みます。読み方とタイミング、読まないものは、プラグインの資料にあります。パラメーターを足せば、コードを変えずに環境変数が増えます。下の表は、インスタンスの名前が `redmine` のときの例です。
 
-| パラメーター | 種類 | 中身 |
-| --- | --- | --- |
-| `/redmine/env/REDMINE_DB_HOST` | String | RDS のエンドポイント(`<インスタンスの ID>.<ランダムな文字>.ap-northeast-1.rds.amazonaws.com`)。秘密ではないが、Redmine の設定をまとめて読むためにここに置く |
-| `/redmine/env/REDMINE_DB_PASSWORD` | SecureString | データベースのユーザーのパスワード。データベースを作るときに作る([rds.md](rds.md#settings)) |
-| `/redmine/env/SECRET_KEY_BASE` | SecureString | Rails の秘密の鍵(`bin/rails secret` で作る) |
+| パラメーター | 種類 | 中身 | 書くもの |
+| --- | --- | --- | --- |
+| `/redmine/env/REDMINE_DB_HOST` | String | RDS のエンドポイント(`<インスタンスの ID>.<ランダムな文字>.ap-northeast-1.rds.amazonaws.com`)。秘密ではないが、Redmine の設定をまとめて読むためにここに置く | インスタンスのスタック |
+| `/redmine/env/REDMINE_DB_PASSWORD` | SecureString | データベースのユーザーのパスワード([rds.md](rds.md#settings)) | 初めてのときの `bin/deploy`([deploy-config.md](deploy-config.md#secrets)) |
+| `/redmine/env/SECRET_KEY_BASE` | SecureString | Rails の秘密の鍵 | 同じ |
+| `/redmine/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL の秘密鍵([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/setup.html#configuration)) | 同じ |
 
+- **つなぎ方:** インスタンスのスタックが、3 つの関数に環境変数 `REDMINE_SSM_PATH=/<instance>/env/` を渡し、実行ロールには、その道筋だけへの `ssm:GetParametersByPath` を許します([iam.md](iam.md#permissions-common-to-the-three-functions))。十分早く読み込まれるように、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から足します。
 - **秘密でない設定:** バケットの名前、ドメイン、リージョン、データベースの名前、データベースのユーザーの名前は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME`(既定は `redmine`)、`REDMINE_DB_USERNAME`(既定は `redmine`)、`REDMINE_JOBS_QUEUE_URL`(ジョブのキュー)、`REDMINE_HOST`(ドメイン)として読みます。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE`(既定は `verify-full`)は、手元のテストでだけ変えます。
 - **暗号化:** SecureString は、SSM の既定の鍵(`aws/ssm`)で暗号化します。この鍵のときに、実行ロールに `kms:Decrypt` が要るかは、作るときに確認します。
-
-<a id="loading"></a>
-
-### 読み込み
-
-1. Rails が設定を読む前に、プラグインの `redmine_serverless_ssm` が、関数の環境変数 `REDMINE_SSM_PATH` の道筋(`/<instance>/env/`)に、SSM の `GetParametersByPath`(復号あり)を呼びます。1 回に 10 件までなので、続きがあれば続けて読みます。`REDMINE_SSM_PATH` がなければ(手元の Docker など)、何も読みません。
-2. 読んだ値を `ENV` に入れます。すでに環境変数にある名前は上書きしません。手元の Docker で試すときに、環境変数で渡せるようにするためです。環境変数にできる名前(大文字、数字、`_`)だけを読み、指定した道筋より下の階層は読みません。
-
-- **コード:** 読み込みはプラグインの [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) が、Railtie の `before_configuration` で行います(`additional_environment.rb` を含む `config/application.rb` のクラスの本体より前)。プラグインの `init.rb` では遅すぎるので、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から足して、Bundler が読み込みます。SSM につながらなければ、秘密の値なしで続けずに、起動を失敗させます。
-- **タイミングの確認:** イメージのテストでは、データベースのホストを SSM(moto)だけに置き、`db:migrate`、web の画面、worker のジョブが通るので、`config/database.yml` より前に読めています(2026-11-09)。
-3. そのあとで、Rails が `config/database.yml` を読み、データベースに接続します。
-
-- **読む場所:** `additional_environment.rb` は `config/application.rb` の中で読まれます。`config/database.yml` の評価と、`SECRET_KEY_BASE` の読み込みはそのあとなので、ここで入れれば間に合います。Redmine の `Gemfile` は `adapter:` の文字しか見ないので、`REDMINE_DB_HOST` がなくても gem を選べます。
-- **タスク用の関数:** rake と `rails runner` も Rails の環境を読み込むので、同じ処理で読みます。
-- **読む回数:** 環境が起動するときに 1 回だけです。値を変えたら、関数の設定を更新して、新しい環境に切り替えます。
-- **権限:** 実行ロールに `ssm:GetParametersByPath` を付けます。対象は `/<instance>/env/` の下だけです([iam.md](iam.md#permissions-common-to-the-three-functions))。
+- **値を変えたとき:** 実行環境は、起動のときに 1 回だけパラメーターを読みます。値を変えたら、関数の設定を更新して、新しい環境を起動させます。
+- **タイミングの確認:** イメージのテストでは、データベースのホストを SSM(moto)だけに置き、`db:migrate`、web の画面、worker のジョブが通るので、`config/database.yml` より前に読めています(2026-11-09。[testing.md](testing.md#image-tests))。
 
 <a id="how-they-reach-the-function"></a>
 

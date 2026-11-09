@@ -160,30 +160,20 @@ Secrets such as `SECRET_KEY_BASE` are stored in SSM Parameter Store and read by 
 
 ### Parameters
 
-Parameters under `/<instance>/env/` are loaded, with the last part of each name used as the environment variable name (the table below is an example for the instance name `redmine`). Adding a parameter adds an environment variable without code changes.
+The plugin [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/) reads every parameter directly under `/<instance>/env/` into environment variables, before Rails reads `config/database.yml` and `SECRET_KEY_BASE`; how and when it reads, and what it skips, are on its pages. Adding a parameter adds an environment variable without code changes. The table is an example for the instance name `redmine`.
 
-| Parameter | Type | Contents |
-| --- | --- | --- |
-| `/redmine/env/REDMINE_DB_HOST` | String | The RDS endpoint (`<instance ID>.<random>.ap-northeast-1.rds.amazonaws.com`). Not a secret, but kept here so that Redmine's settings are read together |
-| `/redmine/env/REDMINE_DB_PASSWORD` | SecureString | The password of the database user, generated when the database is created ([rds.md](rds.md#settings)) |
-| `/redmine/env/SECRET_KEY_BASE` | SecureString | The Rails secret key (generated with `bin/rails secret`) |
+| Parameter | Type | Contents | Written by |
+| --- | --- | --- | --- |
+| `/redmine/env/REDMINE_DB_HOST` | String | The RDS endpoint (`<instance ID>.<random>.ap-northeast-1.rds.amazonaws.com`). Not a secret, but kept here so that Redmine's settings are read together | The instance stack |
+| `/redmine/env/REDMINE_DB_PASSWORD` | SecureString | The password of the database user ([rds.md](rds.md#settings)) | `bin/deploy`, the first time ([deploy-config.md](deploy-config.md#secrets)) |
+| `/redmine/env/SECRET_KEY_BASE` | SecureString | The Rails secret key | Same as above |
+| `/redmine/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | The private key for signed attachment URLs ([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#configuration)) | Same as above |
 
+- **Wiring:** The three functions get `REDMINE_SSM_PATH=/<instance>/env/` as an environment variable from the instance stack, and their execution roles may call `ssm:GetParametersByPath` only on that path ([iam.md](iam.md#permissions-common-to-the-three-functions)). The plugin is a gem as well as a plugin, so that it is loaded early enough; `image/Gemfile.local` adds it from GitHub Packages.
 - **Non-secret settings:** The bucket names, domain, region, database name and database user name are passed from CloudFormation as function environment variables. The image reads them as `REDMINE_DB_NAME` (default `redmine`), `REDMINE_DB_USERNAME` (default `redmine`), `REDMINE_JOBS_QUEUE_URL` (the job queue) and `REDMINE_HOST` (the domain). `REDMINE_DB_PORT` and `REDMINE_DB_SSLMODE` (default `verify-full`) are changed only in local tests.
 - **Encryption:** SecureString parameters are encrypted with the SSM default key (`aws/ssm`). Whether the execution role needs `kms:Decrypt` with this key will be checked when building.
-
-### Loading
-
-1. Before Rails reads the configuration, the plugin `redmine_serverless_ssm` calls SSM `GetParametersByPath` (with decryption) on the path in the function's environment variable `REDMINE_SSM_PATH` (`/<instance>/env/`). It returns up to 10 parameters per call, so the remaining ones are read with further calls. Without `REDMINE_SSM_PATH`, as in local Docker, nothing is read.
-2. Put the values into `ENV`. Names that already exist as environment variables are not overwritten, so that values can be passed as environment variables when testing in local Docker. Only names that can be environment variables (capital letters, digits and `_`) are read, and paths below the one given are not.
-
-- **Code:** The plugin [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/) does the reading, from its Railtie's `before_configuration` (before the class body of `config/application.rb`, which includes `additional_environment.rb`). A plugin's `init.rb` runs too late, so the plugin is also a gem, which `image/Gemfile.local` adds from GitHub Packages and Bundler loads. If SSM cannot be reached, start-up fails instead of continuing without the secrets.
-- **Timing checked:** In the image tests, the database host is only in SSM (moto), and `db:migrate`, the web page and the worker job pass, so the parameters are read before `config/database.yml` (2026-11-09).
-3. After that, Rails reads `config/database.yml` and connects to the database.
-
-- **Where it is read:** `additional_environment.rb` is loaded inside `config/application.rb`. `config/database.yml` is evaluated and `SECRET_KEY_BASE` is read after that, so setting the values here is early enough. Redmine's `Gemfile` looks only at the literal `adapter:`, so the gem can be chosen without `REDMINE_DB_HOST`.
-- **Task function:** rake and `rails runner` also load the Rails environment, so they read the parameters the same way.
-- **How often:** Only once, when an environment starts. After changing a value, update the function configuration to switch to new environments.
-- **Permissions:** The execution role gets `ssm:GetParametersByPath`, limited to `/<instance>/env/` ([iam.md](iam.md#permissions-common-to-the-three-functions)).
+- **Changing a value:** Each execution environment reads the parameters once when it starts. After changing a value, update the function configuration so that new environments start.
+- **Timing checked:** In the image tests, the database host is only in SSM (moto), and `db:migrate`, the web page and the worker job pass, so the parameters are read before `config/database.yml` (2026-11-09; [testing.md](testing.md#image-tests)).
 
 ### How they reach the function
 

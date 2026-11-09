@@ -154,8 +154,9 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 | [`redmine_serverless_sqs`](https://github.com/redmine-kit/redmine_serverless_sqs) | SQS でのジョブ。`aws-activejob-sqs` の設定(キューと、実行してよいジョブのクラス)、最後に失敗したジョブの記録、管理画面の「ジョブ」 | `REDMINE_JOBS_QUEUE_URL` がある | [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/ja/) |
 | [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | 設定と秘密の値。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。そのタイミングで動くように gem でもあり、`image/Gemfile.local` で道筋を指定して足す | `REDMINE_SSM_PATH` がある | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) |
 
-- **5 つに分ける理由:** S3 の添付ファイル、SES でのメール、SQS でのジョブ、SSM の設定は、Lambda 以外でも動きます(ジョブは、Lambda のイベントソースの代わりに gem の取り出し役で動かします)。プラグインを分けると、ふつうのサーバーの Redmine でも、Lambda のための部分なしで片方だけを使えます。Lambda では、ファイルシステムに書けず、メールの受信箱もないので、イメージに 5 つとも入れます。
-- **名前:** GitHub のリポジトリの検索では、`redmine_serverless` という名前の Redmine のプラグインは見つかりませんでした(2026-11-08。見つかったのは関係のない Slack のボットだけ)。S3、SES、SQS、SSM のプラグインの名前は、まだ確認していません。
+S3 の添付ファイル、SES でのメール、SQS でのジョブ、SSM の設定は、Lambda 以外でも動きます。その場合、ジョブは Lambda のイベントソースの代わりに gem の取り出し役で動かします。プラグインを分けておくと、ふつうのサーバーの Redmine でも、Lambda のための部分なしで必要なものだけを使えます。Lambda ではファイルシステムに書けず、メールの受信箱もないので、イメージに 5 つともインストールします。
+
+GitHub のリポジトリの検索では、`redmine_serverless` という名前の Redmine のプラグインは見つかりませんでした(2026-11-08。見つかったのは関係のない Slack のボットだけ)。S3、SES、SQS、SSM のプラグインの名前は、まだ確認していません。
 
 <a id="features"></a>
 
@@ -175,11 +176,13 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 | プラグイン | GitHub Packages の gem `redmine_serverless_x`。プラグインごとに 1 つで、それぞれのリポジトリのワークフローが、バージョンのタグごとに公開する。プラグインの動かすためのファイルを持つ | `Gemfile.local` で GitHub Packages の source から足し、`bundle install` を実行して、入れた gem を `plugins/` にリンクする(各プラグインの準備のページ) |
 | プラグイン(gem を使わない人) | リポジトリのチェックアウト | `plugins/` に clone する |
 
-- **gem にする理由:** gem は、ほかの gem と一緒に Bundler が入れ、バージョンとチェックサムが `image/Gemfile.lock` に残ります。プラグインの更新も、ほかの gem と同じく、毎週の gem の更新でイメージに届きます([testing.md](testing.md#order-in-ci))。`redmine_serverless_ssm` は、Rails が設定を読む前に SSM Parameter Store を読むので、もともと gem である必要があります。
-- **`plugins/` にリンクする理由:** Redmine 7.0.3 は、`plugins/` のディレクトリにあるプラグインだけを読み込みます(`lib/redmine/plugin_loader.rb`)。gem のプラグインを読み込む仕組みはありません。イメージは、入れたプラグインの gem を、そこにリンクします(`image/Dockerfile` の `link-plugins`)。gem にはプラグインの `Gemfile` を入れないので、Redmine の `Gemfile` がプラグインを 2 回読み込むことはありません。
-- **トークンが要る:** GitHub Packages の RubyGems のレジストリは、公開の gem でも、入れるのに `read:packages` の権限を持つトークンが要ります(GitHub の資料、2026-11-09 に確認)。CI はそのジョブの `GITHUB_TOKEN` を、手元は `gh` のログインのトークンを使います。組み立てには秘密として渡し、レイヤーには残しません(`bin/lib/plugin.sh`)。
-- **バージョン:** それぞれのプラグインのバージョンは、gemspec、`init.rb` の `version`、Git のタグでそろえ(公開のワークフローが確認します)、対応する Redmine のバージョンを `requires_redmine` で書きます。
-- **使う側:** 使う側は、Redmine のイメージを、タグではなく digest で参照します([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
+プラグインを gem にするのは、ほかの gem と一緒に Bundler がインストールし、バージョンとチェックサムを `image/Gemfile.lock` に残すためです。プラグインの更新も、ほかの gem と同じく、毎週の gem の更新でイメージに届きます([testing.md](testing.md#order-in-ci))。`redmine_serverless_ssm` は、Rails が設定を読む前に SSM Parameter Store を読むので、もともと gem である必要があります。
+
+Redmine 7.0.3 は、`plugins/` のディレクトリにあるプラグインだけを読み込み(`lib/redmine/plugin_loader.rb`)、gem のプラグインを読み込む仕組みはありません。そこでイメージは、インストールしたプラグインの gem を `plugins/` にリンクします(`image/Dockerfile` の `link-plugins`)。gem にはプラグインの `Gemfile` を入れないので、Redmine の `Gemfile` がプラグインを 2 回読み込むことはありません。
+
+GitHub Packages の RubyGems のレジストリからインストールするには、公開の gem でも、`read:packages` の権限を持つトークンが要ります(GitHub の資料、2026-11-09 に確認)。CI はそのジョブの `GITHUB_TOKEN` を、手元のビルドは `gh` のログインのトークンを使います。ビルドには秘密として渡し、レイヤーには残しません(`bin/lib/plugin.sh`)。
+
+それぞれのプラグインは、バージョンを gemspec、`init.rb` の `version`、Git のタグでそろえ(公開のワークフローが確認します)、対応する Redmine のバージョンを `requires_redmine` で書きます。使う側は、Redmine のイメージをタグではなく digest で参照します([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
 
 <a id="derived-images"></a>
 
@@ -187,9 +190,9 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 
 このプロジェクトのイメージは、標準のテーマと 5 つのプラグインだけを入れます。テーマやプラグインを足したい使う側は、このプロジェクトのイメージを土台にした派生のイメージを作り、設定のファイルの `image` で指します([deploy-config.md](deploy-config.md#fields-of-redminejson))。
 
-- **作り方:** `FROM` でこのプロジェクトのイメージを digest で指し、テーマを `themes/<テーマ>/` に、プラグインを `plugins/<プラグイン>/` に置いて、アセットを作り直します(`assets:precompile`)。Redmine 7.0 は、テーマを `themes/` か `app/assets/themes/` から読み、Propshaft のアセットとして配ります(`lib/redmine/themes.rb`)。
-- **アセット:** `bin/deploy` は、派生のイメージの中のアセットを S3 に同期します。テーマのアセットも、CloudFront の `/assets/*` から配られます。
-- **確認:** 派生のイメージも、このプロジェクトのイメージのテスト(読み取り専用、権限の少ないユーザー、3 つの役割)を通します([testing.md](testing.md#image-tests))。足したプラグインは、このプロジェクトでは確認しません。
+作るときは、`FROM` でこのプロジェクトのイメージを digest で指し、テーマを `themes/<テーマ>/` に、プラグインを `plugins/<プラグイン>/` に置いて、アセットを作り直します(`assets:precompile`)。Redmine 7.0 は、テーマを `themes/` か `app/assets/themes/` から読み、Propshaft のアセットとして配信します(`lib/redmine/themes.rb`)。`bin/deploy` は派生のイメージの中のアセットを S3 に同期するので、テーマのアセットも CloudFront の `/assets/*` から配信されます。
+
+派生のイメージも、このプロジェクトのイメージのテスト(読み取り専用、権限の少ないユーザー、3 つの役割)を通します([testing.md](testing.md#image-tests))。使う側が足したプラグインは、このプロジェクトでは確認しません。
 
 
 <a id="what-is-not-in-the-plugins"></a>

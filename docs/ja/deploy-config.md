@@ -43,9 +43,11 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | 共有の土台 | SES の受信のルールのセット | 有効なルールのセットは、リージョンに 1 つだけ。インスタンスごとに、セットの中にルールを足す([mail.md](mail.md#receipt-rules)) |
 | インスタンスごと | Lambda の関数、RDS のインスタンス、セキュリティグループ、S3 のバケット、SQS のキュー、CloudFront、DNS のレコード、SES の ID、SSM のパラメーター、アラーム | インスタンスのデータと権限を、ほかのインスタンスと混ぜない |
 
-- **1 つしか立てないとき:** 共有の土台とインスタンスを、1 つずつ立てます。手順は同じです。
-- **us-east-1 に置くもの:** Lambda@Edge の関数のほかに、CloudFront の証明書(ACM)も us-east-1 に作ります(CloudFront の決まり)。証明書はインスタンスごとに、us-east-1 のスタック `<instance>-edge` に置きます。
-- **VPC:** インスタンスごとの Lambda の関数と RDS のインスタンスは、共有のプライベートのサブネットに、それぞれのセキュリティグループで入ります。`network.shared` を `false` にすると、インスタンスごとに VPC を作ります([rds.md](rds.md))。
+Redmine を 1 つだけ立てるときは、共有の土台とインスタンスを 1 つずつ立てます。手順は同じです。
+
+Lambda@Edge の関数のほかに、CloudFront の証明書(ACM)も us-east-1 に作ります。CloudFront がそこに置くことを求めるためです。証明書はインスタンスごとに、us-east-1 のスタック `<instance>-edge` に置きます。
+
+インスタンスごとの Lambda の関数と RDS のインスタンスは、共有のプライベートサブネットに、それぞれのセキュリティグループで入ります。`network.shared` を `false` にすると、代わりにインスタンスごとに VPC を作ります([rds.md](rds.md))。
 
 <a id="fields-of-redminejson"></a>
 
@@ -98,7 +100,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | `alarms.snsTopicArn` | | なし | アラームを送る SNS のトピック |
 | `tags` | | なし | すべてのスタックに、つまりリソースに足すタグ |
 
-- **スタックがまだ使わない項目:** `mail.perProjectAddresses`、`mail.globalLocalPart`、`webhooks`、`cloudfront.plan`、`retention.recordsDays` は、スキーマで確認するだけです。あとで作るプラグインの設定と CloudFront のプランで効くようになります。
+`mail.perProjectAddresses`、`mail.globalLocalPart`、`webhooks`、`cloudfront.plan`、`retention.recordsDays` は、スキーマで確認するだけで、スタックはまだ使いません。あとで作るプラグインの設定と CloudFront のプランで効くようになります。
 
 保持の期間の一覧は、[security.md](security.md#retention-periods) にあります。
 
@@ -154,15 +156,33 @@ bin/deploy path/to/redmine.json --code-only  # イメージだけを更新する
 | 10 | Redmine とプラグインの設定を、`redmine-task` の `rails runner` で入れる(`redmine.settingsMode` のとおり)。値は JSON を 16 進にして渡すので、Ruby に引用符の問題は届かない |
 | 11 | デプロイしたあとの確認。`/login` が `Strict-Transport-Security` 付きの 200 を返し、署名のない `/files/` が 403 を返すこと。要求は、ドメインのホスト名のまま、ディストリビューションそのものの名前に送るので、DNS を待たない([testing.md](testing.md#checks-after-deployment))。`dns.mode` が `external` なら、足すレコードを表示する |
 
-- **イメージの順番:** Web と worker が新しいイメージになるのは、マイグレーションのあとです。データベースより新しいコードが動くことはありません。マイグレーションが失敗すると、デプロイはそこで止まり、Web と worker は前のイメージのままです。
-- **`--dry-run`:** 段 1〜4 とインスタンスのスタックについて、変更セットを作って表示し、消します。作られるはずのスタックも消します。秘密の値、イメージ、アセット、関数の呼び出しなど、ほかは何も変えません(そのまま渡すには大きすぎるテンプレートだけは、テンプレートのバケットに置きます)。
-- **`--code-only`:** 段 5〜7、9、11 を、スタックを変えずに、渡された認証情報で動かします(たとえば、GitHub Actions のコードのデプロイ用のロール。[iam.md](iam.md#role-for-deploying-code-github-actions))。関数は直接更新します。立てたインスタンスが要ります。
-- **`--account`:** `infra/account.yaml`(スタック `redmine-account`)を、管理者の自分の認証情報で当てます。それより前には、デプロイ用のロールも CloudFormation のサービスロールも無いからです。アカウントごとに 1 回、最初のデプロイの前に行います。
-- **CloudFormation のロール:** どのスタックも、サービスロール `redmine-cfn-exec` を付けた変更セットで当てます。デプロイ用のロールは、自分ではリソースを作れません([iam.md](iam.md#role-for-deploying-infrastructure))。
-- **保守の画面:** `redmine-web` と `redmine-worker` の同時実行数の予約を 0 にすると、書き込みを止められます(事故のときなど。[security.md](security.md))。CloudFront は、関数 URL からの 502、503、504 に、S3 の保守の画面(`/assets/maintenance.html`)を返します。`redmine-web` の同時実行数の予約が 0 のあいだ、関数 URL は 429 を返します。CloudFront のエラーの応答の設定は 429 を扱えないので、ブラウザーにはその 429 が届きます(下の「確認すること」)。
-- **同じ設定なら何も変えない:** 変更のない変更セットは消し、スタックはそのままにします。イメージはコピーし直さず、マイグレーションも何もしません。
-- **多くのインスタンスを立てるとき:** インスタンスの数だけ、同じコマンドを繰り返します。順番(先に試す小さなインスタンスから)は、使う側で決めます。
-- **イメージ:** このプロジェクトの CI が、イメージを GitHub Packages のコンテナのレジストリ(`ghcr.io`)に公開します([architecture.md](architecture.md#distribution))。デプロイのコマンドは digest のままコピーするので、ECR のイメージも同じ digest です。
+<a id="options"></a>
+
+### オプション
+
+| オプション | 内容 |
+| --- | --- |
+| `--account` | `infra/account.yaml`(スタック `redmine-account`)を、管理者の自分の認証情報で適用する。それより前には、デプロイ用のロールも CloudFormation のサービスロールもないため。アカウントごとに 1 回、最初のデプロイの前に実行する |
+| `--dry-run` | 段 1〜4 とインスタンスのスタックについて、変更セットを作って表示し、消す。作られるはずのスタックも消す。秘密の値、イメージ、アセット、関数の呼び出しなど、ほかは何も変えない(そのまま渡すには大きすぎるテンプレートだけは、テンプレートのバケットに置く) |
+| `--code-only` | 段 5〜7、9、11 を、スタックを変えずに、渡された認証情報で実行する(たとえば、GitHub Actions のコードのデプロイ用のロール。[iam.md](iam.md#role-for-deploying-code-github-actions))。関数は直接更新する。デプロイ済みのインスタンスが要る |
+
+<a id="how-the-steps-behave"></a>
+
+### 手順の動き
+
+Web と worker が新しいイメージになるのは、マイグレーションのあとです。そのため、データベースより新しいコードが動くことはありません。マイグレーションが失敗すると、デプロイはそこで止まり、Web と worker は前のイメージのままです。
+
+どのスタックも、サービスロール `redmine-cfn-exec` を付けた変更セットで適用します。デプロイ用のロールは、自分ではリソースを作れません([iam.md](iam.md#role-for-deploying-infrastructure))。同じ設定でもう一度実行しても、何も変わりません。変更のない変更セットは消してスタックはそのままにし、イメージはコピーし直さず、マイグレーションも何もしません。
+
+このプロジェクトの CI が、イメージを GitHub Packages のコンテナのレジストリ(`ghcr.io`)に公開します([architecture.md](architecture.md#distribution))。デプロイのコマンドは digest のままコピーするので、ECR のイメージも同じ digest です。
+
+多くのインスタンスを立てるときは、インスタンスの数だけ同じコマンドを繰り返します。順番(たとえば、試すための小さなインスタンスから)は、使う側で決めます。
+
+<a id="maintenance-page"></a>
+
+### 保守の画面
+
+`redmine-web` と `redmine-worker` の同時実行数の予約を 0 にすると、書き込みを止められます(事故のときなど。[security.md](security.md))。CloudFront は、関数 URL からの 502、503、504 に対して、S3 の保守の画面(`/assets/maintenance.html`)を返します。ただし、`redmine-web` の同時実行数の予約が 0 のあいだは関数 URL が 429 を返し、CloudFront のエラーの応答の設定は 429 を置き換えられないので、ブラウザーにはその 429 が届きます(下の「未確認の事項」)。
 
 <a id="secrets"></a>
 

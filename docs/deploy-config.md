@@ -37,9 +37,11 @@ When several instances are set up in the same account, resources that can be com
 | Shared base | SES receipt rule set | A Region has only one active rule set. Each instance adds its rules to the set ([mail.md](mail.md#receipt-rules)) |
 | Per instance | Lambda functions, RDS instance, security groups, S3 buckets, SQS queues, CloudFront, DNS records, SES identities, SSM parameters, alarms | Do not mix an instance's data and permissions with other instances |
 
-- **When you set up only one:** Set up one shared base and one instance. The steps are the same.
-- **What goes in us-east-1:** Besides the Lambda@Edge function, the CloudFront certificate (ACM) is also created in us-east-1 (a CloudFront rule). Certificates are per instance, in the us-east-1 stack `<instance>-edge`.
-- **VPC:** Each instance's Lambda functions and RDS instance go into the shared private subnets, with security groups of their own. With `network.shared` set to `false`, an instance gets a VPC of its own instead ([rds.md](rds.md)).
+To set up only one Redmine, set up one shared base and one instance; the steps are the same.
+
+Besides the Lambda@Edge function, the CloudFront certificate (ACM) is also created in us-east-1, because CloudFront requires it there. Certificates are per instance, in the us-east-1 stack `<instance>-edge`.
+
+Each instance's Lambda functions and RDS instance go into the shared private subnets, with security groups of their own. With `network.shared` set to `false`, an instance gets a VPC of its own instead ([rds.md](rds.md)).
 
 ## Fields of `redmine.json`
 
@@ -90,7 +92,7 @@ When several instances are set up in the same account, resources that can be com
 | `alarms.snsTopicArn` | | none | SNS topic to send alarms to |
 | `tags` | | none | Tags added to every stack, and so to the resources |
 
-- **Fields that the stacks do not use yet:** `mail.perProjectAddresses`, `mail.globalLocalPart`, `webhooks`, `cloudfront.plan` and `retention.recordsDays` are checked by the schema; they take effect with the plugins' settings and the CloudFront plan, which come later.
+The schema already checks `mail.perProjectAddresses`, `mail.globalLocalPart`, `webhooks`, `cloudfront.plan` and `retention.recordsDays`, but the stacks do not use them yet. They take effect with the plugins' settings and the CloudFront plan, which come later.
 
 The list of retention periods is in [security.md](security.md#retention-periods).
 
@@ -142,15 +144,27 @@ bin/deploy path/to/redmine.json --code-only  # update only the image
 | 10 | Apply Redmine and plugin settings (according to `redmine.settingsMode`) with `rails runner` in `redmine-task`. The values go in as hex-encoded JSON, so no quoting reaches Ruby |
 | 11 | Checks after deployment: `/login` returns 200 with `Strict-Transport-Security`, and `/files/` without a signature returns 403. The requests go to the distribution's own name with the domain's host name, so they do not wait for DNS ([testing.md](testing.md#checks-after-deployment)). With `dns.mode` `external`, show the records to add |
 
-- **Order of the image:** Web and worker get the new image only after the migrations, so they never run code newer than the database. When a migration fails, the deployment stops there and web and worker keep their image.
-- **`--dry-run`:** Steps 1–4 and the instance stack make change sets, show them, and delete them; a stack that would be created is deleted again. Nothing else is changed: no secrets, image, assets or invocations (only a template too large to pass inline is uploaded to the templates bucket).
-- **`--code-only`:** Steps 5–7, 9 and 11, without stack changes, with the credentials given (for example, the role for deploying code in GitHub Actions; [iam.md](iam.md#role-for-deploying-code-github-actions)). The functions are updated directly. It needs a deployed instance.
-- **`--account`:** Applies `infra/account.yaml` (the stack `redmine-account`) with the administrator's own credentials, because the role for deploying and the CloudFormation service role do not exist before it. Once per account, before the first deployment.
-- **CloudFormation's role:** Every stack is applied through change sets with the service role `redmine-cfn-exec`; the role for deploying cannot create resources itself ([iam.md](iam.md#role-for-deploying-infrastructure)).
-- **Maintenance page:** Writes can be stopped by setting the reserved concurrency of `redmine-web` and `redmine-worker` to 0 (for example, during an incident; [security.md](security.md)). CloudFront returns the maintenance page from S3 (`/assets/maintenance.html`) for 502, 503 and 504 from the function URL. While the reserved concurrency of `redmine-web` is 0, the function URL answers 429, which CloudFront's custom error responses cannot replace (they do not take 429), so browsers get that 429 ("To verify" below).
-- **No changes for the same configuration:** A change set without changes is deleted and the stack is left as it is. The image is not copied again, and the migrations do nothing.
-- **When setting up many instances:** Repeat the same command for each instance. The order (starting with a small instance used for trying things first) is decided by the adopter.
-- **Images:** This project's CI publishes the image to the GitHub Packages container registry (`ghcr.io`) ([architecture.md](architecture.md#distribution)). The deployment command copies it by digest, so the image in ECR has the same digest.
+### Options
+
+| Option | What it does |
+| --- | --- |
+| `--account` | Applies `infra/account.yaml` (the stack `redmine-account`) with the administrator's own credentials, because the role for deploying and the CloudFormation service role do not exist before it. Run it once per account, before the first deployment |
+| `--dry-run` | Steps 1–4 and the instance stack make change sets, show them and delete them; a stack that would be created is deleted again. Nothing else changes: no secrets, image, assets or invocations (only a template too large to pass inline is uploaded to the templates bucket) |
+| `--code-only` | Steps 5–7, 9 and 11, without stack changes, with the credentials given (for example, the role for deploying code in GitHub Actions; [iam.md](iam.md#role-for-deploying-code-github-actions)). The functions are updated directly. It needs a deployed instance |
+
+### How the steps behave
+
+Web and worker get the new image only after the migrations, so they never run code newer than the database. When a migration fails, the deployment stops there and web and worker keep their image.
+
+Every stack is applied through change sets with the service role `redmine-cfn-exec`; the role for deploying cannot create resources itself ([iam.md](iam.md#role-for-deploying-infrastructure)). Running the command again with the same configuration changes nothing: a change set without changes is deleted and the stack is left as it is, the image is not copied again, and the migrations do nothing.
+
+This project's CI publishes the image to the GitHub Packages container registry (`ghcr.io`) ([architecture.md](architecture.md#distribution)). The deployment command copies it by digest, so the image in ECR has the same digest.
+
+To set up many instances, repeat the same command for each one. The adopter decides the order, for example starting with a small instance used for trying things.
+
+### Maintenance page
+
+Writes can be stopped by setting the reserved concurrency of `redmine-web` and `redmine-worker` to 0, for example during an incident ([security.md](security.md)). CloudFront returns the maintenance page from S3 (`/assets/maintenance.html`) for 502, 503 and 504 from the function URL. While the reserved concurrency of `redmine-web` is 0, however, the function URL answers 429, and CloudFront's custom error responses cannot replace a 429, so browsers get that 429 ("To verify" below).
 
 ### Secrets
 

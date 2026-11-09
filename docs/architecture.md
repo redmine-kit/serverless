@@ -136,8 +136,9 @@ Extensions for Lambda and AWS are the project's own plugins, built with Redmine'
 | [`redmine_serverless_sqs`](https://github.com/redmine-kit/redmine_serverless_sqs) | Jobs on SQS: the settings of `aws-activejob-sqs` (queues and the job classes it may run), records of jobs that fail for the last time, the "Jobs" administration page | `REDMINE_JOBS_QUEUE_URL` is set | [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/) |
 | [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | Settings and secrets: reads the parameters under `REDMINE_SSM_PATH` into environment variables before Rails reads `config/database.yml` and `SECRET_KEY_BASE`. It is also a gem, added by path in `image/Gemfile.local`, so that it runs that early | `REDMINE_SSM_PATH` is set | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/) |
 
-- **Why five plugins:** S3 attachments, mail through SES, jobs on SQS and the SSM settings also work outside Lambda (jobs with the gem's poller instead of a Lambda event source). Separate plugins let a Redmine on an ordinary server use one of them without the parts for Lambda. On Lambda, the image installs all five, because Lambda cannot write to the file system and has no mailbox.
-- **Names:** A GitHub repository search found no Redmine plugin named `redmine_serverless` (2026-11-08; the only hit was an unrelated Slack bot). The names of the S3, SES, SQS and SSM plugins have not been checked yet.
+S3 attachments, mail through SES, jobs on SQS and the SSM settings also work outside Lambda; jobs then run with the gem's poller instead of a Lambda event source. Separate plugins let a Redmine on an ordinary server use one of them without the parts for Lambda. On Lambda, the image installs all five, because Lambda cannot write to the file system and has no mailbox.
+
+A GitHub repository search found no Redmine plugin named `redmine_serverless` (2026-11-08; the only hit was an unrelated Slack bot). The names of the S3, SES, SQS and SSM plugins have not been checked yet.
 
 ### Features
 
@@ -153,19 +154,21 @@ The plugins are published as gems on the GitHub Packages RubyGems registry (`htt
 | Plugins | The gem `redmine_serverless_x` on GitHub Packages, one per plugin, published by each repository's workflow for every version tag. It holds the plugin's run-time files | Add it in `Gemfile.local` from the GitHub Packages source, run `bundle install`, and link the installed gem into `plugins/` (each plugin's setup page) |
 | Plugins (without the gem) | A checkout of the repository | Clone into `plugins/` |
 
-- **Why gems:** A gem is installed by Bundler with the other gems and recorded with its version and checksum in `image/Gemfile.lock`, so a plugin update reaches the image through the weekly gem update ([testing.md](testing.md#order-in-ci)) like any other gem. `redmine_serverless_ssm` must be a gem anyway: it reads SSM Parameter Store before Rails reads the configuration.
-- **Why linked into `plugins/`:** Redmine 7.0.3 loads only plugins in the `plugins/` directory (`lib/redmine/plugin_loader.rb`); it has no mechanism to load plugins from gems. The image links each installed plugin gem there (`link-plugins` in `image/Dockerfile`). The gem does not contain the plugin's `Gemfile`, so Redmine's `Gemfile` does not load the plugin twice.
-- **A token is needed:** The GitHub Packages RubyGems registry requires a token with `read:packages` to install, even for a public gem (GitHub documentation, checked on 2026-11-09). CI uses its `GITHUB_TOKEN`; locally, the token of the `gh` login. The build receives it as a secret and does not keep it in a layer (`bin/lib/plugin.sh`).
-- **Version:** Each plugin's version is kept in sync between the gemspec, `version` in `init.rb` and the Git tag (the publishing workflow checks it), and the supported Redmine version is declared with `requires_redmine`.
-- **Adopters:** Adopters reference the Redmine image by digest, not by tag (the same idea as "pin by digest" in [AGENTS.md](../AGENTS.md)).
+The plugins are gems so that Bundler installs them with the other gems and records each version and checksum in `image/Gemfile.lock`. A plugin update then reaches the image through the weekly gem update, like any other gem ([testing.md](testing.md#order-in-ci)). `redmine_serverless_ssm` has to be a gem anyway, because it reads SSM Parameter Store before Rails reads the configuration.
+
+Redmine 7.0.3 loads plugins only from the `plugins/` directory (`lib/redmine/plugin_loader.rb`) and has no way to load them from gems, so the image links each installed plugin gem there (`link-plugins` in `image/Dockerfile`). The gem does not contain the plugin's `Gemfile`, so Redmine's `Gemfile` does not load the plugin twice.
+
+Installing from the GitHub Packages RubyGems registry needs a token with `read:packages`, even for a public gem (GitHub documentation, checked on 2026-11-09). CI uses its `GITHUB_TOKEN`, and a local build uses the token of the `gh` login. The build receives it as a secret and does not keep it in a layer (`bin/lib/plugin.sh`).
+
+Each plugin keeps its version in sync between the gemspec, `version` in `init.rb` and the Git tag (the publishing workflow checks this), and declares the supported Redmine version with `requires_redmine`. Adopters reference the Redmine image by digest, not by tag (the same idea as "pin by digest" in [AGENTS.md](../AGENTS.md)).
 
 ### Derived images
 
 This project's image contains only the default theme and the five plugins. Adopters who want to add themes or plugins build a derived image on top of this project's image and point to it with `image` in the configuration file ([deploy-config.md](deploy-config.md#fields-of-redminejson)).
 
-- **How to build:** Point `FROM` to this project's image by digest, put themes in `themes/<theme>/` and plugins in `plugins/<plugin>/`, and rebuild the assets (`assets:precompile`). Redmine 7.0 reads themes from `themes/` or `app/assets/themes/` and serves them as Propshaft assets (`lib/redmine/themes.rb`).
-- **Assets:** `bin/deploy` syncs the assets in the derived image to S3. Theme assets are also served from CloudFront's `/assets/*`.
-- **Checks:** Derived images also go through this project's image tests (read-only, low-privilege user, three roles) ([testing.md](testing.md#image-tests)). Added plugins are not checked by this project.
+To build one, point `FROM` to this project's image by digest, put themes in `themes/<theme>/` and plugins in `plugins/<plugin>/`, and rebuild the assets (`assets:precompile`). Redmine 7.0 reads themes from `themes/` or `app/assets/themes/` and serves them as Propshaft assets (`lib/redmine/themes.rb`). `bin/deploy` syncs the assets in the derived image to S3, so theme assets are also served from CloudFront's `/assets/*`.
+
+Derived images also go through this project's image tests (read-only, low-privilege user, three roles) ([testing.md](testing.md#image-tests)). Plugins the adopter adds are not checked by this project.
 
 
 ### What is not in the plugins

@@ -1,213 +1,195 @@
 """The AWS resources of one instance, drawn with the AWS Architecture Icons.
 
-What is drawn follows infra/*.yaml. bin/diagrams runs this file and writes
-architecture.svg (English) and architecture.ja.svg (Japanese labels).
+What is drawn follows infra/*.yaml. bin/diagrams runs this file:
+  python architecture.py <lang> <output name>
+and writes architecture.svg (English) and architecture.ja.svg (Japanese).
+Edges show the paths a reader follows: a request, an upload, a job and an
+incoming mail. What every function uses (the image, settings, logs) is one
+group with one edge.
 """
 
-import os
 import sys
 
+import diagrams
 from diagrams import Cluster, Diagram, Edge
-from diagrams.aws.compute import EC2Instance, ECR, LambdaFunction
+from diagrams.aws.compute import ECR, LambdaFunction
 from diagrams.aws.database import RDSPostgresqlInstance
 from diagrams.aws.engagement import SimpleEmailServiceSes
 from diagrams.aws.general import Users
 from diagrams.aws.integration import EventbridgeScheduler, SimpleQueueServiceSqsQueue
 from diagrams.aws.management import Cloudwatch, SystemsManagerParameterStore
-from diagrams.aws.network import CloudFront, Endpoint, Route53
+from diagrams.aws.network import CloudFront, Endpoint
 from diagrams.aws.security import CertificateManager, Guardduty, WAF
 from diagrams.aws.storage import SimpleStorageServiceS3Bucket
-from diagrams.onprem.vcs import Github
 
 LANG = sys.argv[1] if len(sys.argv) > 1 else "en"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "architecture"
 
 TEXT = {
     "en": {
-        "title": "",
-        "functions": "Lambda functions (one image)",
-        "dns_query": "DNS",
-        "apis": "AWS APIs",
-        "settings": "settings, secrets",
-        "logs": "logs",
-        "image": "image",
         "users": "Users",
-        "dns": "Route 53\n(optional)",
-        "cloudfront": "CloudFront",
-        "edge": "us-east-1 (edge)",
+        "cloudfront": "CloudFront\n(Route 53 optional)",
+        "edge": "us-east-1 (for CloudFront)",
         "waf": "AWS WAF",
-        "acm": "Certificate\n(ACM)",
+        "acm": "ACM certificate",
         "body_hash": "Lambda@Edge\nbody-hash",
-        "region": "ap-northeast-1 (instance)",
+        "region": "ap-northeast-1",
         "vpc": "VPC",
         "private": "Private subnets",
-        "public": "Public subnet",
-        "web": "redmine-web\n(function URL)",
+        "functions": "Lambda (one image)",
+        "web": "redmine-web\nfunction URL",
         "worker": "redmine-worker",
         "task": "redmine-task",
-        "rds": "RDS for PostgreSQL",
-        "nat": "NAT instance\n(network: nat)",
-        "endpoints": "VPC endpoints\nS3, SSM, SES, SQS\n(network: endpoints)",
-        "files": "files bucket\n(attachments)",
-        "assets": "assets bucket",
-        "mail": "mail bucket",
-        "guardduty": "GuardDuty\nMalware Protection\n(incoming/, imports/)",
-        "jobs": "SQS jobs\n(+ dead-letter)",
+        "rds": "RDS for\nPostgreSQL",
+        "network": "VPC endpoints\nor\nNAT instance",
+        "files": "Attachments\nbucket",
+        "assets": "Assets bucket",
+        "mail": "Mail bucket",
+        "guardduty": "GuardDuty\nmalware scan",
+        "jobs": "SQS queue",
         "schedules": "EventBridge\nScheduler",
-        "ses": "Amazon SES\n(send, receive)",
+        "ses": "Amazon SES",
+        "shared": "Used by every function",
         "ssm": "SSM\nParameter Store",
-        "ecr": "Amazon ECR",
-        "cloudwatch": "CloudWatch\nlogs, alarms",
-        "ghcr": "ghcr.io\n(published image)",
+        "ecr": "ECR (image)",
+        "cloudwatch": "CloudWatch",
         "https": "HTTPS",
         "pages": "pages",
-        "files_edge": "files, uploads",
-        "scan": "scan",
+        "uploads": "files",
+        "assets_edge": "assets",
+        "scan": "uploads",
         "enqueue": "jobs",
         "run": "rake",
-        "mail_in": "received mail",
-        "copy": "bin/deploy copies",
+        "mail_in": "mail",
     },
     "ja": {
-        "title": "",
-        "functions": "Lambda の関数(1 つのイメージ)",
-        "dns_query": "DNS",
-        "apis": "AWS の API",
-        "settings": "設定、秘密の値",
-        "logs": "ログ",
-        "image": "イメージ",
         "users": "利用者",
-        "dns": "Route 53\n(任意)",
-        "cloudfront": "CloudFront",
-        "edge": "us-east-1(エッジ)",
+        "cloudfront": "CloudFront\n(Route 53 は任意)",
+        "edge": "us-east-1(CloudFront 用)",
         "waf": "AWS WAF",
-        "acm": "証明書\n(ACM)",
+        "acm": "ACM の証明書",
         "body_hash": "Lambda@Edge\nbody-hash",
-        "region": "ap-northeast-1(インスタンス)",
+        "region": "ap-northeast-1",
         "vpc": "VPC",
-        "private": "プライベートのサブネット",
-        "public": "パブリックのサブネット",
-        "web": "redmine-web\n(関数 URL)",
+        "private": "プライベートサブネット",
+        "functions": "Lambda(同じイメージ)",
+        "web": "redmine-web\n関数 URL",
         "worker": "redmine-worker",
         "task": "redmine-task",
-        "rds": "RDS for PostgreSQL",
-        "nat": "NAT インスタンス\n(network: nat)",
-        "endpoints": "VPC エンドポイント\nS3、SSM、SES、SQS\n(network: endpoints)",
-        "files": "files のバケット\n(添付ファイル)",
-        "assets": "assets のバケット",
-        "mail": "mail のバケット",
-        "guardduty": "GuardDuty\nMalware Protection\n(incoming/、imports/)",
-        "jobs": "SQS のジョブ\n(+ デッドレター)",
+        "rds": "RDS for\nPostgreSQL",
+        "network": "VPC エンドポイント\nまたは\nNAT インスタンス",
+        "files": "添付ファイルの\nバケット",
+        "assets": "アセットの\nバケット",
+        "mail": "メールの\nバケット",
+        "guardduty": "GuardDuty\nマルウェアスキャン",
+        "jobs": "SQS のキュー",
         "schedules": "EventBridge\nScheduler",
-        "ses": "Amazon SES\n(送受信)",
+        "ses": "Amazon SES",
+        "shared": "すべての関数が使う",
         "ssm": "SSM\nParameter Store",
-        "ecr": "Amazon ECR",
-        "cloudwatch": "CloudWatch\nログ、アラーム",
-        "ghcr": "ghcr.io\n(公開のイメージ)",
+        "ecr": "ECR(イメージ)",
+        "cloudwatch": "CloudWatch",
         "https": "HTTPS",
         "pages": "画面",
-        "files_edge": "ファイル、アップロード",
-        "scan": "スキャン",
+        "uploads": "ファイル",
+        "assets_edge": "アセット",
+        "scan": "アップロード",
         "enqueue": "ジョブ",
         "run": "rake",
-        "mail_in": "受信したメール",
-        "copy": "bin/deploy がコピー",
+        "mail_in": "メール",
     },
 }[LANG]
 
 FONT = "Noto Sans CJK JP"
 FUNCTIONS = "cluster_" + TEXT["functions"]
+SHARED = "cluster_" + TEXT["shared"]
+GRAY = "#545B64"
+
+# Smaller nodes than the library's default, so that the diagram stays legible
+# at the width of a documentation page.
+diagrams.Node._height = 1.2
 
 # The colors of the AWS Architecture Icons' groups.
 AWS_CLOUD = {"bgcolor": "white", "pencolor": "#232F3E", "fontcolor": "#232F3E"}
 REGION = {"bgcolor": "white", "pencolor": "#00A4A6", "fontcolor": "#00A4A6", "style": "dashed"}
 VPC = {"bgcolor": "white", "pencolor": "#8C4FFF", "fontcolor": "#8C4FFF"}
 PRIVATE = {"bgcolor": "#E6F6F7", "pencolor": "#00A4A6", "fontcolor": "#00A4A6"}
-FUNCTION_GROUP = {"bgcolor": "white", "pencolor": "#ED7100", "fontcolor": "#ED7100", "style": "dashed"}
-PUBLIC = {"bgcolor": "#F2F6E8", "pencolor": "#7AA116", "fontcolor": "#7AA116"}
+FUNCTION_GROUP = {"bgcolor": "#FFFFFF", "pencolor": "#ED7100", "fontcolor": "#ED7100", "style": "dashed"}
+SHARED_GROUP = {"bgcolor": "#F7F8F8", "pencolor": "#879196", "fontcolor": GRAY, "style": "dashed"}
 
 
 def group(label, colors):
-    return Cluster(label, graph_attr={"fontname": FONT, "fontsize": "13", "labeljust": "l", "margin": "16", **colors})
+    return Cluster(label, graph_attr={"fontname": FONT, "fontsize": "12", "labeljust": "l", "margin": "10", **colors})
 
 
 def flow(label="", **attrs):
-    return Edge(label=label, color="#545B64", fontcolor="#545B64", fontname=FONT, fontsize="11", **attrs)
+    return Edge(label=label, color=GRAY, fontcolor=GRAY, fontname=FONT, fontsize="11", **attrs)
 
 
-def from_functions(target, label="", **attrs):
-    """One edge from the group of the three functions, not three edges."""
-    worker >> Edge(ltail=FUNCTIONS, label=label, color="#545B64", fontcolor="#545B64", fontname=FONT,
-                   fontsize="11", **attrs) >> target
+def hidden():
+    return Edge(style="invis")
 
 
 with Diagram(
-    TEXT["title"],
+    "",
     filename=OUT,
     outformat="svg",
     show=False,
     direction="LR",
-    graph_attr={"fontname": FONT, "pad": "0.3", "nodesep": "0.45", "ranksep": "1.0", "compound": "true", "splines": "spline",
-                "newrank": "true"},
-    node_attr={"fontname": FONT, "fontsize": "11"},
-    edge_attr={"fontname": FONT},
+    graph_attr={"fontname": FONT, "pad": "0.2", "nodesep": "0.25", "ranksep": "0.55", "compound": "true",
+                "splines": "spline", "newrank": "true"},
+    node_attr={"fontname": FONT, "fontsize": "11", "width": "0.9", "imagepos": "tc"},
+    edge_attr={"fontname": FONT, "arrowsize": "0.7"},
 ):
     users = Users(TEXT["users"])
 
     with group("AWS Cloud", AWS_CLOUD):
-        dns = Route53(TEXT["dns"])
         cloudfront = CloudFront(TEXT["cloudfront"])
-
         with group(TEXT["edge"], REGION):
             waf = WAF(TEXT["waf"])
             acm = CertificateManager(TEXT["acm"])
             body_hash = LambdaFunction(TEXT["body_hash"])
 
         with group(TEXT["region"], REGION):
+            ses = SimpleEmailServiceSes(TEXT["ses"])
+            schedules = EventbridgeScheduler(TEXT["schedules"])
             files = SimpleStorageServiceS3Bucket(TEXT["files"])
             assets = SimpleStorageServiceS3Bucket(TEXT["assets"])
             guardduty = Guardduty(TEXT["guardduty"])
-            schedules = EventbridgeScheduler(TEXT["schedules"])
-            ses = SimpleEmailServiceSes(TEXT["ses"])
             mail = SimpleStorageServiceS3Bucket(TEXT["mail"])
+            jobs = SimpleQueueServiceSqsQueue(TEXT["jobs"])
 
             with group(TEXT["vpc"], VPC):
                 with group(TEXT["private"], PRIVATE):
                     with group(TEXT["functions"], FUNCTION_GROUP):
                         web = LambdaFunction(TEXT["web"])
-                        worker = LambdaFunction(TEXT["worker"])
                         task = LambdaFunction(TEXT["task"])
+                        worker = LambdaFunction(TEXT["worker"])
                     rds = RDSPostgresqlInstance(TEXT["rds"])
-                    endpoints = Endpoint(TEXT["endpoints"])
-                with group(TEXT["public"], PUBLIC):
-                    nat = EC2Instance(TEXT["nat"])
+                network = Endpoint(TEXT["network"])
 
-            jobs = SimpleQueueServiceSqsQueue(TEXT["jobs"])
-            ssm = SystemsManagerParameterStore(TEXT["ssm"])
-            ecr = ECR(TEXT["ecr"])
-            cloudwatch = Cloudwatch(TEXT["cloudwatch"])
+            with group(TEXT["shared"], SHARED_GROUP):
+                ecr = ECR(TEXT["ecr"])
+                ssm = SystemsManagerParameterStore(TEXT["ssm"])
+                cloudwatch = Cloudwatch(TEXT["cloudwatch"])
 
-    ghcr = Github(TEXT["ghcr"])
-
-    users >> flow(TEXT["dns_query"], style="dashed") >> dns
+    # A request, and the services CloudFront uses in us-east-1 (a row).
     users >> flow(TEXT["https"]) >> cloudfront
-    cloudfront - flow(style="dotted") - waf
-    cloudfront - flow(style="dotted") - acm
-    cloudfront - flow(style="dotted") - body_hash
+    cloudfront >> hidden() >> waf >> hidden() >> acm >> hidden() >> body_hash
+    cloudfront >> flow(style="dotted", constraint="false", arrowhead="none") >> waf
     cloudfront >> flow(TEXT["pages"]) >> web
-    cloudfront >> flow(TEXT["files_edge"]) >> files
-    cloudfront >> flow() >> assets
-    files >> flow(TEXT["scan"]) >> guardduty
-    web >> flow(TEXT["enqueue"]) >> jobs
-    jobs >> flow() >> worker
-    schedules >> flow(TEXT["run"]) >> task
+    # Uploads and downloads go to S3 through CloudFront; uploads are scanned.
+    cloudfront >> flow(TEXT["uploads"]) >> files >> flow(TEXT["scan"]) >> guardduty
+    cloudfront >> flow(TEXT["assets_edge"]) >> assets
+    # A job.
+    web >> flow(TEXT["enqueue"]) >> jobs >> flow() >> worker
+    # Incoming mail, and the scheduled tasks.
     ses >> flow(TEXT["mail_in"]) >> mail
     ses >> flow() >> task
-    from_functions(rds)
-    from_functions(endpoints, TEXT["apis"])
-    from_functions(nat, TEXT["apis"], style="dashed")
-    from_functions(ssm, TEXT["settings"])
-    from_functions(cloudwatch, TEXT["logs"])
-    ghcr >> flow(TEXT["copy"]) >> ecr
-    ecr >> Edge(lhead=FUNCTIONS, label=TEXT["image"], color="#545B64", fontcolor="#545B64", fontname=FONT,
-                fontsize="11") >> worker
+    schedules >> flow(TEXT["run"]) >> task
+    # The database and the AWS APIs, from the group of functions.
+    worker >> Edge(ltail=FUNCTIONS, color=GRAY) >> rds
+    worker >> Edge(ltail=FUNCTIONS, color=GRAY, style="dashed") >> network
+    # What every function uses, as a row under the functions.
+    ecr >> hidden() >> ssm >> hidden() >> cloudwatch
+    task >> Edge(ltail=FUNCTIONS, lhead=SHARED, color=GRAY, style="dashed", arrowhead="none") >> ssm

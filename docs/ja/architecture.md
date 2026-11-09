@@ -173,7 +173,7 @@ GitHub のリポジトリの検索では、`redmine_serverless` という名前�
 | もの | 保存先 | 使い方 |
 | --- | --- | --- |
 | Redmine の Lambda 用のイメージ | `ghcr.io/redmine-kit/serverless`(arm64 の 1 つのアーキテクチャで、index にしない)。main のコミットで、リリースのバージョンのテストが通ったものを、CI が push する(`.github/workflows/ci.yml` の `publish` のジョブ。バージョンは `bin/redmine-version` で読む)。タグは、Redmine のバージョン(`7.0.3`)、Redmine のマイナーバージョン(`7.0`)、`main`。基本は Redmine のバージョンのタグを使う。そのバージョンの新しいビルド(gem とプラグインの更新)に付け替わり、`bin/deploy` も既定でこれを使う。`7.0` は Redmine のパッチリリースにも付いていく。古いビルドはタグなしで残り、digest で取れる。コミットは `org.opencontainers.image.revision` のラベルにある | `bin/deploy` が digest で取り、立てるアカウントの ECR にコピーする([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR のイメージしか使えない |
-| プラグイン | GitHub Packages の gem `redmine_serverless_x`。プラグインごとに 1 つで、それぞれのリポジトリのワークフローが、バージョンのタグごとに公開する。プラグインの動かすためのファイルを持つ | `Gemfile.local` で GitHub Packages の source から足し、`bundle install` を実行して、入れた gem を `plugins/` にリンクする(各プラグインの準備のページ) |
+| プラグイン | GitHub Packages の gem `redmine_serverless_x`。プラグインごとに 1 つで、それぞれのリポジトリのワークフローが、バージョンのタグごとに公開する。プラグインの動かすためのファイルを持つ | `Gemfile.local` で GitHub Packages の source から足し、`bundle install` を実行して、入れた gem を `plugins/` にリンクする(各プラグインの導入のページ) |
 | プラグイン(gem を使わない人) | リポジトリのチェックアウト | `plugins/` に clone する |
 
 プラグインを gem にするのは、ほかの gem と一緒に Bundler がインストールし、バージョンとチェックサムを `image/Gemfile.lock` に残すためです。プラグインの更新も、ほかの gem と同じく、毎週の gem の更新でイメージに届きます([testing.md](testing.md#order-in-ci))。`redmine_serverless_ssm` は、Rails が設定を読む前に SSM Parameter Store を読むので、もともと gem である必要があります。

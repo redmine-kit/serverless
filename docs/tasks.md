@@ -59,10 +59,11 @@ sequenceDiagram
   H-->>C: Exit code, end of output
 ```
 
-- **Why `redmine-worker` and `redmine-task` are separate:** `redmine-worker` keeps Rails loaded so that jobs run fast. `redmine-task` runs each rake task in a new child process and keeps no state from the previous task. They run differently, so they are separate functions.
-- **Why the extension is switched:** Lambda starts every file in `/opt/extensions` as an extension. Lambda Web Adapter registers as an extension and also talks to Lambda (the Runtime API) itself. If it also started in `redmine-task`, it would conflict with the handler. So `/opt/extensions/lambda-adapter` is a small shell script, and the real Lambda Web Adapter is placed in `/opt/lambda-web-adapter/`. The script starts the real one only when `REDMINE_ROLE=web`.
-- **An extension that does nothing:** In `redmine-task`, the script registers as an extension that receives no events (`{"events": []}`) and keeps waiting for the next event. Lambda Web Adapter itself registers in the same way (`register_extension_internal` in `src/lib.rs`). The script does not exit without registering, because Lambda recreates the execution environment when an extension fails. The name used to register (`Lambda-Extension-Name`) is the same as the file name (`lambda-adapter`). The script is written with `curl`, which is in the base image.
-- **Handler:** The handler does not load Rails. It only checks what it received and starts a child process. Rails work happens inside the rake child process. Importing email is also done by a rake task in the plugin `redmine_serverless_ses` ([mail.md](mail.md#receiving)).
+`redmine-worker` and `redmine-task` are separate functions because they run differently. `redmine-worker` keeps Rails loaded so that jobs run fast. `redmine-task` runs each rake task in a new child process and keeps no state from the previous task. Its handler does not load Rails: it only checks what it received and starts the child process, and the Rails work happens inside that rake process. Importing email is also a rake task, in the plugin `redmine_serverless_ses` ([mail.md](mail.md#receiving)).
+
+Lambda starts every file in `/opt/extensions` as an extension. Lambda Web Adapter registers as an extension and also talks to Lambda (the Runtime API) itself, so if it started in `redmine-task` too, it would conflict with the handler. Therefore `/opt/extensions/lambda-adapter` is a small shell script, and the real Lambda Web Adapter is in `/opt/lambda-web-adapter/`. The script starts the real one only when `REDMINE_ROLE=web`.
+
+In `redmine-task`, the script instead registers as an extension that receives no events (`{"events": []}`) and keeps waiting for the next event, the same way Lambda Web Adapter registers itself (`register_extension_internal` in `src/lib.rs`). It must not exit without registering, because Lambda recreates the execution environment when an extension fails. It registers under the same name as its file (`Lambda-Extension-Name: lambda-adapter`) and is written with `curl`, which is in the base image.
 
 ## Kinds of events
 
@@ -83,9 +84,7 @@ sequenceDiagram
 
 ## Permissions
 
-- **Who can invoke it:** Only the SSO administrator role, the deployment role (for migrations and the initial data), SES (for receiving email) and EventBridge Scheduler can invoke `redmine-task`. It has no function URL.
-- **What it can do:** rake and `rails runner` can read and write everything in the database and S3. This is protected by limiting who can invoke it.
-- **Details of permissions:** In [iam.md](iam.md).
+Only the SSO administrator role, the deployment role (for migrations and the initial data), SES (for receiving email) and EventBridge Scheduler can invoke `redmine-task`, and it has no function URL. Limiting who can invoke it is what protects the data: rake and `rails runner` can read and write everything in the database and S3. The details of the permissions are in [iam.md](iam.md).
 
 ## Migrations during deployment
 
@@ -95,9 +94,9 @@ Between the migration and the update of `redmine-web`, old code runs against the
 
 ## Notes on the read-only file system
 
-- **Turn off schema dumps:** Rails writes `db/schema.rb` after `db:migrate` (the default of `ActiveRecord.dump_schema_after_migration` is `true`). Redmine's `production.rb` leaves this setting commented out, so the write fails on Lambda. Set it to `false` in `additional_environment.rb`.
-- **Tasks that write files:** Tasks that move files under `files/`, such as `redmine:attachments:move_to_subdirectories`, do not move files in S3. They are not used.
-- **Tasks that read attachments:** Tasks that read attachments, such as `redmine:attachments:update_digests`, fetch them from S3 and read them through the `/tmp` cache ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache)).
+Rails writes `db/schema.rb` after `db:migrate` (the default of `ActiveRecord.dump_schema_after_migration` is `true`), and Redmine's `production.rb` leaves this setting commented out, so the write fails on Lambda. `additional_environment.rb` sets it to `false`.
+
+Tasks that move files under `files/`, such as `redmine:attachments:move_to_subdirectories`, do not move files in S3, so they are not used. Tasks that read attachments, such as `redmine:attachments:update_digests`, fetch them from S3 and read them through the `/tmp` cache ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache)).
 
 ## Scheduled runs
 

@@ -63,10 +63,11 @@ sequenceDiagram
   H-->>C: 終了コード、出力の末尾
 ```
 
-- **`redmine-worker` と `redmine-task` を分ける理由:** `redmine-worker` は、ジョブを速く動かすために Rails を読み込んだまま使います。`redmine-task` は、rake ごとに新しい子プロセスで動かし、前のタスクの状態を残しません。動かし方が違うので、関数を分けます。
-- **拡張機能を切り替える理由:** Lambda は、`/opt/extensions` にあるファイルを、拡張機能としてすべて起動します。Lambda Web Adapter は、拡張機能として登録したうえで、Lambda とのやり取り(Runtime API)も自分で行います。そのまま `redmine-task` でも起動すると、ハンドラーとぶつかります。そこで、`/opt/extensions/lambda-adapter` を小さなシェルのスクリプトにし、本物の Lambda Web Adapter は `/opt/lambda-web-adapter/` に置きます。スクリプトは、`REDMINE_ROLE=web` のときだけ本物を起動します。
-- **何もしない拡張機能:** `redmine-task` では、スクリプトが、受けるイベントのない拡張機能として登録し(`{"events": []}`)、次のイベントを待ち続けます。Lambda Web Adapter 自身も、同じ形で登録しています(`src/lib.rs` の `register_extension_internal`)。拡張機能を登録せずに終わらせないのは、拡張機能が失敗すると、Lambda が環境を作り直すためです。登録のときの名前(`Lambda-Extension-Name`)は、ファイルの名前(`lambda-adapter`)と同じにします。スクリプトは、土台のイメージにある `curl` で書きます。
-- **ハンドラー:** ハンドラーは Rails を読み込まず、受け取った内容を確認して、子プロセスを起動するだけです。Rails の処理は、子プロセスの rake の中で行います。メールの取り込みも、自前のプラグイン `redmine_serverless_ses` の rake のタスクで行います([mail.md](mail.md#receiving))。
+`redmine-worker` と `redmine-task` は、動かし方が違うので関数を分けます。`redmine-worker` は、ジョブを速く動かすために Rails を読み込んだまま使います。`redmine-task` は、rake ごとに新しい子プロセスで動かし、前のタスクの状態を残しません。そのハンドラーは Rails を読み込まず、受け取った内容を確認して子プロセスを起動するだけで、Rails の処理は子プロセスの rake の中で行います。メールの取得も、プラグイン `redmine_serverless_ses` の rake のタスクです([mail.md](mail.md#receiving))。
+
+Lambda は、`/opt/extensions` にあるファイルをすべて拡張機能として起動します。Lambda Web Adapter は、拡張機能として登録したうえで Lambda とのやり取り(Runtime API)も自分で行うので、`redmine-task` でも起動するとハンドラーとぶつかります。そこで、`/opt/extensions/lambda-adapter` を小さなシェルのスクリプトにし、本物の Lambda Web Adapter は `/opt/lambda-web-adapter/` に置きます。スクリプトは、`REDMINE_ROLE=web` のときだけ本物を起動します。
+
+`redmine-task` では、スクリプトは代わりに、受けるイベントのない拡張機能として登録し(`{"events": []}`)、次のイベントを待ち続けます。Lambda Web Adapter 自身も同じ形で登録しています(`src/lib.rs` の `register_extension_internal`)。拡張機能が失敗すると Lambda が環境を作り直すので、登録せずに終わらせてはいけません。登録の名前はファイルの名前と同じにし(`Lambda-Extension-Name: lambda-adapter`)、土台のイメージにある `curl` で書きます。
 
 <a id="kinds-of-events"></a>
 
@@ -91,9 +92,7 @@ sequenceDiagram
 
 ## 権限
 
-- **呼べる人:** `redmine-task` を呼べるのは、SSO の管理者のロール、デプロイ用のロール(migration と初めのデータのため)、SES(メールの受信のため)、EventBridge Scheduler だけです。関数 URL は付けません。
-- **できること:** rake と `rails runner` は、データベースと S3 のすべてを読み書きできます。呼べる人を絞ることで守ります。
-- **権限の詳しい内容:** [iam.md](iam.md) にあります。
+`redmine-task` を呼べるのは、SSO の管理者のロール、デプロイ用のロール(migration と初めのデータのため)、SES(メールの受信のため)、EventBridge Scheduler だけで、関数 URL は付けません。rake と `rails runner` はデータベースと S3 のすべてを読み書きできるので、呼べる人を絞ることでデータを守ります。権限の詳しい内容は [iam.md](iam.md) にあります。
 
 <a id="migrations-during-deployment"></a>
 
@@ -107,9 +106,9 @@ migration から `redmine-web` の更新までのあいだは、古いコード�
 
 ## 読み取り専用のファイルシステムでの注意
 
-- **スキーマの書き出しを止める:** Rails は、`db:migrate` のあとに `db/schema.rb` を書き出します(`ActiveRecord.dump_schema_after_migration` の既定は `true`)。Redmine の `production.rb` はこの設定をコメントアウトしたままなので、Lambda では書き込みに失敗します。`additional_environment.rb` で `false` にします。
-- **ファイルに書くタスク:** `redmine:attachments:move_to_subdirectories` など、`files/` の下のファイルを動かすタスクは、S3 のファイルを動かしません。使いません。
-- **添付ファイルを読むタスク:** `redmine:attachments:update_digests` など、添付ファイルを読むタスクは、`/tmp` のキャッシュの仕組み([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache))で S3 から取って読みます。
+Rails は、`db:migrate` のあとに `db/schema.rb` を書き出します(`ActiveRecord.dump_schema_after_migration` の既定は `true`)。Redmine の `production.rb` はこの設定をコメントアウトしたままなので、Lambda では書き込みに失敗します。`additional_environment.rb` で `false` にします。
+
+`redmine:attachments:move_to_subdirectories` など、`files/` の下のファイルを動かすタスクは、S3 のファイルを動かさないので使いません。`redmine:attachments:update_digests` など、添付ファイルを読むタスクは、`/tmp` のキャッシュの仕組み([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache))で S3 から取得して読みます。
 
 <a id="scheduled-runs"></a>
 

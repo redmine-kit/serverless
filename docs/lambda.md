@@ -1,4 +1,4 @@
-# Running Redmine on Event Functions
+# Running Redmine on Lambda Event Functions
 
 This is the design for running Redmine (Rails and Puma) on Lambda Event Functions. Event Functions are the traditional Lambda that receives and processes one event at a time. Lambda Web Adapter turns HTTP requests back into plain HTTP and passes them to Puma.
 

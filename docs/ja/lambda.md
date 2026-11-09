@@ -1,4 +1,4 @@
-# Event Functions で Redmine を動かす
+# Lambda の Event Functions で Redmine を動かす
 
 Redmine(Rails と Puma)を、Lambda の Event Functions で動かすための設計です。Event Functions は、イベントを 1 件ずつ受けて処理する従来の Lambda です。HTTP の要求は、Lambda Web Adapter が普通の HTTP に戻して Puma に渡します。
 

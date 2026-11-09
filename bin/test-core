@@ -19,5 +19,5 @@ known=$(grep -v -e '^#' -e '^$' test/core/known_failures.txt | sed 's/[.]/\\./g'
 
 workers="${PARALLEL_WORKERS:-$(getconf _NPROCESSORS_ONLN)}"
 docker run --rm --network serverless-test_default -e PARALLEL_WORKERS="$workers" "$image" \
-  sh -c 'bin/rails db:drop db:create db:migrate db:schema:dump >/dev/null && bin/rails test "$@"' test-core \
+  sh -c 'bin/rails db:drop db:create db:migrate redmine:plugins:migrate db:schema:dump >/dev/null && bin/rails test "$@"' test-core \
   --exclude "/^($known)\$/" "$@"

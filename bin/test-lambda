@@ -155,6 +155,7 @@ if ! task '{"command": "rake", "args": ["-T"]}' >/dev/null &&
   exit 0
 fi
 check "db:migrate" quiet task '{"command": "rake", "args": ["db:migrate"]}'
+check "redmine:plugins:migrate" quiet task '{"command": "rake", "args": ["redmine:plugins:migrate"]}'
 check "redmine:load_default_data" quiet task '{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}'
 secrets_read() {
   task '{"command": "runner", "args": ["puts Rails.application.secret_key_base.size"]}' | grep -qx 128

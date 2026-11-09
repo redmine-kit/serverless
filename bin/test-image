@@ -149,6 +149,7 @@ docker run --rm --network "$network" "${aws_env[@]}" -w /var/task/redmine --entr
 run task
 wait_rie task
 check "rake db:migrate" quiet task '{"command":"rake","args":["db:migrate"]}'
+check "rake redmine:plugins:migrate" quiet task '{"command":"rake","args":["redmine:plugins:migrate"]}'
 check "rake redmine:load_default_data" \
   quiet task '{"command":"rake","args":["redmine:load_default_data"],"env":{"REDMINE_LANG":"ja"}}'
 check "rake -T" quiet task '{"command":"rake","args":["-T"]}'

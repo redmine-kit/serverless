@@ -55,7 +55,7 @@ The role names are provisional.
 
 - **Decrypting SecureString:** Encrypt with the default SSM key (`aws/ssm`). Whether `kms:Decrypt` must be granted in IAM for this key is checked when building it.
 
-- **Where the permissions come from:** Each row belongs to one of the plugins, whose setup pages explain the permissions for use outside Serverless too: [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/setup.html#iam-permissions) (jobs and the administration pages), [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#iam-permissions) (attachments), [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/setup.html#iam-permissions) (email) and [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/#iam-permissions) (settings at start-up). This page puts them together per function.
+- **Where the permissions come from:** Each row belongs to one of the plugins, whose setup pages explain the permissions for use outside Serverless too: [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/setup.html#iam-permissions) (jobs and the "Jobs" page), [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#iam-permissions) (attachments), [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/setup.html#iam-permissions) (email) and [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/setup.html#iam-permissions) (settings at start-up). [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/setup.html#iam-permissions) needs none of its own. This page puts them together per function.
 
 ## Execution role of `redmine-web`
 

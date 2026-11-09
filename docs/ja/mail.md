@@ -95,7 +95,7 @@ SES v2 の `SendEmail` のエラー(API リファレンスの一覧)を、3 つ�
 - **ジョブの中でのやり直し:** Redmine の `Mailer::DeliveryJob` に、ActiveJob の `retry_on` を足します。待ち時間は `:polynomially_longer` で、5 回までです。待ち時間は 3 秒、18 秒、83 秒、258 秒、627 秒ほどで、SQS で時間を置ける上限(15 分)に収まります。
 - **SDK のやり直し:** AWS の SDK も、429 や 5xx では、ジョブより前に自分でやり直します(既定のやり直しの設定)。
 - **使い切ったとき:** `retry_on` を使い切ると、例外がそのまま上がり、SQS がメッセージを届け直します。3 回届け直しても失敗したら、デッドレターキューに移ります。
-- **記録:** 最後に失敗したときに、プラグインのテーブル(`serverless_job_failures`)に、ジョブの中身とエラーを残します([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#jobs))。
+- **記録:** 最後に失敗したときに、プラグインのテーブル(`serverless_job_failures`)に、ジョブの中身とエラーを残します([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/admin.html#jobs))。
 - **2 通届くことがある:** SES がメールを受け付けたあとで応答が途切れると、やり直しで同じメールを 2 回送ることがあります。この規模では受け入れます。
 
 <a id="sending-again"></a>

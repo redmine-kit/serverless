@@ -59,7 +59,7 @@ flowchart LR
 | 項目 | 決めたこと | 理由 | 詳しい資料 |
 | --- | --- | --- | --- |
 | Redmine | 7.0.3(最新の安定バージョン)。外部のプラグインなし、標準のテーマ | 依頼のとおり | [lambda.md](lambda.md) |
-| 拡張 | 自前のプラグイン。`redmine_serverless`(Lambda での実行)、`redmine_serverless_s3`(S3 の添付ファイル)、`redmine_serverless_ses`(SES でのメール)、`redmine_serverless_ssm`(SSM Parameter Store の設定と秘密の値) | Redmine の標準の拡張の仕組みで、本体のファイルを書き換えない | 下の「自前のプラグイン」 |
+| 拡張 | 自前のプラグイン。`redmine_serverless`(Lambda での実行)、`redmine_serverless_s3`(S3 の添付ファイル)、`redmine_serverless_ses`(SES でのメール)、`redmine_serverless_sqs`(SQS でのジョブ)、`redmine_serverless_ssm`(SSM Parameter Store の設定と秘密の値) | Redmine の標準の拡張の仕組みで、本体のファイルを書き換えない | 下の「自前のプラグイン」 |
 | 実行環境 | Event Functions、コンテナイメージ、arm64 | Ruby を動かせる。Web Functions は Node.js だけ(下記) | [lambda.md](lambda.md) |
 | イメージ | Lambda の Ruby のベースイメージ(`public.ecr.aws/lambda/ruby:4.0`)に、Redmine、ImageMagick などの依存、Lambda Web Adapter を入れる | Lambda と同じ OS と Ruby で、Lambda で動かす前提の作り。HTTP サーバー(Puma)をそのまま使える | [lambda.md](lambda.md#choosing-the-base) |
 | 3 つの関数 | `redmine-web`(画面)、`redmine-worker`(ジョブ)、`redmine-task`(rake とメールの取り込み)。同じイメージを、環境変数 `REDMINE_ROLE` で切り替える。Puma を起動するのは `redmine-web` だけ | ビルドが 1 回で済み、同じコードが動く | [tasks.md](tasks.md#how-one-image-runs-everything) |
@@ -138,13 +138,14 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 
 | プラグイン | すること | 有効にする条件 | 資料 |
 | --- | --- | --- | --- |
-| [`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless) | Lambda での実行。Lambda Web Adapter の `/events` に答える Rack のミドルウェア、アセットの自動の書き出しを止める設定、Lambda で使えない Redmine の設定を無効に固定すること、ジョブ、管理画面の「状態と接続」と「ジョブ」 | `REDMINE_ROLE` がある | [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/ja/) |
+| [`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless) | Lambda での実行。Lambda Web Adapter の `/events` に答える Rack のミドルウェア、アセットの自動の書き出しを止める設定、Lambda で使えない Redmine の設定を無効に固定すること、管理画面の「状態と接続」 | `REDMINE_ROLE` がある | [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/ja/) |
 | [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) | S3 の添付ファイル。保存、CloudFront を通した S3 へのアップロード、sandbox の CSP を付ける CloudFront の署名付き URL へのリダイレクト、`/tmp` のキャッシュ、管理画面の「添付ファイルの S3」 | S3 のバケットの設定がある | [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/) |
 | [`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses) | SES でのメール。送信のやり直し、受けたメールの取り込み、プロジェクトごとのアドレス、メールの管理画面 | SES の設定がある | [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/ja/) |
+| [`redmine_serverless_sqs`](https://github.com/redmine-kit/redmine_serverless_sqs) | SQS でのジョブ。`aws-activejob-sqs` の設定(キューと、実行してよいジョブのクラス)、最後に失敗したジョブの記録、管理画面の「ジョブ」 | `REDMINE_JOBS_QUEUE_URL` がある | [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/ja/) |
 | [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | 設定と秘密の値。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。その時機に動くように gem でもあり、`image/Gemfile.local` で道筋を指定して足す | `REDMINE_SSM_PATH` がある | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) |
 
-- **4 つに分ける理由:** S3 の添付ファイル、SES でのメール、SSM の設定は、Lambda 以外でも動きます。プラグインを分けると、ふつうのサーバーの Redmine でも、Lambda のための部分なしで片方だけを使えます。Lambda では、ファイルシステムに書けず、メールの受信箱もないので、イメージに 4 つとも入れます。
-- **名前:** GitHub のリポジトリの検索では、`redmine_serverless` という名前の Redmine のプラグインは見つかりませんでした(2026-11-08。見つかったのは関係のない Slack のボットだけ)。S3 と SES のプラグインの名前は、まだ確認していません。
+- **5 つに分ける理由:** S3 の添付ファイル、SES でのメール、SQS でのジョブ、SSM の設定は、Lambda 以外でも動きます(ジョブは、Lambda のイベントソースの代わりに gem の取り出し役で動かします)。プラグインを分けると、ふつうのサーバーの Redmine でも、Lambda のための部分なしで片方だけを使えます。Lambda では、ファイルシステムに書けず、メールの受信箱もないので、イメージに 5 つとも入れます。
+- **名前:** GitHub のリポジトリの検索では、`redmine_serverless` という名前の Redmine のプラグインは見つかりませんでした(2026-11-08。見つかったのは関係のない Slack のボットだけ)。S3、SES、SQS、SSM のプラグインの名前は、まだ確認していません。
 
 <a id="features"></a>
 
@@ -173,7 +174,7 @@ Redmine の Lambda 用のイメージと、プラグインを、GitHub Packages 
 
 ### 派生のイメージ
 
-このプロジェクトのイメージは、標準のテーマと 4 つのプラグインだけを入れます。テーマやプラグインを足したい使う側は、このプロジェクトのイメージを土台にした派生のイメージを作り、設定のファイルの `image` で指します([deploy-config.md](deploy-config.md#fields-of-redminejson))。
+このプロジェクトのイメージは、標準のテーマと 5 つのプラグインだけを入れます。テーマやプラグインを足したい使う側は、このプロジェクトのイメージを土台にした派生のイメージを作り、設定のファイルの `image` で指します([deploy-config.md](deploy-config.md#fields-of-redminejson))。
 
 - **作り方:** `FROM` でこのプロジェクトのイメージを digest で指し、テーマを `themes/<テーマ>/` に、プラグインを `plugins/<プラグイン>/` に置いて、アセットを作り直します(`assets:precompile`)。Redmine 7.0 は、テーマを `themes/` か `app/assets/themes/` から読み、Propshaft のアセットとして配ります(`lib/redmine/themes.rb`)。
 - **アセット:** `bin/deploy` は、派生のイメージの中のアセットを S3 に同期します。テーマのアセットも、CloudFront の `/assets/*` から配られます。
@@ -196,7 +197,7 @@ Redmine の Lambda 用のイメージと、プラグインを、GitHub Packages 
 | `bin/rake`、`bin/rails` | `bin/` | 手元から、デプロイした Redmine に向けて使う |
 | `bin/test`、`bin/check-migrations` | `bin/` | 手元と CI で、テストと migration の読み分けに使う |
 
-メールの送信(`aws-actionmailer-ses`)とジョブ(`aws-activejob-sqs`)は、AWS の公式の gem を設定するだけで、コードは書きません。
+メールの送信(`aws-actionmailer-ses`)とジョブ(`aws-activejob-sqs`)は、AWS の公式の gem を使い、送信の仕組みやキューのアダプターは書きません。ジョブの設定は `redmine_serverless_sqs` が持ちます。
 
 <a id="repository-layout-planned"></a>
 

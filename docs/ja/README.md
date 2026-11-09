@@ -39,7 +39,7 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | [rds.md](rds.md) | データベース(RDS for PostgreSQL)と VPC。設定、VPC の外への道(VPC のエンドポイントか NAT インスタンス)、Systems Manager での接続、費用 |
 | [tasks.md](tasks.md) | 同じイメージで 3 つの役割を切り替える仕組み。タスク用の関数での migration、任意の rake、`rails runner`、メールの取り込み |
 | [mail.md](mail.md) | Rails の ActionMailer から SES の API で送るメールと、SES で受けて取り込むメール |
-| [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html) | プラグインが足す管理画面(`redmine_serverless` の状態と接続とジョブ、`redmine_serverless_ses` のメールの送信と受信、`redmine_serverless_s3` の添付ファイルの S3) |
+| [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html) | プラグインが足す管理画面(`redmine_serverless` の状態と接続、`redmine_serverless_sqs` のジョブ、`redmine_serverless_ses` のメールの送信と受信、`redmine_serverless_s3` の添付ファイルの S3) |
 | [iam.md](iam.md) | 実行ロール、リソースベースのポリシー、デプロイ用のロール、人の権限 |
 | [security.md](security.md) | 守るもの、起きうることと守り、入口と AWS WAF、Redmine の設定、データの守り、保持の期間、ログ、供給網、残るリスク、事故のとき |
 | [deploy-config.md](deploy-config.md) | 1 つの Redmine ごとの設定のファイル(`redmine.json`)、名前の決まり、共有の土台、デプロイのコマンド |

@@ -80,7 +80,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | `image` | | このプロジェクトのイメージ | 使う側が作った派生のイメージ(テーマやプラグインを足したもの)を使うとき、その置き場所と digest(`image.repository`、`image.digest`)。派生のイメージの作り方は [architecture.md](architecture.md#derived-images) |
 | `redmine.settings` | | なし | Redmine の管理画面の設定の値(`host_name`、`default_language`、`mail_from` など) |
 | `redmine.settingsMode` | | `initial` | `initial`(初めて立てたときだけ入れる。あとは画面で変えられる)か `enforce`(デプロイのたびに入れ直す) |
-| `redmine.pluginSettings` | | なし | プラグインの設定の値。プラグインの名前(`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`)ごとに書く |
+| `redmine.pluginSettings` | | なし | プラグインの設定の値。プラグインの名前(`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`)ごとに書く |
 | `logs.retentionDays` | | 90 | CloudWatch Logs の保持の日数(Lambda@Edge のロググループを含む) |
 | `retention.recordsDays` | | 90 | プラグインの記録(受け取ったメール、失敗したジョブ)を残す日数 |
 | `retention.mailDays` | | 30 | メールのバケットのメール(`processed/` と `inbound/`)を残す日数 |

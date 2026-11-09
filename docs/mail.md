@@ -79,7 +79,7 @@ Errors from SES v2 `SendEmail` (the list in the API reference) are split into th
 - **Retries inside the job:** Add ActiveJob `retry_on` to Redmine's `Mailer::DeliveryJob`. The wait is `:polynomially_longer`, up to 5 attempts. The waits are about 3, 18, 83, 258 and 627 seconds, which fit within the maximum delay SQS allows (15 minutes).
 - **SDK retries:** The AWS SDK also retries on 429 and 5xx by itself, before the job does (the default retry settings).
 - **When retries run out:** When `retry_on` runs out, the exception is raised as is and SQS redelivers the message. If it still fails after 3 redeliveries, it moves to the dead-letter queue.
-- **Record:** On the final failure, the job content and the error are stored in the plugin's table (`serverless_job_failures`) ([admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html#jobs)).
+- **Record:** On the final failure, the job content and the error are stored in the plugin's table (`serverless_job_failures`) ([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/admin.html#jobs)).
 - **Two copies can arrive:** If the response is lost after SES accepts the message, a retry can send the same message twice. This is accepted at this scale.
 
 #### Sending again

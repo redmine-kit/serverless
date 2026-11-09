@@ -83,9 +83,16 @@ S3 is reproduced with SDK `stub_responses` in unit and functional tests, and wit
 | Project email settings | Rejects overlapping aliases and reserved names. Users without permission cannot open them |
 | `redmine_serverless_ses:receive_mail` | Imports only mail that passes DMARC and whose spam and virus verdicts are `PASS`. Does not import mail to unregistered addresses. Is not fooled by fake `X-SES-*` headers added by the sender. Does not import auto-replies. On success, moves the message to `processed/` |
 | Mail sending retries | `raise_delivery_errors` is `true` only in `redmine-worker`. Each SES error is raised one by one with SDK response stubs: temporary errors are retried, account problems go to the dead-letter queue, and message problems are dropped. In every case, a record remains after the final failure |
-| Resending from failure records | The same job can be re-enqueued from the recorded job contents |
 
 Mail import tests use Redmine's test mail samples (`test/fixtures/mail_handler/`) with the headers SES adds.
+
+### Jobs (`redmine_serverless_sqs`)
+
+| Target | What to check |
+| --- | --- |
+| Jobs on SQS | With `REDMINE_JOBS_QUEUE_URL`, a notification mail job is enqueued to SQS, run by the job handler, and the mail is sent. A message for a class outside the allowlist is not run. Without it, Redmine runs jobs as standard |
+| Failure records | A job that fails for the last time (retries used up, or an error that is not retried) leaves a record with its contents and the error |
+| Resending from failure records | The same job can be re-enqueued from the recorded job contents |
 
 ### Settings and code outside the plugins
 
@@ -95,7 +102,6 @@ Mail import tests use Redmine's test mail samples (`test/fixtures/mail_handler/`
 | SSM loading (`redmine_serverless_ssm`) | Reads everything under `/<instance>/env/`, continuing past 10 entries, and decrypts SecureString. Does not overwrite existing environment variables. Skips names that cannot be environment variables and deeper paths. Fails when SSM cannot be reached. In the image tests, the three roles read the database host, its password and `SECRET_KEY_BASE` only from SSM, which checks that the reading comes before `config/database.yml` | Minitest, moto (the plugin's `test/loader_test.rb`, `bin/test-image`) |
 | Task handler | Accepts only the defined `command` and `env`. Recognizes SES events. Returns the child process's exit code and the end of its output. Does not cut Japanese text in the middle of a character | Minitest |
 | Extension script | Depending on `REDMINE_ROLE`, starts the real Lambda Web Adapter or registers as an extension that does nothing | ShellCheck, image tests |
-| Jobs (`aws-activejob-sqs`) | A notification mail job is enqueued to SQS, run by the job handler, and the mail is sent | Minitest, moto |
 | Webhooks | Not sent to destinations in the `webhook_blocklist` ranges (private, link-local). An error at the destination fails the job, and it is redelivered | Minitest, moto |
 | Mail sending (`aws-actionmailer-ses`) | Redmine's notification mail is passed to SES v2 `SendEmail` with the full message and recipients (To, Cc, Bcc) | Minitest, SDK `stub_responses` |
 | Function that adds the body hash (`edge/body-hash/`) | Sets the SHA256 of an empty body for requests without a body and with an empty body. Computes the SHA256 of a base64 body over the raw bytes (matching a locally computed value for binary bodies and multipart forms). Returns 413 for requests with `inputTruncated` and does not send them to the origin | Node.js `node:test`. No npm package dependencies |

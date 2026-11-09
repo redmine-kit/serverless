@@ -35,7 +35,7 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | [rds.md](rds.md) | The database (RDS for PostgreSQL) and the VPC: settings, routes out of the VPC (VPC endpoints or a NAT instance), access through Systems Manager, cost |
 | [tasks.md](tasks.md) | How one image switches between three roles. Migrations, arbitrary rake tasks, `rails runner` and mail import in the task function |
 | [mail.md](mail.md) | Mail sent from Rails ActionMailer through the SES API, and mail received by SES and imported |
-| [admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html) | Administration pages added by the plugins (status and connections and jobs in `redmine_serverless`; mail sending and receiving in `redmine_serverless_ses`; S3 attachments in `redmine_serverless_s3`) |
+| [admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html) | Administration pages added by the plugins (status and connections in `redmine_serverless`; jobs in `redmine_serverless_sqs`; mail sending and receiving in `redmine_serverless_ses`; S3 attachments in `redmine_serverless_s3`) |
 | [iam.md](iam.md) | Execution roles, resource-based policies, the deployment role, permissions for people |
 | [security.md](security.md) | What to protect, threats and protections, the entry point and AWS WAF, Redmine settings, data protection, retention periods, logs, the supply chain, remaining risks, incidents |
 | [deploy-config.md](deploy-config.md) | The configuration file for each Redmine (`redmine.json`), naming rules, the shared foundation, deployment commands |

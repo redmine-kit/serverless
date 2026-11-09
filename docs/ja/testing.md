@@ -95,9 +95,18 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | プロジェクトのメールの設定 | 別名の重なりと予約した名前を断る。権限のない人が開けない |
 | `redmine_serverless_ses:receive_mail` | DMARC が通り、迷惑メールとウイルスの検査が `PASS` のメールだけを取り込む。登録のないアドレスのメールを取り込まない。送信者が付けた偽の `X-SES-*` のヘッダーにだまされない。自動応答のメールを取り込まない。成功したら `processed/` に移す |
 | メールの送信のやり直し | `redmine-worker` でだけ `raise_delivery_errors` が `true` になる。SES のエラーを、SDK の応答の差し替えで 1 つずつ起こし、一時的なものはやり直し、アカウントの問題はデッドレターキューへ、メールの問題は捨てる。どれも、最後に失敗したときに記録が残る |
-| 失敗の記録からの送り直し | 記録したジョブの中身から、同じジョブを積み直せる |
 
 メールの取り込みのテストには、Redmine のテストのメールの見本(`test/fixtures/mail_handler/`)に、SES が付けるヘッダーを足したものを使います。
+
+<a id="jobs-redmine_serverless_sqs"></a>
+
+### ジョブ(`redmine_serverless_sqs`)
+
+| 対象 | 確認すること |
+| --- | --- |
+| SQS でのジョブ | `REDMINE_JOBS_QUEUE_URL` があると、通知のメールのジョブが SQS に積まれ、ジョブ用のハンドラーで実行されてメールが送られる。許可の一覧にないクラスのメッセージは実行しない。なければ、Redmine は標準のままにジョブを動かす |
+| 失敗の記録 | 最後に失敗したジョブ(やり直しを使い切ったもの、やり直さないエラー)は、中身とエラーといっしょに記録が残る |
+| 失敗の記録からの送り直し | 記録したジョブの中身から、同じジョブを積み直せる |
 
 <a id="settings-and-code-outside-the-plugins"></a>
 
@@ -109,7 +118,6 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | SSM の読み込み(`redmine_serverless_ssm`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。すでにある環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM につながらなければ失敗する。イメージのテストでは、3 つの役割が、データベースのホスト、そのパスワード、`SECRET_KEY_BASE` を SSM だけから読み、`config/database.yml` より前に読めていることを確認する | Minitest、moto(プラグインの `test/loader_test.rb`、`bin/test-image`) |
 | タスクのハンドラー | 決めた `command` と `env` だけを受け付ける。SES のイベントを見分ける。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
 | 拡張機能のスクリプト | `REDMINE_ROLE` ごとに、本物の Lambda Web Adapter を起動するか、何もしない拡張機能として登録するかが変わる | ShellCheck、イメージのテスト |
-| ジョブ(`aws-activejob-sqs`) | 通知のメールのジョブが SQS に積まれ、ジョブ用のハンドラーで実行されてメールが送られる | Minitest、moto |
 | webhook | `webhook_blocklist` の範囲(プライベート、リンクローカル)の送り先に送らない。送り先のエラーでジョブが失敗し、届け直される | Minitest、moto |
 | メールの送信(`aws-actionmailer-ses`) | Redmine の通知のメールが、SES v2 の `SendEmail` に、全文と宛先(To、Cc、Bcc)で渡る | Minitest、SDK の `stub_responses` |
 | 本文のハッシュを入れる関数(`edge/body-hash/`) | 本文のない要求と空の本文に、空の本文の SHA256 を入れる。base64 の本文を、バイト列のまま SHA256 にする(バイナリの本文とマルチパートのフォームで、手元で計算した値と同じ)。`inputTruncated` の要求に 413 を返し、オリジンに送らない | Node.js の `node:test`。依存の npm のパッケージは使わない |

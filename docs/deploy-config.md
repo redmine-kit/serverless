@@ -72,7 +72,7 @@ When several instances are set up in the same account, resources that can be com
 | `image` | | This project's image | To use a derived image built by the adopter (with added themes or plugins), its location and digest (`image.repository`, `image.digest`). How to build a derived image is in [architecture.md](architecture.md#derived-images) |
 | `redmine.settings` | | none | Values of Redmine administration settings (`host_name`, `default_language`, `mail_from`, etc.) |
 | `redmine.settingsMode` | | `initial` | `initial` (set only when first set up; can be changed on the page afterwards) or `enforce` (set again on every deployment) |
-| `redmine.pluginSettings` | | none | Setting values for the plugins, by plugin name (`redmine_serverless`, `redmine_serverless_s3`, `redmine_serverless_ses`) |
+| `redmine.pluginSettings` | | none | Setting values for the plugins, by plugin name (`redmine_serverless`, `redmine_serverless_s3`, `redmine_serverless_ses`, `redmine_serverless_sqs`) |
 | `logs.retentionDays` | | 90 | CloudWatch Logs retention in days (including Lambda@Edge log groups) |
 | `retention.recordsDays` | | 90 | Days to keep the plugin's records (received email, failed jobs) |
 | `retention.mailDays` | | 30 | Days to keep email in the mail bucket (`processed/` and `inbound/`) |

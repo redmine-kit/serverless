@@ -105,7 +105,7 @@ ENTRYPOINT ["/var/task/bin/start"]
 | --- | --- | --- |
 | 置き場所 | `/var/task/redmine` | Lambda のベースイメージは、関数のコードを `/var/task`(`LAMBDA_TASK_ROOT`)に置く |
 | `config/database.yml` | ビルドのときに入れる。`adapter:` は文字で `postgresql` と書く。接続先、データベースの名前、ユーザーの名前、パスワードは、環境変数から ERB で読む(`REDMINE_DB_HOST`、`REDMINE_DB_NAME`、`REDMINE_DB_USERNAME`、`REDMINE_DB_PASSWORD`)。TLS は、イメージの中の RDS の CA の証明書の束で `verify-full` にする(`sslrootcert: /var/task/rds-global-bundle.pem`) | Redmine の `Gemfile` は、`config/database.yml` の `adapter:` の値で、入れるデータベースの gem を決める。`adapter:` の値を ERB にすると、Gemfile も ERB を評価するので、文字で書いておく方が確か。RDS for PostgreSQL なので、`pg` の gem を使う |
-| `Gemfile.local` | `puma`(Redmine はテスト用のグループにしか入れていない)、`aws-sdk-ssm`(設定と秘密の値)、`aws-actionmailer-ses`(メール)、`aws-activejob-sqs`(ジョブ) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem(`redmine_serverless_s3` の `aws-sdk-s3` など)は、そのプラグインの `Gemfile` に書く |
+| `Gemfile.local` | `puma`(Redmine はテスト用のグループにしか入れていない)、`aws-actionmailer-ses`(メール)、`aws-activejob-sqs`(ジョブ)、道筋を指定した gem としての `redmine_serverless_ssm`(設定と秘密の値。[architecture.md](architecture.md#the-plugins)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem(`redmine_serverless_s3` の `aws-sdk-s3` など)は、そのプラグインの `Gemfile` に書く |
 | 自前のプラグイン | `plugins/redmine_serverless`、`plugins/redmine_serverless_s3`、`plugins/redmine_serverless_ses`、`plugins/redmine_serverless_ssm`。それぞれ別のリポジトリから、決めたコミットで入れる(`redmine_serverless_ssm` は、`Gemfile.local` で道筋を指定した gem としても入れる) | 拡張の部分を自前のプラグインにする([architecture.md](architecture.md#the-plugins)) |
 | gem | ビルドのときに `vendor/bundle` に入れ、実行のときは入れない(`BUNDLE_DEPLOYMENT`、`BUNDLE_WITHOUT=development:test`) | 実行のときには書き込めない |
 | ファイルの権限 | どのユーザーからも読めるようにする | Lambda は、既定の権限の少ないユーザーで動かす。このユーザーが、実行に要るすべてのファイルを読める必要がある |
@@ -300,7 +300,7 @@ sequenceDiagram
 - **同時実行数:** `redmine-worker` の同時実行数の予約を 3 にします。ジョブが一度に多く動いて、データベースの接続と費用が増えすぎないようにするためです。
 - **webhook:** Redmine 7.0 の webhook は、ジョブ(`WebhookJob`)で送るので、`redmine-worker` が送ります。`redmine-worker` は VPC の中にあるので、webhook を送れるのは NAT インスタンスの形のときだけです([rds.md](rds.md#routes-out-of-the-vpc))。VPC のエンドポイントの形では、すぐに失敗します(上の `webhook_blocklist`)。
   - **有効にする:** Redmine の既定では止まっています(`webhooks_enabled` が 0)。管理者が有効にし、権限(`use_webhooks`)を持つ人が、自分の webhook を作ります。
-  - **失敗したとき:** 送り先がエラーを返すか、つながらないと(Redmine の待ち時間は 60 秒)、ジョブが失敗します。SQS が届け直し、3 回失敗したらデッドレターキューに移り、失敗の記録に残ります。管理画面の「ジョブ」から送り直せます([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#jobs))。
+  - **失敗したとき:** 送り先がエラーを返すか、つながらないと(Redmine の待ち時間は 60 秒)、ジョブが失敗します。SQS が届け直し、3 回失敗したらデッドレターキューに移り、失敗の記録に残ります。管理画面の「ジョブ」から送り直せます([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/admin.html#jobs))。
   - **送り先の制限:** Redmine は、送る前に送り先の名前を IP アドレスに引き、`webhook_blocklist` の範囲なら送りません。引いた IP アドレスに直接つなぐので、DNS の答えを途中で差し替える攻撃にも備えています(`lib/webhook_endpoint_validator.rb`、`Webhook::Executor`)。この設計では、プライベートのアドレスと、リンクローカルのアドレス(メタデータのアドレス `169.254.169.254` を含む)を断ります([ai.md](ai.md#event-notifications-redmines-standard-webhooks))。
 - **大きなプロジェクトの削除:** `redmine-worker` で動くので、15 分まで使えます。
 - **rake の中のメール:** Redmine の rake のタスク(期日の通知など)は、メールをその場で送る形(`Mailer.with_synched_deliveries`)に切り替えるので、ジョブを積みません。

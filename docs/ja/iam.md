@@ -61,7 +61,7 @@ flowchart LR
 
 - **SecureString の復号:** SSM の既定の鍵(`aws/ssm`)で暗号化します。この鍵のときに `kms:Decrypt` を IAM で付ける必要があるかは、作るときに確認します。
 
-- **権限の出どころ:** 各行は、どれかのプラグインのためのものです。Serverless の外で使うときの権限も、プラグインの準備のページにあります。[Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/ja/setup.html#iam-permissions)(ジョブと管理画面)、[Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/setup.html#iam-permissions)(添付ファイル)、[Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/ja/setup.html#iam-permissions)(メール)、[Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/#iam-permissions)(起動のときの設定)です。このページは、それを関数ごとにまとめたものです。
+- **権限の出どころ:** 各行は、どれかのプラグインのためのものです。Serverless の外で使うときの権限も、プラグインの準備のページにあります。[Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/ja/setup.html#iam-permissions)(ジョブと「ジョブ」の画面)、[Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/setup.html#iam-permissions)(添付ファイル)、[Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/ja/setup.html#iam-permissions)(メール)、[Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/setup.html#iam-permissions)(起動のときの設定)です。[Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/ja/setup.html#iam-permissions) 自身の権限は要りません。このページは、それを関数ごとにまとめたものです。
 
 <a id="execution-role-of-redmine-web"></a>
 

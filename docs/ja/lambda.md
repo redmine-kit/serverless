@@ -221,8 +221,8 @@ Rails の設定は、どこに書くかで効くかどうかが変わります�
 | `config.active_record.dump_schema_after_migration` | `false` | `additional_environment.rb` | migration のあとの `db/schema.rb` の書き出しを止める。`production.rb` ではコメントアウトされている |
 | `config.hosts` | Redmine のドメイン | `additional_environment.rb` | — |
 | `config.filter_redirect` | パスの `/files/`、`/thumbnails/`、`/tmp/bulk/` | `additional_environment.rb` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と書かせる([security.md](security.md#logs)) |
-| `config.action_mailer.raise_delivery_errors` | `redmine-worker` だけ `true` | プラグイン `redmine_serverless_ses` の `init.rb` | `production.rb` が `false` にしている。送信のエラーでジョブを失敗させ、やり直せるようにする([mail.md](mail.md#when-sending-fails)) |
-| `config.assets.redmine_detect_update` | `false` | プラグイン `redmine_serverless` の `init.rb` | `production.rb` が `true` にしている。値は初期化のあと(`after_initialize`)で読まれるので、プラグインを読み込むときに上書きすれば間に合う(推測。作るときに確認する) |
+| `config.action_mailer.raise_delivery_errors` | `redmine-worker` でだけ `true` | プラグイン `redmine_serverless_ses` | `production.rb` が `false` にしている。送信のエラーでジョブを失敗させ、やり直せるようにする([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#raising-errors)) |
+| `config.assets.redmine_detect_update` | `false` | プラグイン `redmine_serverless`([その README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda)) | `production.rb` が `true` にしている |
 | `RAILS_ENV` | `production` | 環境変数 | — |
 | `RAILS_LOG_TO_STDOUT` | `1` | 環境変数 | `production.rb` が、この変数があればログを標準出力に出す |
 | `SECRET_KEY_BASE` | 起動のときに SSM Parameter Store から読む(上の「設定と秘密の値」) | 環境変数 | Rails 8.1 は環境変数か credentials から読む。`config/secrets.yml` は読まれない |
@@ -270,18 +270,16 @@ sequenceDiagram
 | 項目 | 内容 |
 | --- | --- |
 | gem | `aws-activejob-sqs` 1.2.0(2026-08-17)。AWS の公式。`activejob` 7.1 以上 |
-| アダプター | `config.active_job.queue_adapter = :sqs`。`REDMINE_ROLE` のあるとき(Lambda の上)だけ。手元では `:inline` |
 | キュー | 標準のキュー 1 つ(`redmine-jobs`)。デッドレターキュー(`redmine-jobs-dlq`)を付け、3 回受け取って失敗したメッセージを移す |
 | ジョブ用の関数 | `redmine-worker`。`redmine-web` と同じイメージで、`REDMINE_ROLE=worker`。Puma は起動しない |
-| ハンドラー | gem のもの(`redmine/config/environment.Aws::ActiveJob::SQS::LambdaHandler.job_handler`)。Rails を読み込んでから、メッセージごとにジョブを実行し、成功したメッセージを消す。gem は、イベントの ARN から組み立てたキューの URL で、メッセージを自分で消す |
-| キュー | Redmine の ActiveJob のキュー(`default` と、メールの `mailers`)は、どちらも `redmine-jobs` に入れる(`config/aws_active_job_sqs.yml`) |
-| 実行してよいジョブ | Redmine のジョブ(`ActionMailer::MailDeliveryJob`、`DestroyProjectJob`、`DestroyProjectsJob`、`WebhookJob`)だけ。gem の `job_class_allowlist` で決める。ほかのクラスの名前のメッセージは、クラスを探す前に拒否する。プラグインが足すジョブは、この一覧に加える |
+| ハンドラー | gem のもの(`redmine/config/environment.Aws::ActiveJob::SQS::LambdaHandler.job_handler`)。プラグインが、失敗を記録するために包む。Rails を読み込んでから、メッセージごとにジョブを実行し、成功したメッセージを消す。gem は、イベントの ARN から組み立てたキューの URL で、メッセージを自分で消す |
+| プラグイン | `redmine_serverless_sqs` が、キューのアダプターを設定し(`REDMINE_JOBS_QUEUE_URL` があるときだけ)、Redmine のキューを `redmine-jobs` に向け、Redmine とプラグインのジョブのクラスだけを実行させ、最後に失敗したジョブを記録し、「ジョブ」の画面を足す([プラグインの資料](https://redmine-kit.github.io/redmine_serverless_sqs/ja/)) |
 | まとめて受け取る数 | 1。ハンドラーは、途中のジョブが失敗すると例外で終わるので、1 件ずつにして、失敗したものだけがやり直されるようにする |
 | 可視性タイムアウト | 関数のタイムアウト(900 秒)より長くする |
 
 - **速い:** `redmine-worker` は、環境が残っているあいだ、読み込んだ Rails をそのまま使います。ジョブのたびに Rails を起動し直しません。
 - **Redmine の bundle を先に:** ランタイムインターフェイスクライアントは、ハンドラーが Rails を読み込む前に、json や uri などの Ruby に最初から入っている gem を読み込みます。そのあとで Bundler が、Redmine の bundle の新しいバージョンを拒否します。そこで `redmine-worker` は、ランタイムが動き出す前に Redmine の bundle を準備します(`RUBYOPT=-rbundler/setup`)(2026-11-09 にランタイムインターフェイスエミュレーターで確認)。
-- **やり直し:** ジョブが失敗すると、メッセージは可視性タイムアウトのあとで、もう一度届きます。3 回失敗したら、デッドレターキューに移り、件数をアラームで通知します。
+- **やり直し:** ジョブが失敗すると、メッセージは可視性タイムアウトのあとで、もう一度届きます。3 回失敗したら、デッドレターキューに移り、件数をアラームで通知します。プラグインは、最後の受け取りでジョブを記録し、送り直せるようにします([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/admin.html#jobs))。
 - **2 回動くことがある:** SQS の標準のキューは、同じメッセージを 2 回届けることがあります。通知のメールが 2 通届くことがありえますが、この規模では受け入れます。
 - **時間を置くジョブ:** gem は、15 分までの時間を置く指定に対応しています。Redmine 本体は使っていません。
 - **要求が速くなる:** 画面の要求は、ジョブを SQS に積んだ時点で応答を返します。通知のメールの送信を待ちません。
@@ -365,7 +363,7 @@ flowchart LR
 
 ### Lambda Web Adapter の `/events`
 
-関数 URL の外から関数を呼ぶイベント(業務時間の温めなど)は、Lambda Web Adapter が `/events` への POST として Puma に渡します(`AWS_LWA_PASS_THROUGH_PATH`)。プラグインの Rack のミドルウェアが、`/events` への要求に、データベースに触れずに 204 を返します。CloudFront から `/events` に来た要求にも、同じく 204 を返すだけです。
+関数 URL の外から関数を呼ぶイベント(業務時間の温めなど)は、Lambda Web Adapter が `/events` への POST として Puma に渡します(`AWS_LWA_PASS_THROUGH_PATH`)。プラグイン `redmine_serverless` が、データベースに触れずに 204 を返します([その README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda))。CloudFront から `/events` に来た要求にも、同じく 204 を返すだけです。
 
 <a id="serving-assets"></a>
 

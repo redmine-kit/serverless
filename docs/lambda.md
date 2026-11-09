@@ -193,8 +193,8 @@ Whether a Rails setting takes effect depends on where it is written.
 | `config.active_record.dump_schema_after_migration` | `false` | `additional_environment.rb` | Stops writing `db/schema.rb` after migrations. Commented out in `production.rb` |
 | `config.hosts` | The Redmine domain | `additional_environment.rb` | — |
 | `config.filter_redirect` | The paths `/files/`, `/thumbnails/` and `/tmp/bulk/` | `additional_environment.rb` | Makes redirects to attachment signed URLs appear as `[FILTERED]` in logs ([security.md](security.md#logs)) |
-| `config.action_mailer.raise_delivery_errors` | `true` only in `redmine-worker` | `init.rb` of the plugin `redmine_serverless_ses` | `production.rb` sets it to `false`. Sending errors fail the job so that it can be retried ([mail.md](mail.md#when-sending-fails)) |
-| `config.assets.redmine_detect_update` | `false` | `init.rb` of the plugin `redmine_serverless` | `production.rb` sets it to `true`. The value is read after initialization (`after_initialize`), so overwriting it when the plugin loads is early enough (an assumption; to be checked when building) |
+| `config.action_mailer.raise_delivery_errors` | `true` only in `redmine-worker` | The plugin `redmine_serverless_ses` | `production.rb` sets it to `false`. Sending errors fail the job so that it can be retried ([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/sending.html#raising-errors)) |
+| `config.assets.redmine_detect_update` | `false` | The plugin `redmine_serverless` ([its README](https://redmine-kit.github.io/redmine_serverless/#running-on-lambda)) | `production.rb` sets it to `true` |
 | `RAILS_ENV` | `production` | Environment variable | — |
 | `RAILS_LOG_TO_STDOUT` | `1` | Environment variable | When this variable exists, `production.rb` sends logs to standard output |
 | `SECRET_KEY_BASE` | Read from SSM Parameter Store at start-up (see "Settings and secrets" above) | Environment variable | Rails 8.1 reads it from an environment variable or credentials. `config/secrets.yml` is not read |
@@ -238,18 +238,16 @@ sequenceDiagram
 | Item | Details |
 | --- | --- |
 | Gem | `aws-activejob-sqs` 1.2.0 (2026-08-17). Official AWS gem. `activejob` 7.1 or later |
-| Adapter | `config.active_job.queue_adapter = :sqs`, only when `REDMINE_ROLE` exists (on Lambda). `:inline` locally |
 | Queue | One standard queue (`redmine-jobs`), with a dead-letter queue (`redmine-jobs-dlq`) that receives messages that failed after 3 receives |
 | Worker function | `redmine-worker`. Same image as `redmine-web`, with `REDMINE_ROLE=worker`. Puma is not started |
-| Handler | The gem's handler (`redmine/config/environment.Aws::ActiveJob::SQS::LambdaHandler.job_handler`). Loads Rails, then runs the job for each message and deletes the messages that succeeded. The gem deletes each message itself, at the queue URL it builds from the event's ARN |
-| Queues | Redmine's ActiveJob queues (`default`, and `mailers` for mail) both go to `redmine-jobs` (`config/aws_active_job_sqs.yml`) |
-| Jobs that may run | Only Redmine's jobs (`ActionMailer::MailDeliveryJob`, `DestroyProjectJob`, `DestroyProjectsJob`, `WebhookJob`), with the gem's `job_class_allowlist`. A message naming another class is rejected before the class is looked up. Jobs added by the plugins are added to this list |
+| Handler | The gem's handler (`redmine/config/environment.Aws::ActiveJob::SQS::LambdaHandler.job_handler`), which the plugin wraps to record failures. Loads Rails, then runs the job for each message and deletes the messages that succeeded. The gem deletes each message itself, at the queue URL it builds from the event's ARN |
+| Plugin | `redmine_serverless_sqs` sets the queue adapter (only with `REDMINE_JOBS_QUEUE_URL`), sends Redmine's queues to `redmine-jobs`, allows only Redmine's and the plugins' job classes to run, records the jobs that fail for the last time and adds the "Jobs" page ([its documentation](https://redmine-kit.github.io/redmine_serverless_sqs/)) |
 | Batch size | 1. The handler ends with an exception when a job in the batch fails, so messages are processed one at a time and only the failed one is retried |
 | Visibility timeout | Longer than the function timeout (900 seconds) |
 
 - **Fast:** While the environment stays alive, `redmine-worker` reuses the loaded Rails. Rails is not restarted for each job.
 - **Redmine's bundle first:** The runtime interface client loads default gems such as json and uri before the handler loads Rails, and Bundler then refuses the newer versions in Redmine's bundle. So `redmine-worker` sets up Redmine's bundle before the runtime starts (`RUBYOPT=-rbundler/setup`) (checked on the Runtime Interface Emulator on 2026-11-09).
-- **Retries:** When a job fails, the message is delivered again after the visibility timeout. After 3 failures, it moves to the dead-letter queue, and an alarm reports the count.
+- **Retries:** When a job fails, the message is delivered again after the visibility timeout. After 3 failures, it moves to the dead-letter queue, and an alarm reports the count. The plugin records the job on the last receive and can resend it ([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/admin.html#jobs)).
 - **May run twice:** An SQS standard queue may deliver the same message twice. A notification mail may arrive twice, which is acceptable at this scale.
 - **Delayed jobs:** The gem supports delays of up to 15 minutes. Redmine itself does not use them.
 - **Faster requests:** A page request returns its response as soon as the job is queued in SQS. It does not wait for notification mail to be sent.
@@ -323,7 +321,7 @@ The processing is as follows.
 
 ### The `/events` path of Lambda Web Adapter
 
-Events that invoke the function from outside the function URL (such as warming during business hours) are passed to Puma by Lambda Web Adapter as a POST to `/events` (`AWS_LWA_PASS_THROUGH_PATH`). The plugin's Rack middleware returns 204 for requests to `/events` without touching the database. Requests to `/events` that come from CloudFront also just get 204.
+Events that invoke the function from outside the function URL (such as warming during business hours) are passed to Puma by Lambda Web Adapter as a POST to `/events` (`AWS_LWA_PASS_THROUGH_PATH`). The plugin `redmine_serverless` answers them with 204 without touching the database ([its README](https://redmine-kit.github.io/redmine_serverless/#running-on-lambda)). Requests to `/events` that come from CloudFront also just get 204.
 
 ### Serving assets
 

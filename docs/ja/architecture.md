@@ -191,12 +191,12 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 | もの | 置き場所 | 理由 |
 | --- | --- | --- |
 | キャッシュ、ジョブ、スキーマの書き出しの設定 | `config/additional_environment.rb` | データベースへの接続とキャッシュの作成より前に要る。プラグインは、そのあとで読み込まれる |
-| データベース、添付の置き場所、メールの送信の設定 | `config/database.yml`、`config/configuration.yml` | Redmine の設定ファイル |
+| データベース、添付の置き場所、メールの送信の設定 | `config/database.yml`<br>`config/configuration.yml` | Redmine の設定ファイル |
 | 起動のスクリプト、拡張機能のスクリプト | `image/` | Redmine より前に動く |
 | 本文のハッシュを入れる関数 | `edge/` | CloudFront の Lambda@Edge で動く(Node.js) |
 | タスクのハンドラー | `image/` | Rails を読み込まずに、rake を子プロセスで起動する |
-| `bin/rake`、`bin/rails` | `bin/` | 手元から、デプロイした Redmine に向けて使う |
-| `bin/test`、`bin/check-migrations` | `bin/` | 手元と CI で、テストと migration の読み分けに使う |
+| `bin/rake`<br>`bin/rails` | `bin/` | 手元から、デプロイした Redmine に向けて使う |
+| `bin/test`<br>`bin/check-migrations` | `bin/` | 手元と CI で、テストと migration の読み分けに使う |
 
 メールの送信(`aws-actionmailer-ses`)とジョブ(`aws-activejob-sqs`)は、AWS の公式の gem を使い、送信の仕組みやキューのアダプターは書きません。ジョブの設定は `redmine_serverless_sqs` が持ちます。
 

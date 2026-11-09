@@ -167,12 +167,12 @@ The following are not in the plugins, because they must load before plugins or t
 | What | Location | Reason |
 | --- | --- | --- |
 | Settings for cache, jobs and schema dump | `config/additional_environment.rb` | Needed before the database connection and the cache are created. Plugins load after that |
-| Settings for the database, attachment storage and mail sending | `config/database.yml`, `config/configuration.yml` | Redmine configuration files |
+| Settings for the database, attachment storage and mail sending | `config/database.yml`<br>`config/configuration.yml` | Redmine configuration files |
 | Startup script, extension script | `image/` | Run before Redmine |
 | Function that adds the body hash | `edge/` | Runs on CloudFront Lambda@Edge (Node.js) |
 | Task handler | `image/` | Starts rake as a child process without loading Rails |
-| `bin/rake`, `bin/rails` | `bin/` | Used locally against the deployed Redmine |
-| `bin/test`, `bin/check-migrations` | `bin/` | Used locally and in CI for tests and migration review |
+| `bin/rake`<br>`bin/rails` | `bin/` | Used locally against the deployed Redmine |
+| `bin/test`<br>`bin/check-migrations` | `bin/` | Used locally and in CI for tests and migration review |
 
 Mail sending (`aws-actionmailer-ses`) and jobs (`aws-activejob-sqs`) use AWS's official gems; no delivery method or queue adapter is written. The jobs' settings belong to `redmine_serverless_sqs`.
 

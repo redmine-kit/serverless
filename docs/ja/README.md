@@ -6,7 +6,7 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 
 ## 目的から探す
 
-| したいこと | 読む資料 |
+| 目的 | 読む資料 |
 | --- | --- |
 | 全体の構成と、決めたこと・まだ決めていないことを知る | [architecture.md](architecture.md) |
 | イメージや Lambda の設定を作る | [lambda.md](lambda.md) |

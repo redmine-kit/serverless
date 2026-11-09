@@ -8,7 +8,7 @@
 
 ## 比べる形
 
-| 形 | 中身 |
+| 形 | 内容 |
 | --- | --- |
 | この設計 | VPC の中の Lambda、RDS for PostgreSQL(db.t4g.micro)、VPC のエンドポイントか NAT インスタンス、S3、SQS、SES([architecture.md](architecture.md)) |
 | EC2 1 台 | t4g.small(2 GB)1 台に、Redmine と PostgreSQL を同じサーバーで動かす。添付ファイルはサーバーのディスク |

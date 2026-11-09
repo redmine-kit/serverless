@@ -186,7 +186,7 @@ Event Functions で書き込めるのは `/tmp` だけです。Redmine が実行
 
 プラグインの [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) が、Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`/<instance>/env/` のすぐ下のパラメーターを、すべて環境変数に読み込みます。読み方とタイミング、読まないものは、プラグインの資料にあります。パラメーターを足せば、コードを変えずに環境変数が増えます。下の表は、インスタンスの名前が `redmine` のときの例です。
 
-| パラメーター | 種類 | 中身 | 書くもの |
+| パラメーター | 種類 | 内容 | 書くもの |
 | --- | --- | --- | --- |
 | `/redmine/env/REDMINE_DB_HOST` | String | RDS のエンドポイント(`<インスタンスの ID>.<ランダムな文字>.ap-northeast-1.rds.amazonaws.com`)。秘密ではないが、Redmine の設定をまとめて読むためにここに置く | インスタンスのスタック |
 | `/redmine/env/REDMINE_DB_PASSWORD` | SecureString | データベースのユーザーのパスワード([rds.md](rds.md#settings)) | 初めてのときの `bin/deploy`([deploy-config.md](deploy-config.md#secrets)) |

@@ -35,7 +35,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 
 同じアカウントに複数のインスタンスを立てるときに、まとめて 1 つにできるものは、共有の土台(CloudFormation のスタック `redmine-shared`)に置きます。
 
-| 置き場所 | リソース | 理由 |
+| 保存先 | リソース | 理由 |
 | --- | --- | --- |
 | 共有の土台 | ECR のリポジトリ | 同じバージョンのイメージを、インスタンスのあいだで使い回す |
 | 共有の土台(us-east-1) | Lambda@Edge の関数 `redmine-body-hash`(スタック `redmine-shared-edge`) | Lambda@Edge の関数は us-east-1 に作る決まり。同じコードを、インスタンスのあいだで使い回す([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge)) |
@@ -183,7 +183,7 @@ CloudFormation は SecureString のパラメーターを作れないので、`bi
 
 スタックは、`infra/` に CloudFormation で書きます。`bin/lint` が cfn-lint で検査します。
 
-| ファイル | スタック | 中身 |
+| ファイル | スタック | 内容 |
 | --- | --- | --- |
 | `infra/account.yaml` | `redmine-account` | 権限の境界 `redmine-boundary`、CloudFormation のサービスロール `redmine-cfn-exec`、ロール `redmine-infra-deploy` と `redmine-github-deploy`、要るときは GitHub の OIDC のプロバイダー([iam.md](iam.md#account-roles))。アカウントになければ、CloudTrail の証跡と IAM Access Analyzer のアナライザー([aws-security.md](aws-security.md)) |
 | `infra/shared.yaml` | `redmine-shared` | ECR のリポジトリ、そのまま渡すには大きすぎるテンプレートのためのバケット、2 つの AZ のプライベートのサブネットを持つ VPC、S3 のゲートウェイのエンドポイント、共有の SES の受信のルールのセット、外への道。外への道は、1 つの AZ の SSM、SQS、SES のインターフェースのエンドポイント(`network.mode` が `endpoints`)か、NAT インスタンス(`nat`。インターネットゲートウェイ、パブリックのサブネット、起動のときに Elastic IP と経路を引き継ぐ 1 台の Auto Scaling グループ。[rds.md](rds.md#setup-2-nat-instance)) |

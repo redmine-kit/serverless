@@ -201,7 +201,7 @@ flowchart LR
 bin/deploy --account
 ```
 
-| リソース | 中身 |
+| リソース | 内容 |
 | --- | --- |
 | `redmine-boundary`(管理ポリシー) | スタックが作るすべてのロールの権限の境界。このページのロールの操作だけを許す。ログを書く、SSM のパラメーターを読む、`kms:Decrypt`、VPC の中の Lambda のネットワークインターフェースと NAT インスタンスの操作、S3 のオブジェクト、SQS、SES、`lambda:InvokeFunction`、GuardDuty Malware Protection の EventBridge のルールとバケットの通知、`AmazonSSMManagedInstanceCore` の操作。IAM の操作は何も許さない |
 | `redmine-cfn-exec` | CloudFormation(`cloudformation.amazonaws.com`。`aws:SourceAccount` はこのアカウント)。スタックのサービスの操作と、パス `/redmine/` の下だけの IAM の操作。ロールを作ることと、ポリシーを入れることや付けることは、権限の境界があるときだけ(`iam:PermissionsBoundary`)。`/redmine/` の下のロール、インスタンスプロファイル、ポリシーの管理。`/redmine/` の下のロールを Lambda、Lambda@Edge、EventBridge Scheduler、EC2、GuardDuty Malware Protection に渡す `iam:PassRole`。`iam:CreateServiceLinkedRole` と `lambda:EnableReplication*`。`iam:DeleteRolePermissionsBoundary` は拒否する。アカウントのロールと権限の境界は `/redmine/` の外にあるので、変えられない |

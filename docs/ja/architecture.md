@@ -169,7 +169,7 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 
 プラグインは、GitHub Packages の RubyGems のレジストリ(`https://rubygems.pkg.github.com/redmine-kit`)に gem として公開します。Redmine の Lambda 用のイメージは、GitHub Packages のコンテナのレジストリ(`ghcr.io`)で公開します。どちらも、置き場所の持ち主は redmine-kit の組織です。
 
-| もの | 置き場所 | 使い方 |
+| もの | 保存先 | 使い方 |
 | --- | --- | --- |
 | Redmine の Lambda 用のイメージ | `ghcr.io/redmine-kit/serverless`(arm64 の 1 つのアーキテクチャで、index にしない)。main のコミットで、リリースのバージョンのテストが通ったものを、CI が push する(`.github/workflows/ci.yml` の `publish` のジョブ。バージョンは `bin/redmine-version` で読む)。タグは、Redmine のバージョン(`7.0.3`)、Redmine のマイナーバージョン(`7.0`)、`main`。基本は Redmine のバージョンのタグを使う。そのバージョンの新しいビルド(gem とプラグインの更新)に付け替わり、`bin/deploy` も既定でこれを使う。`7.0` は Redmine のパッチリリースにも付いていく。古いビルドはタグなしで残り、digest で取れる。コミットは `org.opencontainers.image.revision` のラベルにある | `bin/deploy` が digest で取り、立てるアカウントの ECR にコピーする([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR のイメージしか使えない |
 | プラグイン | GitHub Packages の gem `redmine_serverless_x`。プラグインごとに 1 つで、それぞれのリポジトリのワークフローが、バージョンのタグごとに公開する。プラグインの動かすためのファイルを持つ | `Gemfile.local` で GitHub Packages の source から足し、`bundle install` を実行して、入れた gem を `plugins/` にリンクする(各プラグインの準備のページ) |
@@ -198,7 +198,7 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 
 次のものは、プラグインより前に読み込む必要があるか、Redmine の外で動くので、プラグインにしません。
 
-| もの | 置き場所 | 理由 |
+| もの | 保存先 | 理由 |
 | --- | --- | --- |
 | キャッシュ、ジョブ、スキーマの書き出しの設定 | `config/additional_environment.rb` | データベースへの接続とキャッシュの作成より前に要る。プラグインは、そのあとで読み込まれる |
 | データベース、添付の置き場所、メールの送信の設定 | `config/database.yml`<br>`config/configuration.yml` | Redmine の設定ファイル |

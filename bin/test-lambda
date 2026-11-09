@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# Lambda tests on LocalStack (docs/testing.md#lambda-tests). The three
+# functions run as Lambda from the local image: the task through the
+# deployment's own functions (deploy/lib.sh), the worker from its SQS event
+# source, including the deletion of the message, and web through a function
+# URL. Needs LOCALSTACK_AUTH_TOKEN; without it, the tests are skipped.
+#   bin/test-lambda [image]   # default: serverless:test (bin/build-image)
+#   bin/test-lambda --down    # stop LocalStack and PostgreSQL
+#   KEEP=1 bin/test-lambda    # leave them running for inspection
+# Commands that run inside containers are in single quotes on purpose.
+# shellcheck disable=SC2016
+set -euo pipefail
+cd "$(dirname "$0")/.."
+compose=(docker compose -f test/lambda/compose.yml)
+if [[ "${1:-}" == --down ]]; then
+  LOCALSTACK_AUTH_TOKEN=unused "${compose[@]}" down -v --remove-orphans
+  exit 0
+fi
+if [[ -z "${LOCALSTACK_AUTH_TOKEN:-}" ]]; then
+  echo "skipped: LOCALSTACK_AUTH_TOKEN is not set"
+  exit 0
+fi
+image="${1:-serverless:test}"
+tools=serverless-deploy-tools:local
+instance=lambda-test
+network=serverless-lambda-test
+ssm_path=/$instance/env/
+tmp=$(mktemp -d)
+cleanup() {
+  rm -rf "$tmp"
+  [[ -n "${KEEP:-}" ]] || "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+failures=0
+pass() { echo "ok: $*"; }
+fail() { echo "FAILED: $*" >&2; failures=$((failures + 1)); }
+check() { local name="$1"; shift; if "$@"; then pass "$name"; else fail "$name"; fi; }
+quiet() { "$@" >/dev/null; }
+
+echo "== LocalStack"
+docker build --quiet -t "$tools" deploy >/dev/null
+if ! "${compose[@]}" up -d --wait; then
+  "${compose[@]}" logs --tail 80
+  exit 1
+fi
+for _ in $(seq 1 60); do
+  curl -fsS http://127.0.0.1:4566/_localstack/health 2>/dev/null | grep -q '"lambda": "\(available\|running\)"' && break
+  sleep 2
+done
+
+# The AWS CLI and the deployment's functions, in the tools image on the
+# network of LocalStack.
+in_tools() {
+  docker run --rm -i --network "$network" -v "$PWD:/work:ro" -v "$tmp:$tmp" -w /work \
+    -e AWS_ENDPOINT_URL=http://serverless-lambda-test-localstack:4566 -e AWS_DEFAULT_REGION=us-east-1 \
+    -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test -e AWS_PAGER= \
+    -e instance="$instance" -e work="$tmp" --entrypoint bash "$tools" -c "$@"
+}
+aws() { in_tools 'aws "$@"' aws "$@"; }
+# Runs a function of deploy/lib.sh.
+lib() { in_tools 'set -euo pipefail; source deploy/lib.sh; "$@"' lib "$@"; }
+
+echo "== Image in ECR"
+repository=$(aws ecr create-repository --repository-name "$instance" --query repository.repositoryUri --output text)
+image_uri="$repository:test"
+docker tag "$image" "$image_uri"
+push() { docker push --quiet "$image_uri" >/dev/null; }
+check "the image is pushed to LocalStack's ECR" push
+docker rmi "$image_uri" >/dev/null
+case "$(docker image inspect -f '{{.Architecture}}' "$image")" in
+  arm64) architecture=arm64 ;;
+  *) architecture=x86_64 ;;
+esac
+
+echo "== Secrets in SSM (deploy/lib.sh)"
+check "create_secrets creates the secrets" lib create_secrets
+values() { aws ssm get-parameters-by-path --path "$ssm_path" --with-decryption --query 'Parameters[].[Name, Type, Value]' --output text | sort; }
+first=$(values)
+check "create_secrets keeps existing secrets" lib create_secrets
+check "the secrets are unchanged" test "$(values)" == "$first"
+check "SECRET_KEY_BASE and the private key are SecureString" test \
+  "$(awk '{ print $1, $2 }' <<<"$first" | grep -cE '(SECRET_KEY_BASE|REDMINE_CLOUDFRONT_PRIVATE_KEY|REDMINE_DB_PASSWORD) SecureString$')" == 3
+# PostgreSQL here does not check the password.
+aws ssm put-parameter --name "${ssm_path}REDMINE_DB_HOST" --type String --value postgres --overwrite >/dev/null
+
+echo "== Queues and mail"
+dlq_url=$(aws sqs create-queue --queue-name "$instance-jobs-dlq" --query QueueUrl --output text)
+dlq_arn=$(aws sqs get-queue-attributes --queue-url "$dlq_url" --attribute-names QueueArn --query Attributes.QueueArn --output text)
+# A short visibility timeout: a message that the worker does not delete
+# comes back within the test.
+queue_url=$(aws sqs create-queue --queue-name "$instance-jobs" --attributes "$(jq -nc --arg dlq "$dlq_arn" \
+  '{VisibilityTimeout: "60", RedrivePolicy: ({deadLetterTargetArn: $dlq, maxReceiveCount: 3} | tojson)}')" \
+  --query QueueUrl --output text)
+queue_arn=$(aws sqs get-queue-attributes --queue-url "$queue_url" --attribute-names QueueArn --query Attributes.QueueArn --output text)
+# Redmine's default sender (Setting.mail_from).
+aws sesv2 create-email-identity --email-identity redmine@example.net >/dev/null
+
+echo "== Functions"
+create() { # <role> <timeout>
+  aws lambda create-function --function-name "$instance-$1" --package-type Image \
+    --code "ImageUri=$image_uri" --architectures "$architecture" \
+    --role "arn:aws:iam::000000000000:role/$instance-$1" --memory-size 2048 --timeout "$2" \
+    --environment "$(jq -nc --arg role "$1" --arg ssm "$ssm_path" --arg queue "$queue_url" '{Variables: {
+      REDMINE_ROLE: $role, REDMINE_SSM_PATH: $ssm, REDMINE_JOBS_QUEUE_URL: $queue,
+      REDMINE_DB_NAME: "postgres", REDMINE_DB_USERNAME: "postgres", REDMINE_DB_SSLMODE: "disable"}}')" >/dev/null
+  aws lambda wait function-active-v2 --function-name "$instance-$1"
+}
+check "redmine-task is created" create task 900
+check "redmine-worker is created" create worker 60
+check "redmine-web is created" create web 60
+
+echo "== task (deploy/lib.sh)"
+task() { lib task "$1" 2>&1; }
+check "db:migrate" quiet task '{"command": "rake", "args": ["db:migrate"]}'
+check "redmine:load_default_data" quiet task '{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}'
+secrets_read() {
+  task '{"command": "runner", "args": ["puts Rails.application.secret_key_base.size"]}' | grep -qx 128
+}
+check "the task reads SECRET_KEY_BASE from SSM" secrets_read
+failed_task() { ! task '{"command": "rake", "args": ["no:such:task"]}' >/dev/null; }
+check "a failed command fails task()" failed_task
+settings() {
+  local code
+  code=$(in_tools 'source deploy/lib.sh; settings_code "$1"' settings \
+    '{"mode": "enforce", "settings": {"app_title": "Lambda test"}, "plugins": {}}')
+  task "$(jq -nc --arg code "$code" '{command: "runner", args: [$code]}')" | grep -q 'settings: 1 applied' &&
+    task '{"command": "runner", "args": ["puts Setting.app_title"]}' | grep -qx 'Lambda test'
+}
+check "settings_code applies settings" settings
+
+echo "== worker from SQS"
+aws lambda create-event-source-mapping --function-name "$instance-worker" --event-source-arn "$queue_arn" \
+  --batch-size 1 >/dev/null
+# A job that the web would queue: deleting a project, which also sends a mail.
+check "the task queues DestroyProjectJob" quiet task '{"command": "runner", "args": [
+  "p = Project.create!(name: %q(Worker probe), identifier: %q(worker-probe)); Project.mark_for_deletion(p); DestroyProjectJob.perform_later(p.id, User.where(admin: true).first.id, %q(127.0.0.1)); puts :queued"]}'
+project_deleted() {
+  for _ in $(seq 1 90); do
+    task '{"command": "runner", "args": ["puts Project.where(identifier: %q(worker-probe)).count"]}' | grep -qx 0 && return 0
+    sleep 2
+  done
+  return 1
+}
+check "the worker ran the job" project_deleted
+messages() { # <queue URL>: visible and in flight
+  aws sqs get-queue-attributes --queue-url "$1" \
+    --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
+    --query 'Attributes.[ApproximateNumberOfMessages, ApproximateNumberOfMessagesNotVisible]' --output text | awk '{ print $1 + $2 }'
+}
+# Longer than the visibility timeout: a message that was not deleted is back.
+sleep 75
+check "the messages are deleted from the queue" test "$(messages "$queue_url")" == 0
+check "the dead-letter queue is empty" test "$(messages "$dlq_url")" == 0
+mail_sent() { curl -fsS http://127.0.0.1:4566/_aws/ses | grep -q 'redmine@example.net'; }
+check "the worker sent the notification mail through SES" mail_sent
+
+echo "== web through a function URL"
+url=$(aws lambda create-function-url-config --function-name "$instance-web" --auth-type NONE \
+  --query FunctionUrl --output text)
+login_page() {
+  local page
+  for _ in $(seq 1 30); do
+    page=$(curl -fsS "${url%/}/login" 2>/dev/null) && break
+    sleep 2
+  done
+  grep -q 'Lambda test</title>' <<<"${page:-}"
+}
+check "/login answers through the function URL" login_page
+
+if ((failures)); then
+  "${compose[@]}" logs --tail 60 localstack
+  echo "$failures check(s) failed" >&2
+  exit 1
+fi
+echo "all Lambda checks passed"

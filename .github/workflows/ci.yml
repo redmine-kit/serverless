@@ -84,8 +84,17 @@ jobs:
           persist-credentials: false
       - run: bin/build-image
       - run: bin/test-image
+      # The functions as Lambda on LocalStack, with the release only. The
+      # secret is not given to pull requests from forks, so it is skipped
+      # there.
+      - if: matrix.redmine != 'master'
+        run: bin/test-lambda
+        env:
+          LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
       - if: always()
         run: bin/test-services --down
+      - if: always()
+        run: bin/test-lambda --down
 
   core:
     needs: static

@@ -1,0 +1,31 @@
+# Services of bin/test-lambda (docs/testing.md#lambda-tests). LocalStack runs
+# the functions as Lambda in containers on this network, where they reach
+# PostgreSQL. It needs the Docker socket to start those containers, and an
+# auth token (LocalStack Hobby), which is never written to the repository.
+name: serverless-lambda-test
+networks:
+  default:
+    name: serverless-lambda-test
+services:
+  postgres:
+    image: postgres:16@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      retries: 30
+
+  localstack:
+    image: localstack/localstack:2026.10.6@sha256:f94401988db4c01a5b2634d37d698a9b11c93f74c1ad0f7a8849f5ebd73dcbdc
+    container_name: serverless-lambda-test-localstack
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?LOCALSTACK_AUTH_TOKEN is needed}
+      MAIN_CONTAINER_NAME: serverless-lambda-test-localstack
+      LAMBDA_DOCKER_NETWORK: serverless-lambda-test
+      # Rails takes longer than the default 20 seconds to start.
+      LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT: "300"
+    ports:
+      - "127.0.0.1:4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

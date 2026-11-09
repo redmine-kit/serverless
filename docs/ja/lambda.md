@@ -203,7 +203,7 @@ Event Functions で書き込めるのは `/tmp` だけです。Redmine が実行
 2. 読んだ値を `ENV` に入れます。すでに環境変数にある名前は上書きしません。手元の Docker で試すときに、環境変数で渡せるようにするためです。環境変数にできる名前(大文字、数字、`_`)だけを読み、指定した道筋より下の階層は読みません。
 
 - **コード:** 読み込みはプラグインの [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) が、Railtie の `before_configuration` で行います(`additional_environment.rb` を含む `config/application.rb` のクラスの本体より前)。プラグインの `init.rb` では遅すぎるので、プラグインは gem でもあり、`image/Gemfile.local` で道筋を指定して足します。SSM につながらなければ、秘密の値なしで続けずに、起動を失敗させます。
-- **時機の確認:** イメージのテストでは、データベースのホストを SSM(moto)だけに置き、`db:migrate`、web の画面、worker のジョブが通るので、`config/database.yml` より前に読めています(2026-11-09)。
+- **タイミングの確認:** イメージのテストでは、データベースのホストを SSM(moto)だけに置き、`db:migrate`、web の画面、worker のジョブが通るので、`config/database.yml` より前に読めています(2026-11-09)。
 3. そのあとで、Rails が `config/database.yml` を読み、データベースに接続します。
 
 - **読む場所:** `additional_environment.rb` は `config/application.rb` の中で読まれます。`config/database.yml` の評価と、`SECRET_KEY_BASE` の読み込みはそのあとなので、ここで入れれば間に合います。Redmine の `Gemfile` は `adapter:` の文字しか見ないので、`REDMINE_DB_HOST` がなくても gem を選べます。

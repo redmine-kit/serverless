@@ -33,7 +33,7 @@ Serverless のセキュリティの設計です。守るもの、起きうるこ
 
 | 起きうること | 主な守り | 資料 |
 | --- | --- | --- |
-| Redmine の弱点を突かれる | Redmine を早めに上げる、WAF、読み取り専用のファイルシステム | [upgrade.md](upgrade.md)、下の「AWS WAF」 |
+| Redmine の弱点を突かれる | Redmine を早めにバージョンアップする、WAF、読み取り専用のファイルシステム | [upgrade.md](upgrade.md)、下の「AWS WAF」 |
 | パスワードの総当たり、使い回しのパスワード | 二要素認証(管理者は必須)、パスワードの決まり、WAF のログインへの回数の制限 | 下の「Redmine の設定」「AWS WAF」 |
 | 関数 URL を直接呼ばれる | 関数 URL は IAM の認証で、OAC の署名がないと関数が呼ばれない | [lambda.md](lambda.md#cloudfront-and-function-urls) |
 | データベースに外からつながれる | RDS はパブリックアクセスのないプライベートのサブネットに置く。セキュリティグループは関数からだけを許す。パスワードは SSM と RDS にだけ置く | [rds.md](rds.md#security) |
@@ -223,7 +223,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 
 | リスク | 理由 | 補う方法 |
 | --- | --- | --- |
-| Redmine の弱点 | Redmine と Rails の弱点は、上げるまで残る | Redmine のセキュリティの通知を見て、早めに上げる。WAF で一部を防ぐ |
+| Redmine の弱点 | Redmine と Rails の弱点は、バージョンアップするまで残る | Redmine のセキュリティの通知を見て、早めにバージョンアップする。WAF で一部を防ぐ |
 | ログインの総当たり | Redmine に、失敗の回数でアカウントを止める仕組みがない | WAF の回数の制限と、二要素認証 |
 | NAT インスタンスを通る外への通信 | NAT インスタンスの形では、関数がインターネットに出られる | 乗っ取られないことに力を入れる(上の守り)。外への通信を止める必要があれば、VPC のエンドポイントの形にする([rds.md](rds.md#which-to-choose)) |
 | データベースのパスワード | 一時的な認証情報と違い、パスワードはひとりでには切れない | SSM(SecureString)と RDS にだけ置き、RDS には VPC の中からしか届かない。事故のときは変える(下記) |

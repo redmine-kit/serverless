@@ -25,7 +25,7 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | 月の費用を見る | [cost.md](cost.md) |
 | ふつうのサーバーと比べる | [comparison.md](comparison.md) |
 | テストを書く、CI を作る | [testing.md](testing.md) |
-| Redmine のバージョンを上げる | [upgrade.md](upgrade.md) |
+| Redmine のバージョンアップ | [upgrade.md](upgrade.md) |
 | 古い Redmine からデータを移す | [migration.md](migration.md) |
 
 <a id="pages"></a>
@@ -51,6 +51,6 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | [cost.md](cost.md) | 東京リージョンでの月の費用の見込み |
 | [comparison.md](comparison.md) | ふつうのサーバー(EC2、Lightsail、ECS Fargate)との、料金、セキュリティ、運用の比較 |
 | [testing.md](testing.md) | テストの種類、プラグインと本体のテスト、イメージのテスト、デプロイしたあとの確認、CI の順番 |
-| [upgrade.md](upgrade.md) | Redmine を上げるときの確認の方法(増えた migration の読み分け、試験用のデータベースでの実行、記録) |
+| [upgrade.md](upgrade.md) | Redmine のバージョンアップの確認の方法(増えた migration の読み分け、試験用のデータベースでの実行、記録) |
 | [migration.md](migration.md) | 古い Redmine(ほかの環境で動いているもの)からの移行。MySQL からの移し方 |
 | [sources.md](sources.md) | 参照した情報と確認日 |

@@ -77,7 +77,7 @@ flowchart LR
 
 - **Redmine の標準の migration:** `redmine-task` が、`db:migrate` と `redmine:plugins:migrate` をそのまま実行します([tasks.md](tasks.md#migrations-during-deployment))。migration を書き換えたり、差し替えたりはしません。
 - **新しく始めるとき:** migration のあとに、`redmine-task` で `redmine:load_default_data` を実行します。言語は、設定のファイルの `redmine.settings.default_language` です(なければ英語)。
-- **Redmine を上げるとき:** 新しい migration は、デプロイの前に読み、PostgreSQL のコンテナで実行して確認します([upgrade.md](upgrade.md))。
+- **Redmine のバージョンアップ:** 新しい migration は、デプロイの前に読み、PostgreSQL のコンテナで実行して確認します([upgrade.md](upgrade.md))。
 
 <a id="security"></a>
 

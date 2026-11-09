@@ -47,15 +47,15 @@ MySQL のまま移す先(RDS for MySQL、Aurora MySQL)は、この設計では�
 ```mermaid
 flowchart TD
   a["1. 止めて<br>書き出す"] --> b["2. 一時の<br>MySQL 8 に<br>戻す"]
-  b --> c["3. MySQL のまま<br>7.0.3 に上げる"]
+  b --> c["3. MySQL のまま<br>7.0.3 にバージョンアップ"]
   c --> d["4. 一時の<br>PostgreSQL に<br>空のスキーマ"]
   d --> e["5. データ<br>だけをコピーする"]
   e --> f["6. 確認する"]
 ```
 
 1. **止めて書き出す:** 移行元の Redmine を止め(書き込みを止める)、データベースを書き出します(`mysqldump` に `--single-transaction`、`--default-character-set=utf8mb4`、`--hex-blob` を付ける)。止めたあとに入った変更は移らないので、止めてから書き出します。
-2. **一時の MySQL 8 に戻す:** 書き出したものを、一時の MySQL 8.0 か 8.4(Docker か、スナップショットから作った一時の RDS for MySQL)に戻します。移行元が MySQL 5.7 なら、ここで 8 に上がります。文字コードが `utf8`(3 バイト)のテーブルは、`utf8mb4` に替えます。
-3. **MySQL のまま 7.0.3 に上げる:** 一時の MySQL の上で、Redmine 7.0.3 の `db:migrate` を実行します。Redmine 7.0 は MySQL 8.0〜8.4 に対応しているので、古い Redmine を動かさずに、新しい Redmine で上げられます。古いバージョンから一気に上げてよいかは、Redmine の更新の手順(RedmineUpgrade の wiki)で確認します。
+2. **一時の MySQL 8 に戻す:** 書き出したものを、一時の MySQL 8.0 か 8.4(Docker か、スナップショットから作った一時の RDS for MySQL)に戻します。移行元が MySQL 5.7 なら、ここで 8 になります。文字コードが `utf8`(3 バイト)のテーブルは、`utf8mb4` に替えます。
+3. **MySQL のまま 7.0.3 にバージョンアップする:** 一時の MySQL の上で、Redmine 7.0.3 の `db:migrate` を実行します。Redmine 7.0 は MySQL 8.0〜8.4 に対応しているので、古い Redmine を動かさずに、新しい Redmine でバージョンアップできます。古いバージョンから一気にバージョンアップしてよいかは、Redmine の更新の手順(RedmineUpgrade の wiki)で確認します。
 4. **一時の PostgreSQL に空のスキーマ:** 一時の PostgreSQL に、Redmine 7.0.3 の標準の `db:migrate` と `redmine:plugins:migrate` で、空のスキーマを作ります(初めのデータは入れない)。スキーマは、変換のツールに作らせず、Redmine の migration で作ります。
 5. **データだけをコピーする:** 一時の MySQL(7.0.3 のスキーマ)から、一時の PostgreSQL の空のスキーマに、データだけをコピーします(下の「コピーの方法」)。
 6. **確認する:** 下の「確認すること」を通します。

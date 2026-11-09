@@ -101,7 +101,7 @@ sequenceDiagram
 
 デプロイの段は [deploy-config.md](deploy-config.md#deployment-commands) にあります。migration は、`redmine-task` のイメージを先に新しいものにしてから実行し、成功したら `redmine-web` と `redmine-worker` を更新します(段 7、9)。初めて立てるときは、同じ migration が空のデータベースにスキーマを作り、そのあと `redmine-task` が初めのデータを入れます(段 8)。
 
-migration から `redmine-web` の更新までのあいだは、古いコードが新しいスキーマで動きます。Redmine のバージョンを上げるときは、利用の少ない時間に行います。上げる前に、増えた migration をこのプロジェクトで確認します([upgrade.md](upgrade.md))。
+migration から `redmine-web` の更新までのあいだは、古いコードが新しいスキーマで動きます。Redmine のバージョンアップは、利用の少ない時間に行います。バージョンアップの前に、増えた migration をこのプロジェクトで確認します([upgrade.md](upgrade.md))。
 
 <a id="notes-on-the-read-only-file-system"></a>
 

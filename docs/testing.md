@@ -6,20 +6,18 @@ The specifications in this document were checked against official information as
 
 ## Approach
 
-- **Every piece of replaced code has tests:** Write at least one test for each row of the table in [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#replaced-code). The table and the tests are changed in the same commit.
-- **Use Redmine's standard test framework:** Redmine has unit, functional, integration and system (Capybara and Selenium) tests built on Rails Minitest and mocha. The plugins' tests are written the same way and run with `rake redmine:plugins:test`.
-- **Use substitutes for AWS locally:** Tests do not connect to real AWS. They use AWS SDK response stubs (`stub_responses`), and moto (Apache-2.0) and LocalStack, which reproduce AWS APIs locally (see "Which substitute to use" below).
-- **LocalStack in this project:** This project's CI uses the redmine-kit organization's LocalStack license (Ultimate, from 2026-11-09), given to the jobs as the secret `LOCALSTACK_AUTH_TOKEN`. Adopters of Serverless who run the tests need a LocalStack license of their own that allows their use; otherwise they rely on this project's CI results and their own checks after deployment.
-- **Real AWS is checked after deployment:** Things that cannot be reproduced locally, such as Lambda, CloudFront and SES receiving, are checked after deployment.
-- **Until `bin/test` is put together:** The stages built so far are separate scripts: `bin/lint` (static checks), `bin/test-services` (starts PostgreSQL, moto and LocalStack and checks that each answers), `bin/build-image`, `bin/test-image` (image tests), `bin/test-core` (Redmine's own tests) and `bin/update-gems` (writes `image/Gemfile.lock`).
-- **Working on the plugin at the same time:** The image installs the plugins as gems from GitHub Packages at the versions in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)). With `REDMINE_SERVERLESS_SSM_DIR` or `REDMINE_SERVERLESS_S3_DIR` set to a checkout of the plugin, the scripts that build the image replace the installed gem with its working tree (`bin/lib/plugin.sh`). For example, to test the image with a checkout of the SSM plugin next to this repository:
+The tests follow four rules:
 
-  ```sh
-  REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
-  ```
+- Every piece of replaced code has tests: at least one for each row of the table in [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#replaced-code), changed in the same commit as the table.
+- The tests use Redmine's standard test framework. Redmine has unit, functional, integration and system (Capybara and Selenium) tests built on Rails Minitest and mocha; the plugins' tests are written the same way and run with `rake redmine:plugins:test`.
+- Tests do not connect to real AWS. They use AWS SDK response stubs (`stub_responses`), and moto (Apache-2.0) and LocalStack, which reproduce AWS APIs locally ("Which substitute to use" below).
+- What cannot be reproduced locally, such as Lambda, CloudFront and SES receiving, is checked after deployment.
 
-  The scripts take Bundler's credential for GitHub Packages from the `gh` login, or from `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (CI sets it from `GITHUB_TOKEN`).
-- **Local tests use `bin/test`:** Local tests run with `bin/test` in this repository. There is no Makefile. `bin/test` runs a test image and containers for PostgreSQL, moto and LocalStack in Docker, so it works without Ruby or PostgreSQL installed locally. This repository's `bin/rake` and `bin/rails` target the deployed Redmine, so they are not used for tests ([tasks.md](tasks.md#usage-planned)).
+This project's CI uses the redmine-kit organization's LocalStack license (Ultimate, from 2026-11-09), given to the jobs as the secret `LOCALSTACK_AUTH_TOKEN`. Adopters of Serverless who run the tests need a LocalStack license of their own that allows their use; otherwise they rely on this project's CI results and their own checks after deployment.
+
+### Running the tests
+
+Local tests run with `bin/test` in this repository; there is no Makefile. `bin/test` runs a test image and containers for PostgreSQL, moto and LocalStack in Docker, so it works without Ruby or PostgreSQL installed locally. This repository's `bin/rake` and `bin/rails` target the deployed Redmine, so they are not used for tests ([tasks.md](tasks.md#usage-planned)).
 
 ```sh
 bin/test            # Everything from static checks to Lambda integration tests, in the same order as CI
@@ -32,8 +30,19 @@ bin/test lambda     # Integration tests that invoke the three functions as Lambd
 bin/test plugin test/unit/attachment_patch_test.rb   # Run a specific file
 ```
 
-- **CI is the same:** GitHub Actions calls the same `bin/test` stages in order. Tests run the same way locally and in CI.
-- **Nothing that fails tests is deployed:** If a step in the CI order (below) fails, the run stops there.
+GitHub Actions calls the same `bin/test` stages in order, so tests run the same way locally and in CI. If a step in the CI order (below) fails, the run stops there, and nothing that fails the tests is deployed.
+
+Until `bin/test` is put together, the stages built so far are separate scripts: `bin/lint` (static checks), `bin/test-services` (starts PostgreSQL, moto and LocalStack and checks that each answers), `bin/build-image`, `bin/test-image` (image tests), `bin/test-core` (Redmine's own tests) and `bin/update-gems` (writes `image/Gemfile.lock`).
+
+### Working on a plugin at the same time
+
+The image installs the plugins as gems from GitHub Packages at the versions in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)). With `REDMINE_SERVERLESS_SSM_DIR` or `REDMINE_SERVERLESS_S3_DIR` set to a checkout of the plugin, the scripts that build the image replace the installed gem with its working tree (`bin/lib/plugin.sh`). For example, to test the image with a checkout of the SSM plugin next to this repository:
+
+```sh
+REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
+```
+
+The scripts take Bundler's credential for GitHub Packages from the `gh` login, or from `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (CI sets it from `GITHUB_TOKEN`).
 
 ## Kinds of tests
 

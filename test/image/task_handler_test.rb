@@ -23,6 +23,36 @@ class TaskHandlerTest < Minitest::Test
                  TaskHandler.parse(event)
   end
 
+  def test_ses_event_passes_the_verdicts_and_recipients
+    receipt = {
+      'recipients' => ['support@redmine.example.com', 'ecookbook@redmine.example.com'],
+      'spamVerdict' => { 'status' => 'PASS' }, 'virusVerdict' => { 'status' => 'PASS' },
+      'spfVerdict' => { 'status' => 'PASS' }, 'dkimVerdict' => { 'status' => 'GRAY' },
+      'dmarcVerdict' => { 'status' => 'FAIL' }, 'dmarcPolicy' => 'reject'
+    }
+    event = { 'Records' => [{ 'ses' => { 'mail' => { 'messageId' => 'abc123' }, 'receipt' => receipt } }] }
+    _, _, env = TaskHandler.parse(event)
+    assert_equal({ 'MESSAGE_ID' => 'abc123', 'SES_SPAM_VERDICT' => 'PASS', 'SES_VIRUS_VERDICT' => 'PASS',
+                   'SES_SPF_VERDICT' => 'PASS', 'SES_DKIM_VERDICT' => 'GRAY', 'SES_DMARC_VERDICT' => 'FAIL',
+                   'SES_DMARC_POLICY' => 'REJECT',
+                   'SES_RECIPIENTS' => 'support@redmine.example.com,ecookbook@redmine.example.com' }, env)
+  end
+
+  def test_ses_event_values_that_are_not_well_formed_are_left_out
+    receipt = { 'recipients' => ['a@b.example', 'x,y@b.example', 'no-at', 1],
+                'spamVerdict' => { 'status' => 'PASS; rm' }, 'virusVerdict' => 'PASS' }
+    event = { 'Records' => [{ 'ses' => { 'mail' => { 'messageId' => 'abc123' }, 'receipt' => receipt } }] }
+    _, _, env = TaskHandler.parse(event)
+    assert_equal({ 'MESSAGE_ID' => 'abc123', 'SES_RECIPIENTS' => 'a@b.example' }, env)
+  end
+
+  def test_command_events_cannot_pass_verdicts
+    assert_raises(ArgumentError) do
+      TaskHandler.parse('command' => 'rake', 'args' => ['redmine_serverless_ses:receive_mail'],
+                        'env' => { 'MESSAGE_ID' => 'abc', 'SES_DMARC_VERDICT' => 'PASS' })
+    end
+  end
+
   def test_rejects_ses_event_without_message_id
     assert_raises(ArgumentError) { TaskHandler.parse('Records' => [{ 'ses' => { 'mail' => {} } }]) }
   end

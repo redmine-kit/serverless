@@ -40,12 +40,35 @@ module TaskHandler
     ses ? parse_ses(ses) : parse_command(event)
   end
 
-  # A receipt rule passes the received mail; it is imported from S3.
+  # A receipt rule passes the received mail; it is imported from S3. The
+  # verdicts and the envelope recipients come from the event, not from the
+  # message, whose headers the sender controls (docs/mail.md#spoofing-and-spam).
+  # They are set only here: a command event cannot pass them.
+  SES_VERDICTS = {
+    'spamVerdict' => 'SES_SPAM_VERDICT', 'virusVerdict' => 'SES_VIRUS_VERDICT',
+    'dmarcVerdict' => 'SES_DMARC_VERDICT', 'spfVerdict' => 'SES_SPF_VERDICT', 'dkimVerdict' => 'SES_DKIM_VERDICT'
+  }.freeze
+  VERDICT = /\A[A-Z_]{1,32}\z/
+  RECIPIENT = /\A[^\s,@]+@[^\s,@]+\z/
+
   def parse_ses(ses)
     message_id = ses.dig('mail', 'messageId')
     raise ArgumentError, 'SES event without messageId' unless message_id.is_a?(String) && !message_id.empty?
 
-    ['rake', ['redmine_serverless_ses:receive_mail'], { 'MESSAGE_ID' => message_id }]
+    ['rake', ['redmine_serverless_ses:receive_mail'], { 'MESSAGE_ID' => message_id }.merge(ses_receipt(ses))]
+  end
+
+  def ses_receipt(ses)
+    receipt = ses['receipt'].is_a?(Hash) ? ses['receipt'] : {}
+    env = SES_VERDICTS.each_with_object({}) do |(field, name), out|
+      status = receipt[field].is_a?(Hash) ? receipt[field]['status'] : nil
+      out[name] = status if status.is_a?(String) && VERDICT.match?(status)
+    end
+    policy = receipt['dmarcPolicy']
+    env['SES_DMARC_POLICY'] = policy.upcase if policy.is_a?(String) && VERDICT.match?(policy.upcase)
+    recipients = Array(receipt['recipients']).select { |r| r.is_a?(String) && RECIPIENT.match?(r) }
+    env['SES_RECIPIENTS'] = recipients.join(',') unless recipients.empty?
+    env
   end
 
   def parse_command(event)

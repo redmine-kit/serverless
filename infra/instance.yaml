@@ -1,10 +1,12 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  Serverless instance (stack <instance>): RDS for PostgreSQL, the job queue,
-  and the functions redmine-web and redmine-task in the shared VPC
-  (docs/deploy-config.md#shared-base-and-per-instance-resources). The secrets
-  SECRET_KEY_BASE and REDMINE_DB_PASSWORD are SecureString parameters that
-  bin/deploy creates before this stack.
+  Serverless instance (stack <instance>): RDS for PostgreSQL in the shared
+  VPC, the S3 buckets, the job queues, the functions redmine-web,
+  redmine-worker and redmine-task, the CloudFront distribution, SES and the
+  schedules (docs/deploy-config.md#shared-base-and-per-instance-resources).
+  bin/deploy creates the secrets (SECRET_KEY_BASE, REDMINE_DB_PASSWORD and the
+  CloudFront private key) before this stack, and passes the outputs of the
+  us-east-1 stacks (the certificate, the web ACL and the Lambda@Edge version).
 
 Parameters:
   InstanceName:
@@ -22,8 +24,38 @@ Parameters:
     Description: The image in this account's ECR, by digest.
   Domain:
     Type: String
+    AllowedPattern: ^([a-z0-9-]+\.)+[a-z]{2,}$
+    Description: The host name of Redmine and of its email (domain in redmine.json).
+  HostedZoneId:
+    Type: String
     Default: ""
-    Description: The host name of Redmine (domain in redmine.json). Empty allows any host.
+    Description: >-
+      The Route 53 hosted zone of the domain (dns.mode route53): the stack
+      writes the A, AAAA, MX and DKIM records. Empty with dns.mode external.
+  CertificateArn:
+    Type: String
+    AllowedPattern: ^arn:aws[a-z-]*:acm:us-east-1:[0-9]{12}:certificate/.+$
+    Description: The certificate of the domain, from the stack <instance>-edge (us-east-1).
+  WebAclArn:
+    Type: String
+    AllowedPattern: ^arn:aws[a-z-]*:wafv2:us-east-1:[0-9]{12}:global/webacl/.+$
+    Description: The web ACL, from the stack <instance>-edge or cloudfront.webAclArn.
+  BodyHashFunctionArn:
+    Type: String
+    AllowedPattern: ^arn:aws[a-z-]*:lambda:us-east-1:[0-9]{12}:function:redmine-body-hash:[0-9]+$
+    Description: The version of redmine-body-hash, from the stack redmine-shared-edge.
+  CloudFrontPublicKey:
+    Type: String
+    Description: >-
+      The PEM public key whose private key Redmine uses to sign the URLs of
+      attachments (/<instance>/env/REDMINE_CLOUDFRONT_PRIVATE_KEY).
+  MaxUploadBytes:
+    Type: Number
+    Default: 104857600
+    MinValue: 1
+    Description: >-
+      The upload limit that the CloudFront Function on /incoming/* applies;
+      the same as Redmine's attachment_max_size.
   DbMajorVersion:
     Type: String
     AllowedPattern: ^[0-9]{2}$
@@ -48,13 +80,55 @@ Parameters:
   WebReservedConcurrency:
     Type: Number
     Default: 10
+    MinValue: 0
+    Description: 0 stops the pages; the function URL then answers 429.
+  WorkerReservedConcurrency:
+    Type: Number
+    Default: 3
+    MinValue: 0
   LogRetentionDays:
     Type: Number
     Default: 90
     AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653]
+  MailDays:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    Description: Days to keep email in the mail bucket (retention.mailDays).
+  NoncurrentVersionDays:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    Description: Days to keep old versions of attachments (retention.noncurrentVersionDays).
+  ReceiveMail:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: mail.receive in redmine.json.
+  ReceiptRuleSetName:
+    Type: String
+    Default: redmine-shared
+    Description: The SES receipt rule set of the shared base, which bin/deploy makes active.
+  SendReminders:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Runs redmine:send_reminders on weekday mornings.
+  ScheduleTimezone:
+    Type: String
+    Default: UTC
+    Description: The time zone of the schedules (an IANA name, such as Asia/Tokyo).
+  AlarmTopicArn:
+    Type: String
+    Default: ""
+    Description: The SNS topic that alarms notify (alarms.snsTopicArn). Empty keeps alarms without actions.
 
 Conditions:
-  HasDomain: !Not [!Equals [!Ref Domain, ""]]
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneId, ""]]
+  ReceivesMail: !Equals [!Ref ReceiveMail, "true"]
+  ReceivesMailInZone: !And [!Condition ReceivesMail, !Condition HasHostedZone]
+  SendsReminders: !Equals [!Ref SendReminders, "true"]
+  HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, ""]]
 
 Resources:
   # Security groups: the functions reach RDS on 5432, nothing reaches the
@@ -133,8 +207,196 @@ Resources:
       Type: String
       Value: !GetAtt Database.Endpoint.Address
 
-  # Jobs that redmine-web and redmine-task enqueue. redmine-worker, which runs
-  # them, is added with jobs and mail sending (stage 6).
+  # Buckets. Every one has Block Public Access, SSE-S3, the bucket owner as
+  # the owner of every object, and a policy that denies requests without TLS.
+  AttachmentsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub ${InstanceName}-files-${AWS::AccountId}-${AWS::Region}
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      # https://redmine-kit.github.io/redmine_serverless_s3/setup.html#the-bucket
+      LifecycleConfiguration:
+        Rules:
+          - Id: incoming
+            Status: Enabled
+            Prefix: incoming/
+            ExpirationInDays: 1
+          - Id: tmp
+            Status: Enabled
+            Prefix: tmp/
+            ExpirationInDays: 1
+          - Id: imports
+            Status: Enabled
+            Prefix: imports/
+            ExpirationInDays: 7
+          - Id: noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref NoncurrentVersionDays
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      Tags:
+        - Key: redmine:instance
+          Value: !Ref InstanceName
+  AttachmentsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AttachmentsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: TlsOnly
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt AttachmentsBucket.Arn, !Sub "${AttachmentsBucket.Arn}/*"]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: CloudFrontReads
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource:
+              - !Sub ${AttachmentsBucket.Arn}/files/*
+              - !Sub ${AttachmentsBucket.Arn}/thumbnails/*
+              - !Sub ${AttachmentsBucket.Arn}/tmp/bulk/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+          - Sid: CloudFrontUploads
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub ${AttachmentsBucket.Arn}/incoming/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+  # Compiled assets and the maintenance page (bin/deploy syncs them).
+  AssetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${InstanceName}-assets-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      Tags:
+        - Key: redmine:instance
+          Value: !Ref InstanceName
+  AssetsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AssetsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: TlsOnly
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt AssetsBucket.Arn, !Sub "${AssetsBucket.Arn}/*"]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: CloudFrontReads
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${AssetsBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+  # Received email (docs/mail.md#receiving): SES writes inbound/, the task
+  # moves imported email to processed/.
+  MailBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub ${InstanceName}-mail-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - Id: inbound
+            Status: Enabled
+            Prefix: inbound/
+            ExpirationInDays: !Ref MailDays
+          - Id: processed
+            Status: Enabled
+            Prefix: processed/
+            ExpirationInDays: !Ref MailDays
+      Tags:
+        - Key: redmine:instance
+          Value: !Ref InstanceName
+  MailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MailBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: TlsOnly
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt MailBucket.Arn, !Sub "${MailBucket.Arn}/*"]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: SesWritesInbound
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub ${MailBucket.Arn}/inbound/*
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:receipt-rule-set/${ReceiptRuleSetName}:receipt-rule/${InstanceName}
+
+  # Jobs (docs/lambda.md#background-jobs). The worker gets up to three tries,
+  # then the job is kept in the dead-letter queue for the "Jobs" page.
   JobDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -152,11 +414,23 @@ Resources:
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt JobDeadLetterQueue.Arn
         maxReceiveCount: 3
+  # Failed asynchronous invocations of redmine-task (mail from SES, schedules).
+  TaskFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${InstanceName}-task-failures
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
 
   WebLogs:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${InstanceName}-web
+      RetentionInDays: !Ref LogRetentionDays
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${InstanceName}-worker
       RetentionInDays: !Ref LogRetentionDays
   TaskLogs:
     Type: AWS::Logs::LogGroup
@@ -164,7 +438,7 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${InstanceName}-task
       RetentionInDays: !Ref LogRetentionDays
 
-  # Permissions common to the functions (docs/iam.md#permissions-common-to-the-three-functions).
+  # Permissions of the three functions (docs/iam.md and the plugins' iam pages).
   CommonPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -200,6 +474,23 @@ Resources:
             Effect: Allow
             Action: sqs:SendMessage
             Resource: !GetAtt JobQueue.Arn
+          - Sid: Attachments
+            Effect: Allow
+            Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+            Resource:
+              - !Sub ${AttachmentsBucket.Arn}/files/*
+              - !Sub ${AttachmentsBucket.Arn}/thumbnails/*
+              - !Sub ${AttachmentsBucket.Arn}/imports/*
+              - !Sub ${AttachmentsBucket.Arn}/incoming/*
+              - !Sub ${AttachmentsBucket.Arn}/tmp/*
+          - Sid: ListAttachments
+            Effect: Allow
+            Action: s3:ListBucket
+            Resource: !GetAtt AttachmentsBucket.Arn
+          - Sid: SendEmail
+            Effect: Allow
+            Action: [ses:SendEmail, ses:SendRawEmail]
+            Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${Domain}
 
   WebRole:
     Type: AWS::IAM::Role
@@ -217,20 +508,60 @@ Resources:
                 aws:SourceAccount: !Ref AWS::AccountId
       ManagedPolicyArns: [!Ref CommonPolicy]
       Policies:
-        - PolicyName: logs
+        - PolicyName: web
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action: [logs:CreateLogStream, logs:PutLogEvents]
                 Resource: !Sub ${WebLogs.Arn}:*
-        - PolicyName: jobs
+              # The "Jobs" page.
+              - Effect: Allow
+                Action: sqs:GetQueueAttributes
+                Resource: [!GetAtt JobQueue.Arn, !GetAtt JobDeadLetterQueue.Arn]
+              - Effect: Allow
+                Action: [sqs:StartMessageMoveTask, sqs:ListMessageMoveTasks]
+                Resource: !GetAtt JobDeadLetterQueue.Arn
+              # The "Sending email" page.
+              - Effect: Allow
+                Action: ses:GetEmailIdentity
+                Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${Domain}
+              - Effect: Allow
+                Action: [ses:GetAccount, ses:ListSuppressedDestinations, ses:DeleteSuppressedDestination]
+                Resource: "*"
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${InstanceName}-worker
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns: [!Ref CommonPolicy]
+      Policies:
+        - PolicyName: worker
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
-                Action: sqs:GetQueueAttributes
-                Resource: [!GetAtt JobQueue.Arn, !GetAtt JobDeadLetterQueue.Arn]
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub ${WorkerLogs.Arn}:*
+              - Effect: Allow
+                Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes, sqs:ChangeMessageVisibility]
+                Resource: !GetAtt JobQueue.Arn
+              # Re-importing email from the administration pages.
+              - Effect: Allow
+                Action: [s3:GetObject, s3:DeleteObject]
+                Resource: [!Sub "${MailBucket.Arn}/inbound/*", !Sub "${MailBucket.Arn}/processed/*"]
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub ${MailBucket.Arn}/processed/*
   TaskRole:
     Type: AWS::IAM::Role
     Properties:
@@ -247,13 +578,24 @@ Resources:
                 aws:SourceAccount: !Ref AWS::AccountId
       ManagedPolicyArns: [!Ref CommonPolicy]
       Policies:
-        - PolicyName: logs
+        - PolicyName: task
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action: [logs:CreateLogStream, logs:PutLogEvents]
                 Resource: !Sub ${TaskLogs.Arn}:*
+              # Importing received email.
+              - Effect: Allow
+                Action: [s3:GetObject, s3:DeleteObject]
+                Resource: !Sub ${MailBucket.Arn}/inbound/*
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub ${MailBucket.Arn}/processed/*
+              # Lambda sends failed asynchronous invocations with this role.
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt TaskFailureQueue.Arn
 
   Web:
     Type: AWS::Lambda::Function
@@ -286,16 +628,83 @@ Resources:
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
           REDMINE_DB_USERNAME: redmine
+          REDMINE_HOST: !Ref Domain
           REDMINE_JOBS_QUEUE_URL: !Ref JobQueue
-          REDMINE_HOST: !If [HasDomain, !Ref Domain, !Ref AWS::NoValue]
-  # IAM authentication: CloudFront signs requests with origin access control
-  # (stage 4). Until then, signed requests open it directly.
+          REDMINE_JOBS_DEAD_LETTER_QUEUE_URL: !Ref JobDeadLetterQueue
+          REDMINE_S3_BUCKET: !Ref AttachmentsBucket
+          REDMINE_S3_REGION: !Ref AWS::Region
+          REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
+          REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
+          REDMINE_MAIL_BUCKET: !Ref MailBucket
+  # IAM authentication: only CloudFront, signing with origin access control,
+  # can call it.
   WebUrl:
     Type: AWS::Lambda::Url
     Properties:
       TargetFunctionArn: !GetAtt Web.Arn
       AuthType: AWS_IAM
       InvokeMode: BUFFERED
+  WebUrlFromCloudFront:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Web
+      Action: lambda:InvokeFunctionUrl
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+      FunctionUrlAuthType: AWS_IAM
+  WebInvokeFromCloudFront:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Web
+      Action: lambda:InvokeFunction
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+  Worker:
+    Type: AWS::Lambda::Function
+    DependsOn: DatabaseHost
+    Properties:
+      FunctionName: !Sub ${InstanceName}-worker
+      Role: !GetAtt WorkerRole.Arn
+      PackageType: Image
+      Code:
+        ImageUri: !Ref ImageUri
+      Architectures: [arm64]
+      MemorySize: 2048
+      Timeout: 900
+      EphemeralStorage:
+        Size: 512
+      ReservedConcurrentExecutions: !Ref WorkerReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: [!Ref FunctionSecurityGroup]
+        SubnetIds: !Split
+          - ","
+          - !ImportValue
+            Fn::Sub: ${SharedStackName}-PrivateSubnetIds
+      LoggingConfig:
+        LogGroup: !Ref WorkerLogs
+      Environment:
+        Variables:
+          REDMINE_ROLE: worker
+          REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
+          REDMINE_DB_NAME: redmine
+          REDMINE_DB_USERNAME: redmine
+          REDMINE_HOST: !Ref Domain
+          REDMINE_JOBS_QUEUE_URL: !Ref JobQueue
+          REDMINE_S3_BUCKET: !Ref AttachmentsBucket
+          REDMINE_S3_REGION: !Ref AWS::Region
+          REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
+          REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
+          REDMINE_MAIL_BUCKET: !Ref MailBucket
+  # One job per invocation: the gem's handler deletes the messages that
+  # succeeded, and a failure makes SQS deliver the job again.
+  WorkerJobs:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      FunctionName: !Ref Worker
+      EventSourceArn: !GetAtt JobQueue.Arn
+      BatchSize: 1
+      Enabled: true
 
   Task:
     Type: AWS::Lambda::Function
@@ -309,8 +718,6 @@ Resources:
       Architectures: [arm64]
       MemorySize: 2048
       Timeout: 900
-      # Lambda's default. /tmp holds only files Redmine itself reads (thumbnails,
-      # previews, the bulk-download zip); see the S3 plugin's /tmp cache.
       EphemeralStorage:
         Size: 512
       # docs/tasks.md#kinds-of-events
@@ -329,12 +736,480 @@ Resources:
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
           REDMINE_DB_USERNAME: redmine
+          REDMINE_HOST: !Ref Domain
           REDMINE_JOBS_QUEUE_URL: !Ref JobQueue
+          REDMINE_S3_BUCKET: !Ref AttachmentsBucket
+          REDMINE_S3_REGION: !Ref AWS::Region
+          REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
+          REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
+          REDMINE_MAIL_BUCKET: !Ref MailBucket
+  TaskAsync:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref Task
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 2
+      DestinationConfig:
+        OnFailure:
+          Destination: !GetAtt TaskFailureQueue.Arn
+  TaskFromSes:
+    Type: AWS::Lambda::Permission
+    Condition: ReceivesMail
+    Properties:
+      FunctionName: !Ref Task
+      Action: lambda:InvokeFunction
+      Principal: ses.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:receipt-rule-set/${ReceiptRuleSetName}:receipt-rule/${InstanceName}
+
+  # CloudFront (docs/lambda.md#cloudfront-and-function-urls, the S3 plugin's
+  # setup page). One distribution: Redmine from the function URL, attachments
+  # and assets from S3.
+  FunctionUrlAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${InstanceName}-function-url
+        OriginAccessControlOriginType: lambda
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  BucketAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${InstanceName}-buckets
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  CloudFrontKey:
+    Type: AWS::CloudFront::PublicKey
+    Properties:
+      PublicKeyConfig:
+        Name: !Sub ${InstanceName}-attachments
+        CallerReference: !Sub ${InstanceName}-attachments
+        EncodedKey: !Ref CloudFrontPublicKey
+  CloudFrontKeyGroup:
+    Type: AWS::CloudFront::KeyGroup
+    Properties:
+      KeyGroupConfig:
+        Name: !Sub ${InstanceName}-attachments
+        Items: [!Ref CloudFrontKey]
+  # Attachments: the signature is checked before the cache, so the cache key
+  # holds only the overrides of the file name and type.
+  AttachmentsCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub ${InstanceName}-attachments
+        DefaultTTL: 300
+        MinTTL: 0
+        MaxTTL: 3600
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: false
+          EnableAcceptEncodingBrotli: false
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: whitelist
+            QueryStrings: [response-content-disposition, response-content-type]
+  UploadsOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub ${InstanceName}-uploads
+        CookiesConfig:
+          CookieBehavior: none
+        QueryStringsConfig:
+          QueryStringBehavior: none
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers: [x-amz-checksum-sha256]
+  # The sandbox CSP that Redmine's AttachmentsController sets, and nosniff.
+  # It isolates attachments that are served from Redmine's origin.
+  AttachmentsHeaders:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub ${InstanceName}-attachments
+        SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            ContentSecurityPolicy: "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 31536000
+            Override: false
+  IncomingSize:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${InstanceName}-incoming-size
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Rejects uploads over the limit before S3
+        Runtime: cloudfront-js-2.0
+      # edge/incoming-size/index.js; bin/test-edge checks that this is the same.
+      FunctionCode: !Sub |
+          // redmine-incoming-size: CloudFront Function (cloudfront-js-2.0) on the
+          // viewer request of /incoming/*, where browsers PUT attachments to S3
+          // through signed URLs. A signed URL cannot limit the size, so this rejects a
+          // request whose Content-Length is over the limit before it reaches S3. The
+          // limit is written in when the deployment creates the function.
+          var MAX_BYTES = ${MaxUploadBytes};
+
+          function handler(event) {
+            var request = event.request;
+            if (request.method !== 'PUT') {
+              return request;
+            }
+            var header = request.headers['content-length'];
+            if (!header || !/^[0-9]+$/.test(header.value)) {
+              return reply(411, 'Length Required', 'A Content-Length is required.\n');
+            }
+            if (Number(header.value) > MAX_BYTES) {
+              return reply(413, 'Payload Too Large', 'The file is larger than the upload limit.\n');
+            }
+            return request;
+          }
+
+          function reply(statusCode, statusDescription, body) {
+            return {
+              statusCode: statusCode,
+              statusDescription: statusDescription,
+              headers: { 'content-type': { value: 'text/plain; charset=utf-8' }, 'cache-control': { value: 'no-store' } },
+              body: body,
+            };
+          }
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub Redmine ${InstanceName}
+        Aliases: [!Ref Domain]
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        WebACLId: !Ref WebAclArn
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Origins:
+          - Id: redmine
+            DomainName: !Select [2, !Split ["/", !GetAtt WebUrl.FunctionUrl]]
+            OriginAccessControlId: !GetAtt FunctionUrlAccess.Id
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+              # The timeout of redmine-web.
+              OriginReadTimeout: 60
+          - Id: attachments
+            DomainName: !GetAtt AttachmentsBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt BucketAccess.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+          - Id: assets
+            DomainName: !GetAtt AssetsBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt BucketAccess.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        # Redmine. CachingDisabled and AllViewerExceptHostHeader (the function
+        # URL needs its own Host); SecurityHeadersPolicy; the body hash for
+        # origin access control.
+        DefaultCacheBehavior:
+          TargetOriginId: redmine
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
+          LambdaFunctionAssociations:
+            - EventType: origin-request
+              IncludeBody: true
+              LambdaFunctionARN: !Ref BodyHashFunctionArn
+        CacheBehaviors:
+          - PathPattern: /files/*
+            TargetOriginId: attachments
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: !Ref AttachmentsCachePolicy
+            ResponseHeadersPolicyId: !Ref AttachmentsHeaders
+            TrustedKeyGroups: [!Ref CloudFrontKeyGroup]
+          - PathPattern: /thumbnails/*
+            TargetOriginId: attachments
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: !Ref AttachmentsCachePolicy
+            ResponseHeadersPolicyId: !Ref AttachmentsHeaders
+            TrustedKeyGroups: [!Ref CloudFrontKeyGroup]
+          - PathPattern: /tmp/bulk/*
+            TargetOriginId: attachments
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: !Ref AttachmentsCachePolicy
+            ResponseHeadersPolicyId: !Ref AttachmentsHeaders
+            TrustedKeyGroups: [!Ref CloudFrontKeyGroup]
+          - PathPattern: /incoming/*
+            TargetOriginId: attachments
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: !Ref UploadsOriginRequestPolicy
+            ResponseHeadersPolicyId: !Ref AttachmentsHeaders
+            TrustedKeyGroups: [!Ref CloudFrontKeyGroup]
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt IncomingSize.FunctionMetadata.FunctionARN
+          # Compiled assets (CachingOptimized).
+          - PathPattern: /assets/*
+            TargetOriginId: assets
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+            ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
+        # The maintenance page when Lambda cannot answer. CloudFront cannot
+        # replace a 429, which the function URL answers while redmine-web's
+        # reserved concurrency is 0 (docs/deploy-config.md#deployment-commands).
+        CustomErrorResponses:
+          - ErrorCode: 502
+            ResponseCode: 502
+            ResponsePagePath: /assets/maintenance.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 503
+            ResponseCode: 503
+            ResponsePagePath: /assets/maintenance.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 504
+            ResponseCode: 504
+            ResponsePagePath: /assets/maintenance.html
+            ErrorCachingMinTTL: 0
+      Tags:
+        - Key: redmine:instance
+          Value: !Ref InstanceName
+
+  # DNS records, with dns.mode route53.
+  DomainA:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref Domain
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+  DomainAAAA:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref Domain
+      Type: AAAA
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+
+  # Email (docs/mail.md). The domain is the sender and the receiving domain.
+  # Production access (leaving the SES sandbox) is requested by hand.
+  EmailIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref Domain
+      DkimSigningAttributes:
+        NextSigningKeyLength: RSA_2048_BIT
+  Dkim1:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !GetAtt EmailIdentity.DkimDNSTokenName1
+      Type: CNAME
+      TTL: "1800"
+      ResourceRecords: [!GetAtt EmailIdentity.DkimDNSTokenValue1]
+  Dkim2:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !GetAtt EmailIdentity.DkimDNSTokenName2
+      Type: CNAME
+      TTL: "1800"
+      ResourceRecords: [!GetAtt EmailIdentity.DkimDNSTokenValue2]
+  Dkim3:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !GetAtt EmailIdentity.DkimDNSTokenName3
+      Type: CNAME
+      TTL: "1800"
+      ResourceRecords: [!GetAtt EmailIdentity.DkimDNSTokenValue3]
+  MailExchange:
+    Type: AWS::Route53::RecordSet
+    Condition: ReceivesMailInZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref Domain
+      Type: MX
+      TTL: "1800"
+      ResourceRecords: [!Sub "10 inbound-smtp.${AWS::Region}.amazonaws.com"]
+  # Received email: stored in inbound/, then redmine-task imports it.
+  ReceiptRule:
+    Type: AWS::SES::ReceiptRule
+    Condition: ReceivesMail
+    DependsOn: [MailBucketPolicy, TaskFromSes]
+    Properties:
+      RuleSetName: !Ref ReceiptRuleSetName
+      Rule:
+        Name: !Ref InstanceName
+        Enabled: true
+        ScanEnabled: true
+        TlsPolicy: Optional
+        Recipients: [!Ref Domain]
+        Actions:
+          - S3Action:
+              BucketName: !Ref MailBucket
+              ObjectKeyPrefix: inbound/
+          - LambdaAction:
+              FunctionArn: !GetAtt Task.Arn
+              InvocationType: Event
+
+  # Scheduled rake (docs/tasks.md#scheduled-runs). The plugins' prune tasks
+  # are added when their code exists.
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${InstanceName}-scheduler
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: invoke-task
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt Task.Arn
+  PruneAttachments:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub ${InstanceName}-prune-attachments
+      ScheduleExpression: cron(30 3 * * ? *)
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt Task.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: '{"command": "rake", "args": ["redmine:attachments:prune"]}'
+  SendRemindersSchedule:
+    Type: AWS::Scheduler::Schedule
+    Condition: SendsReminders
+    Properties:
+      Name: !Sub ${InstanceName}-send-reminders
+      ScheduleExpression: cron(0 8 ? * MON-FRI *)
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt Task.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: '{"command": "rake", "args": ["redmine:send_reminders"]}'
+
+  # Alarms (docs/security.md): jobs that used up their tries, failed tasks,
+  # and errors of the functions.
+  JobDeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${InstanceName}-jobs-dead-letter
+      AlarmDescription: Jobs used up their tries and are in the dead-letter queue
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt JobDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+  TaskFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${InstanceName}-task-failures
+      AlarmDescription: Asynchronous invocations of the task function failed (received email, schedules)
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt TaskFailureQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+  WebErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${InstanceName}-web-errors
+      AlarmDescription: redmine-web failed to answer (start-up or timeouts)
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref Web
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
 
 Outputs:
-  WebFunctionUrl:
-    Value: !GetAtt WebUrl.FunctionUrl
+  DistributionDomainName:
+    Description: The CNAME target of the domain with dns.mode external.
+    Value: !GetAtt Distribution.DomainName
+  DistributionId:
+    Value: !Ref Distribution
+  AttachmentsBucketName:
+    Value: !Ref AttachmentsBucket
+  AssetsBucketName:
+    Value: !Ref AssetsBucket
+  MailBucketName:
+    Value: !Ref MailBucket
   DatabaseEndpoint:
     Value: !GetAtt Database.Endpoint.Address
   JobQueueUrl:
     Value: !Ref JobQueue
+  WebFunctionName:
+    Value: !Ref Web
+  WorkerFunctionName:
+    Value: !Ref Worker
+  TaskFunctionName:
+    Value: !Ref Task
+  CloudFrontKeyPairId:
+    Value: !Ref CloudFrontKey

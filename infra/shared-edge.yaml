@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Serverless shared base in us-east-1 (stack redmine-shared-edge): the
+  Lambda@Edge function redmine-body-hash that every instance's CloudFront
+  distribution attaches (docs/lambda.md#function-that-adds-the-body-hash-lambdaedge).
+  Lambda@Edge functions must be created in us-east-1.
+
+Parameters:
+  CodeSha256:
+    Type: String
+    AllowedPattern: ^[0-9a-f]{64}$
+    Description: >-
+      The SHA256 of edge/body-hash/index.js, given by bin/deploy. A change
+      publishes a new version, which the distributions then use.
+
+Resources:
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: redmine-body-hash
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com, edgelambda.amazonaws.com]
+            Action: sts:AssumeRole
+      # Logs of Lambda@Edge go to the Region near the edge that ran it, so
+      # the log groups are /aws/lambda/us-east-1.redmine-body-hash in many
+      # Regions (docs/iam.md#execution-role-of-lambdaedge).
+      Policies:
+        - PolicyName: logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws/lambda/us-east-1.redmine-body-hash:*
+
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: redmine-body-hash
+      Description: Adds x-amz-content-sha256 for CloudFront origin access control to Lambda function URLs
+      Runtime: nodejs24.x
+      Handler: index.handler
+      Role: !GetAtt Role.Arn
+      MemorySize: 128
+      Timeout: 5
+      Architectures: [x86_64]
+      Code:
+        # edge/body-hash/index.js; bin/test-edge checks that this is the same.
+        ZipFile: |
+          // redmine-body-hash: Lambda@Edge on the origin request of Redmine's behaviors
+          // (docs/lambda.md#function-that-adds-the-body-hash-lambdaedge). CloudFront
+          // signs requests to the Lambda function URL with origin access control,
+          // which needs the SHA256 of the body in x-amz-content-sha256 for requests
+          // with a body. node:crypto only, no npm packages. CommonJS, because the
+          // template carries this file as the function's inline code (index.js).
+          'use strict';
+          const { createHash } = require('node:crypto');
+
+          const HEADER = 'x-amz-content-sha256';
+
+          // The SHA256 of the body as CloudFront passes it: base64 (IncludeBody) is
+          // decoded to bytes first, so binary bodies and multipart forms hash the same
+          // as the bytes the browser sent.
+          function bodyHash(body) {
+            const hash = createHash('sha256');
+            if (body && body.data) {
+              hash.update(Buffer.from(body.data, body.encoding === 'text' ? 'utf8' : 'base64'));
+            }
+            return hash.digest('hex');
+          }
+
+          async function handler(event) {
+            const { request } = event.Records[0].cf;
+
+            // Over 1 MB, CloudFront passes only the start of the body. A hash of that
+            // would not match, and the function URL would refuse the request anyway.
+            if (request.body && request.body.inputTruncated) {
+              return {
+                status: '413',
+                statusDescription: 'Payload Too Large',
+                headers: {
+                  'content-type': [{ key: 'Content-Type', value: 'text/plain; charset=utf-8' }],
+                  'cache-control': [{ key: 'Cache-Control', value: 'no-store' }],
+                },
+                body: 'The request body is larger than 1 MB.\n',
+              };
+            }
+
+            request.headers[HEADER] = [{ key: HEADER, value: bodyHash(request.body) }];
+            return request;
+          }
+
+          module.exports = { bodyHash, handler };
+
+  Version:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref Function
+      Description: !Sub "index.js ${CodeSha256}"
+
+Outputs:
+  FunctionVersionArn:
+    Value: !Ref Version
+    Export:
+      Name: !Sub ${AWS::StackName}-FunctionVersionArn

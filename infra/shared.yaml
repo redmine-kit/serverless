@@ -7,9 +7,14 @@ Parameters:
   NetworkMode:
     Type: String
     Default: endpoints
-    # The NAT instance (nat) is added in a later stage (docs/rds.md#setup-2-nat-instance).
-    AllowedValues: [endpoints]
-    Description: The route out of the VPC (network.mode in redmine.json).
+    AllowedValues: [endpoints, nat]
+    Description: >-
+      The route out of the VPC (network.mode in redmine.json): VPC endpoints
+      for SSM, SQS and SES, or a NAT instance (docs/rds.md#routes-out-of-the-vpc).
+  NatImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Description: The image of the NAT instance (Amazon Linux 2023, arm64).
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
@@ -18,6 +23,7 @@ Parameters:
 
 Conditions:
   UseEndpoints: !Equals [!Ref NetworkMode, endpoints]
+  UseNat: !Equals [!Ref NetworkMode, nat]
 
 Resources:
   Repository:
@@ -29,6 +35,18 @@ Resources:
       ImageTagMutability: IMMUTABLE
       EncryptionConfiguration:
         EncryptionType: AES256
+      # Lambda pulls the images of the functions in this account.
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: LambdaPull
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: [ecr:BatchGetImage, ecr:GetDownloadUrlForLayer]
+            Condition:
+              StringLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
       LifecyclePolicy:
         LifecyclePolicyText: >-
           {"rules": [{"rulePriority": 1, "description": "Keep the last 20 images",
@@ -117,6 +135,18 @@ Resources:
       PrivateDnsEnabled: true
       SubnetIds: [!Ref PrivateSubnet1]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
+  # The SES v2 API (email). Whether this service name answers sesv2 is to
+  # be verified (docs/mail.md).
+  SesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: UseEndpoints
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.email
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref PrivateSubnet1]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
   SqsEndpoint:
     Condition: UseEndpoints
     Type: AWS::EC2::VPCEndpoint
@@ -127,6 +157,170 @@ Resources:
       PrivateDnsEnabled: true
       SubnetIds: [!Ref PrivateSubnet1]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
+
+  # Received email: one active rule set per Region; every instance adds its
+  # rule. bin/deploy makes it the active one.
+  ReceiptRuleSet:
+    Type: AWS::SES::ReceiptRuleSet
+    Properties:
+      RuleSetName: redmine-shared
+
+  # The NAT instance (network.mode nat; docs/rds.md#setup-2-nat-instance):
+  # one t4g.nano in a public subnet, kept running by an Auto Scaling group of
+  # one. A new instance takes the Elastic IP and the private route to itself.
+  # Managed with Systems Manager; no SSH and no inbound port from outside.
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: UseNat
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: UseNat
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Condition: UseNat
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [2, !Cidr [!Ref VpcCidr, 3, 12]]
+      Tags:
+        - Key: Name
+          Value: redmine-shared-public
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: UseNat
+    Properties:
+      VpcId: !Ref Vpc
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    Condition: UseNat
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnetRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: UseNat
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+  NatAddress:
+    Type: AWS::EC2::EIP
+    Condition: UseNat
+    Properties:
+      Domain: vpc
+  NatSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: UseNat
+    Properties:
+      GroupDescription: NAT instance, traffic from the VPC only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: "-1"
+          CidrIp: !Ref VpcCidr
+          Description: Traffic from the VPC
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          Description: The internet
+  NatRole:
+    Type: AWS::IAM::Role
+    Condition: UseNat
+    Properties:
+      RoleName: redmine-shared-nat
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      # docs/iam.md#role-of-the-nat-instance-only-with-a-nat-instance
+      Policies:
+        - PolicyName: take-over
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ec2:AssociateAddress
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:elastic-ip/${NatAddress.AllocationId}
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+              - Effect: Allow
+                Action: [ec2:CreateRoute, ec2:ReplaceRoute]
+                Resource: !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:route-table/${PrivateRouteTable}
+              - Effect: Allow
+                Action: ec2:ModifyInstanceAttribute
+                Resource: !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/aws:autoscaling:groupName: redmine-shared-nat
+  NatInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: UseNat
+    Properties:
+      Roles: [!Ref NatRole]
+  NatLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Condition: UseNat
+    Properties:
+      LaunchTemplateName: redmine-shared-nat
+      LaunchTemplateData:
+        ImageId: !Ref NatImageId
+        InstanceType: t4g.nano
+        IamInstanceProfile:
+          Arn: !GetAtt NatInstanceProfile.Arn
+        MetadataOptions:
+          HttpTokens: required
+          HttpPutResponseHopLimit: 1
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            SubnetId: !Ref PublicSubnet
+            Groups: [!Ref NatSecurityGroup]
+            AssociatePublicIpAddress: false
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euo pipefail
+            token=$(curl -sX PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 300')
+            meta() { curl -s -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1"; }
+            instance=$(meta instance-id)
+            mac=$(meta mac)
+            eni=$(meta "network/interfaces/macs/$mac/interface-id")
+            export AWS_DEFAULT_REGION=${AWS::Region}
+            aws ec2 modify-instance-attribute --instance-id "$instance" --no-source-dest-check
+            aws ec2 associate-address --allocation-id ${NatAddress.AllocationId} --instance-id "$instance" --allow-reassociation
+            dnf install -y iptables-nft
+            sysctl -w net.ipv4.ip_forward=1
+            echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/90-nat.conf
+            iface=$(ip -o -4 route show to default | awk '{print $5}')
+            iptables -t nat -A POSTROUTING -o "$iface" -s ${VpcCidr} -j MASQUERADE
+            aws ec2 replace-route --route-table-id ${PrivateRouteTable} --destination-cidr-block 0.0.0.0/0 --network-interface-id "$eni" ||
+              aws ec2 create-route --route-table-id ${PrivateRouteTable} --destination-cidr-block 0.0.0.0/0 --network-interface-id "$eni"
+  NatGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: UseNat
+    DependsOn: PublicDefaultRoute
+    Properties:
+      AutoScalingGroupName: redmine-shared-nat
+      MinSize: "1"
+      MaxSize: "1"
+      DesiredCapacity: "1"
+      VPCZoneIdentifier: [!Ref PublicSubnet]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref NatLaunchTemplate
+        Version: !GetAtt NatLaunchTemplate.LatestVersionNumber
+      HealthCheckType: EC2
+      Tags:
+        - Key: Name
+          Value: redmine-shared-nat
+          PropagateAtLaunch: true
 
 Outputs:
   RepositoryUri:
@@ -141,3 +335,11 @@ Outputs:
     Value: !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
     Export:
       Name: !Sub ${AWS::StackName}-PrivateSubnetIds
+  NatSecurityGroupId:
+    Condition: UseNat
+    Description: Allowed to RDS for port forwarding through Session Manager.
+    Value: !Ref NatSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-NatSecurityGroupId
+  ReceiptRuleSetName:
+    Value: !Ref ReceiptRuleSet

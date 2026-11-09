@@ -106,7 +106,7 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 | 対象 | 確認すること | 道具 |
 | --- | --- | --- |
 | Lambda で使えない設定 | `REDMINE_ROLE` があるとき、`enabled_scm` などが決めた値を返し、設定の画面から保存しても変わらない。設定の画面の入力が押せず、説明が出る。`REDMINE_ROLE` がないときは、Redmine の標準のまま | Minitest(ユニット、機能)、システムのテスト |
-| SSM の読み込み(`additional_environment.rb`、`serverless_env.rb`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。すでにある環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM につながらなければ失敗する。イメージのテストでは、3 つの役割が `SECRET_KEY_BASE` とデータベースのパスワードを SSM から読む | Minitest、moto(`test/image/serverless_env_test.rb`、`bin/test-image`) |
+| SSM の読み込み(`redmine_serverless_ssm`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。すでにある環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM につながらなければ失敗する。イメージのテストでは、3 つの役割が、データベースのホスト、そのパスワード、`SECRET_KEY_BASE` を SSM だけから読み、`config/database.yml` より前に読めていることを確認する | Minitest、moto(プラグインの `test/loader_test.rb`、`bin/test-image`) |
 | タスクのハンドラー | 決めた `command` と `env` だけを受け付ける。SES のイベントを見分ける。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
 | 拡張機能のスクリプト | `REDMINE_ROLE` ごとに、本物の Lambda Web Adapter を起動するか、何もしない拡張機能として登録するかが変わる | ShellCheck、イメージのテスト |
 | ジョブ(`aws-activejob-sqs`) | 通知のメールのジョブが SQS に積まれ、ジョブ用のハンドラーで実行されてメールが送られる | Minitest、moto |
@@ -120,7 +120,7 @@ S3 は、ユニットと機能のテストでは SDK の `stub_responses` で、
 
 プラグインは、`prepend` で Redmine の処理を差し替えます。本体の動きを壊していないかを、Redmine のテストで確認します。
 
-- **実行のしかた:** `bin/test-core` は、イメージの Dockerfile の `core-test` の段で実行します。この段は、イメージと同じ Redmine のソース、`config/` のファイル、`Gemfile.lock` に、テスト用の gem と ImageMagick を足したものです。データベースは `bin/test-services` の PostgreSQL で、プロセッサーの数だけのワーカーで並列に実行します(数は `PARALLEL_WORKERS` で変えられます)。イメージは、Lambda のファイルシステムが読み取り専用なので、migration のあとに `db/schema.rb` を書きません。並列のテストはこのファイルを読むので、`bin/test-core` がテストの前に書きます。SCM のリポジトリや LDAP のサーバーが要るテストは、この段で用意しないので、Redmine が飛ばします。3 つのプラグイン(`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`)を入れた状態で実行します。
+- **実行のしかた:** `bin/test-core` は、イメージの Dockerfile の `core-test` の段で実行します。この段は、イメージと同じ Redmine のソース、`config/` のファイル、`Gemfile.lock` に、テスト用の gem と ImageMagick を足したものです。データベースは `bin/test-services` の PostgreSQL で、プロセッサーの数だけのワーカーで並列に実行します(数は `PARALLEL_WORKERS` で変えられます)。イメージは、Lambda のファイルシステムが読み取り専用なので、migration のあとに `db/schema.rb` を書きません。並列のテストはこのファイルを読むので、`bin/test-core` がテストの前に書きます。SCM のリポジトリや LDAP のサーバーが要るテストは、この段で用意しないので、Redmine が飛ばします。テストは、イメージのプラグインを入れた状態で実行します。今は `redmine_serverless` と `redmine_serverless_ssm` で、`redmine_serverless_s3` と `redmine_serverless_ses` は、コードができたらイメージに足します。
 - **理由の分かっている失敗は、理由と一緒に一覧にする:** このイメージのせいではなく、gem のせいで失敗するテストは、理由と一緒に `test/core/known_failures.txt` に載せ、`bin/test-core` はそれを外して実行します。原因が上流で直ったら、その行を消します。新しいバージョンにはセキュリティの修正が入ることがあるので、テストを通すために gem を古いバージョンに留めることはしません。たとえば、Nokogiri 1.19.5 で CSS のセレクターの読み方が変わり、rails-dom-testing 2.3.0 で正規表現を渡す `:match` が当たらなくなりました([rails/rails-dom-testing#136](https://github.com/rails/rails-dom-testing/issues/136))。
 - **プラグインが動かないときは、本体のテストがそのまま通る:** プラグインは、有効にする条件がそろわないとき(S3 のバケットの設定、`REDMINE_ROLE`、SES の設定がない)は、差し替えを有効にしません。プラグインを入れた状態で、Redmine のユニット、機能、統合のテストを実行し、すべて通ることを確認します。
 - **`redmine_serverless_s3` が動くときは、添付ファイルのテストを S3 の形で通す:** Redmine の添付ファイルのテスト(`test/unit/attachment_test.rb`、`test/unit/attachment_transaction_test.rb`、`test/functional/attachments_controller_test.rb`、`test/functional/attachments_visibility_test.rb`、`test/integration/attachments_test.rb`)のうち、ローカルのファイルを前提にしないものを、プラグインを有効にして moto の上で実行します。ローカルのファイルを前提にするもの(ディスクの上のパスを直接確認するもの)は、外す理由を書いて外します。

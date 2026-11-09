@@ -4,18 +4,25 @@
 
 FROM public.ecr.aws/lambda/ruby:4.0@sha256:9aea5f69767d2078ad1874471cf0c3064cf7fe46d95afc6c96bfeb62f51fdc02 AS base
 
-# The plugin redmine_serverless at a pinned commit. bin/lib/plugin.sh can
-# replace this stage with a local checkout (--build-context plugin=<dir>).
-FROM base AS plugin-git
+# The plugins at pinned commits. bin/lib/plugin.sh can replace a stage with a
+# local checkout (--build-context plugin=<dir>, plugin-ssm=<dir>).
+FROM base AS git
 RUN dnf install -y git-core && dnf clean all
+# fetch <repository> <commit> <dir>
+RUN printf '%s\n' '#!/bin/sh' 'set -e' 'git init -q "$3"' \
+    'git -C "$3" fetch -q --depth 1 "https://github.com/redmine-kit/$1.git" "$2"' \
+    'git -C "$3" checkout -q FETCH_HEAD' 'test "$(git -C "$3" rev-parse HEAD)" = "$2"' 'rm -rf "$3/.git"' \
+    > /usr/local/bin/fetch && chmod +x /usr/local/bin/fetch
+FROM git AS plugin-git
 ARG REDMINE_SERVERLESS_COMMIT=849873adc180e3eaaeb9c04208644d7336039575
-RUN git init -q /plugin \
-  && git -C /plugin fetch -q --depth 1 https://github.com/redmine-kit/redmine_serverless.git "$REDMINE_SERVERLESS_COMMIT" \
-  && git -C /plugin checkout -q FETCH_HEAD \
-  && test "$(git -C /plugin rev-parse HEAD)" = "$REDMINE_SERVERLESS_COMMIT" \
-  && rm -rf /plugin/.git
+RUN fetch redmine_serverless "$REDMINE_SERVERLESS_COMMIT" /plugin
+FROM git AS plugin-ssm-git
+ARG REDMINE_SERVERLESS_SSM_COMMIT=9a78fcc1b6035a6ea7fb2d6c91831dd13e3c251d
+RUN fetch redmine_serverless_ssm "$REDMINE_SERVERLESS_SSM_COMMIT" /plugin-ssm
 FROM scratch AS plugin
 COPY --from=plugin-git /plugin /
+FROM scratch AS plugin-ssm
+COPY --from=plugin-ssm-git /plugin-ssm /
 
 FROM base AS source
 RUN dnf install -y gcc gcc-c++ make libpq-devel libyaml-devel tar gzip && dnf clean all
@@ -28,9 +35,10 @@ RUN curl -fsSLo /tmp/redmine.tar.gz "https://www.redmine.org/releases/redmine-${
   && rm /tmp/redmine.tar.gz
 WORKDIR /var/task/redmine
 COPY image/config/database.yml image/config/additional_environment.rb image/config/configuration.yml \
-  image/config/aws_active_job_sqs.yml image/config/serverless_env.rb config/
+  image/config/aws_active_job_sqs.yml config/
 COPY image/Gemfile.local ./
 COPY --from=plugin / plugins/redmine_serverless/
+COPY --from=plugin-ssm / plugins/redmine_serverless_ssm/
 RUN bundle config set --local path vendor/bundle \
   && bundle config set --local without development:test
 
@@ -60,7 +68,7 @@ FROM source AS build
 COPY image/Gemfile.lock ./
 RUN bundle config set --local deployment true \
   && bundle install --jobs 4 \
-  && rm -rf vendor/bundle/ruby/*/cache plugins/redmine_serverless/test
+  && rm -rf vendor/bundle/ruby/*/cache
 RUN SECRET_KEY_BASE_DUMMY=1 RAILS_ENV=production bin/rails assets:precompile
 # Only /tmp is writable on Lambda. tmp is linked after the assets are built,
 # because building may use it (docs/lambda.md#read-only-file-system).

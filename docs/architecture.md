@@ -55,7 +55,7 @@ flowchart LR
 | Item | Decision | Reason | Details |
 | --- | --- | --- | --- |
 | Redmine | 7.0.3 (latest stable version). No external plugins, default theme | As requested | [lambda.md](lambda.md) |
-| Extensions | The project's own plugins: `redmine_serverless` (running on Lambda), `redmine_serverless_s3` (attachments in S3) and `redmine_serverless_ses` (mail through SES) | Redmine's standard extension mechanism; Redmine's own files are not modified | "The plugins" below |
+| Extensions | The project's own plugins: `redmine_serverless` (running on Lambda), `redmine_serverless_s3` (attachments in S3), `redmine_serverless_ses` (mail through SES) and `redmine_serverless_ssm` (settings and secrets from SSM Parameter Store) | Redmine's standard extension mechanism; Redmine's own files are not modified | "The plugins" below |
 | Runtime | Event Functions, container image, arm64 | Can run Ruby. Web Functions support only Node.js (see below) | [lambda.md](lambda.md) |
 | Image | Lambda's Ruby base image (`public.ecr.aws/lambda/ruby:4.0`) with Redmine, dependencies such as ImageMagick, and Lambda Web Adapter | Same OS and Ruby as Lambda, built to run on Lambda. The HTTP server (Puma) can be used as is | [lambda.md](lambda.md#choosing-the-base) |
 | Three functions | `redmine-web` (pages), `redmine-worker` (jobs), `redmine-task` (rake and mail import). The same image, switched by the environment variable `REDMINE_ROLE`. Only `redmine-web` starts Puma | One build, and the same code runs everywhere | [tasks.md](tasks.md#how-one-image-runs-everything) |
@@ -125,8 +125,9 @@ Extensions for Lambda and AWS are the project's own plugins, built with Redmine'
 | [`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless) | Running on Lambda: the Rack middleware for Lambda Web Adapter's `/events`, the setting that stops automatic asset compilation, Redmine settings that cannot work on Lambda fixed to disabled, jobs, the "Status and connections" and "Jobs" administration pages | `REDMINE_ROLE` exists | [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/) |
 | [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) | Attachments in S3: storage, uploads to S3, redirects to presigned URLs, the `/tmp` cache, the "Attachments in S3" administration page | S3 bucket settings exist | [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/) |
 | [`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses) | Mail through SES: retries of sending, importing received mail, addresses per project, the mail administration pages | SES settings exist | [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/) |
+| [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | Settings and secrets: reads the parameters under `REDMINE_SSM_PATH` into environment variables before Rails reads `config/database.yml` and `SECRET_KEY_BASE`. It is also a gem, added by path in `image/Gemfile.local`, so that it runs that early | `REDMINE_SSM_PATH` is set | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/) |
 
-- **Why three plugins:** S3 attachments and mail through SES also work outside Lambda. Separate plugins let a Redmine on an ordinary server use one of them without the parts for Lambda. On Lambda, the image installs all three, because Lambda cannot write to the file system and has no mailbox.
+- **Why four plugins:** S3 attachments, mail through SES and the SSM settings also work outside Lambda. Separate plugins let a Redmine on an ordinary server use one of them without the parts for Lambda. On Lambda, the image installs all four, because Lambda cannot write to the file system and has no mailbox.
 - **Names:** A GitHub repository search found no Redmine plugin named `redmine_serverless` (2026-11-08; the only hit was an unrelated Slack bot). The names of the S3 and SES plugins have not been checked yet.
 
 ### Features
@@ -150,7 +151,7 @@ The proposal is to publish the Redmine image for Lambda and the plugins on the G
 
 ### Derived images
 
-This project's image contains only the default theme and the three plugins. Adopters who want to add themes or plugins build a derived image on top of this project's image and point to it with `image` in the configuration file ([deploy-config.md](deploy-config.md#fields-of-redminejson)).
+This project's image contains only the default theme and the four plugins. Adopters who want to add themes or plugins build a derived image on top of this project's image and point to it with `image` in the configuration file ([deploy-config.md](deploy-config.md#fields-of-redminejson)).
 
 - **How to build:** Point `FROM` to this project's image by digest, put themes in `themes/<theme>/` and plugins in `plugins/<plugin>/`, and rebuild the assets (`assets:precompile`). Redmine 7.0 reads themes from `themes/` or `app/assets/themes/` and serves them as Propshaft assets (`lib/redmine/themes.rb`).
 - **Assets:** `bin/deploy` syncs the assets in the derived image to S3. Theme assets are also served from CloudFront's `/assets/*`.
@@ -163,7 +164,7 @@ The following are not in the plugins, because they must load before plugins or t
 
 | What | Location | Reason |
 | --- | --- | --- |
-| Settings for SSM loading, cache, jobs and schema dump | `config/additional_environment.rb` | Needed before the database connection and the cache are created. Plugins load after that |
+| Settings for cache, jobs and schema dump | `config/additional_environment.rb` | Needed before the database connection and the cache are created. Plugins load after that |
 | Settings for the database, attachment storage and mail sending | `config/database.yml`, `config/configuration.yml` | Redmine configuration files |
 | Startup script, extension script | `image/` | Run before Redmine |
 | Function that adds the body hash | `edge/` | Runs on CloudFront Lambda@Edge (Node.js) |

@@ -58,7 +58,7 @@ run() {
   docker run -d --name "$prefix-$role" --network "$network" \
     --read-only --tmpfs /tmp:exec --user 993:993 \
     -e REDMINE_ROLE="$role" \
-    -e REDMINE_DB_HOST=postgres -e REDMINE_DB_NAME=postgres -e REDMINE_DB_USERNAME=postgres -e REDMINE_DB_SSLMODE=disable \
+    -e REDMINE_DB_NAME=postgres -e REDMINE_DB_USERNAME=postgres -e REDMINE_DB_SSLMODE=disable \
     -e REDMINE_SSM_PATH="$ssm_path" "${aws_env[@]}" \
     -e REDMINE_JOBS_QUEUE_URL="$queue_url" \
     "$@" "$image" >/dev/null
@@ -96,10 +96,10 @@ handler_tests() {
 check "task handler" handler_tests
 ssm_tests() {
   docker run --rm --read-only --tmpfs /tmp --user 993:993 --network "$network" "${aws_env[@]}" \
-    -v "$PWD/test/image:/test:ro" -w /var/task/redmine --entrypoint ruby "$image" \
-    -rbundler/setup -r/var/task/redmine/config/serverless_env.rb /test/serverless_env_test.rb
+    -w /var/task/redmine --entrypoint ruby "$image" \
+    -rbundler/setup -rredmine_serverless_ssm/loader plugins/redmine_serverless_ssm/test/loader_test.rb
 }
-check "SSM loading" ssm_tests
+check "SSM loading (redmine_serverless_ssm)" ssm_tests
 
 echo "== contents"
 check "arm64 Linux image" test "$(docker image inspect "$image" -f '{{.Os}}/{{.Architecture}}')" = linux/arm64
@@ -129,14 +129,17 @@ echo "== task"
 # A new queue each run (SQS allows one PurgeQueue per 60 seconds).
 sqs -d Action=DeleteQueue -d QueueUrl="$queue_url" >/dev/null 2>&1 || true
 sqs -d Action=CreateQueue -d QueueName=redmine-jobs >/dev/null
-# The secrets in SSM, as the deployment puts them (PostgreSQL here does not
-# check the password).
+# The database host and the secrets in SSM, as the deployment puts them
+# (PostgreSQL here does not check the password). The host is only there, so
+# the roles reach the database only if SSM is read before Rails reads
+# config/database.yml.
 docker run --rm --network "$network" "${aws_env[@]}" -w /var/task/redmine --entrypoint ruby "$image" \
   -rbundler/setup -raws-sdk-ssm -e '
     ssm = Aws::SSM::Client.new
     { "SECRET_KEY_BASE" => ARGV[1], "REDMINE_DB_PASSWORD" => "unused" }.each do |name, value|
       ssm.put_parameter(name: "#{ARGV[0]}#{name}", value: value, type: "SecureString", overwrite: true)
-    end' "$ssm_path" "$secret_key_base"
+    end
+    ssm.put_parameter(name: "#{ARGV[0]}REDMINE_DB_HOST", value: "postgres", type: "String", overwrite: true)' "$ssm_path" "$secret_key_base"
 run task
 wait_rie task
 check "rake db:migrate" quiet task '{"command":"rake","args":["db:migrate"]}'

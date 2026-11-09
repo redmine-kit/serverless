@@ -5,6 +5,8 @@
 # Redmine lists puma only in its test group. Bundler warns that it is listed
 # twice; this entry puts it in the default group too.
 gem 'puma'
-gem 'aws-sdk-ssm', '~> 1.0'
 gem 'aws-actionmailer-ses', '~> 1.0'
 gem 'aws-activejob-sqs', '~> 1.2'
+# Reads SSM Parameter Store before Rails reads the configuration. It is a
+# plugin and also a gem, added by path here (not in the plugin's Gemfile).
+gem 'redmine_serverless_ssm', path: 'plugins/redmine_serverless_ssm'

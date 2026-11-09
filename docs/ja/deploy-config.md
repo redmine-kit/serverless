@@ -141,7 +141,7 @@ bin/deploy path/to/redmine.json             # 立てる、更新する
 - **保守の画面:** `redmine-web` と `redmine-worker` の同時実行数の予約を 0 にすると、書き込みを止められます(事故のときなど。[security.md](security.md))。`redmine-web` の同時実行数の予約が 0 のあいだ、関数 URL は要求を断ります。CloudFront のエラーの応答の設定で、そのときに S3 の保守の画面を返します。
 - **同じ設定なら何もしない:** 設定のファイルとイメージが変わっていなければ、何も変えません。
 - **多くのインスタンスを立てるとき:** インスタンスの数だけ、同じコマンドを繰り返します。順番(先に試す小さなインスタンスから)は、使う側で決めます。
-- **イメージ:** このプロジェクトの CI が、Redmine のバージョンごとにイメージを作り、GitHub Packages のコンテナのレジストリ(`ghcr.io`)に公開します(案。[architecture.md](architecture.md#distribution-proposal))。デプロイのコマンドは、digest で指定してそのイメージを取り、立てるアカウントの ECR に置きます。
+- **イメージ:** このプロジェクトの CI が、Redmine のバージョンごとにイメージを作り、GitHub Packages のコンテナのレジストリ(`ghcr.io`)に公開します(案。[architecture.md](architecture.md#distribution))。デプロイのコマンドは、digest で指定してそのイメージを取り、立てるアカウントの ECR に置きます。
 
 
 <a id="templates"></a>

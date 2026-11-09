@@ -129,7 +129,7 @@ bin/deploy path/to/redmine.json             # set up or update
 - **Maintenance page:** Writes can be stopped by setting the reserved concurrency of `redmine-web` and `redmine-worker` to 0 (for example, during an incident; [security.md](security.md)). While the reserved concurrency of `redmine-web` is 0, the function URL rejects requests. CloudFront's custom error response settings return the maintenance page from S3 in that case.
 - **No changes for the same configuration:** If the configuration file and the image have not changed, nothing is changed.
 - **When setting up many instances:** Repeat the same command for each instance. The order (starting with a small instance used for trying things first) is decided by the adopter.
-- **Images:** This project's CI builds an image for each Redmine version and publishes it to the GitHub Packages container registry (`ghcr.io`) (proposal; [architecture.md](architecture.md#distribution-proposal)). The deployment command pulls that image by digest and puts it in the target account's ECR.
+- **Images:** This project's CI builds an image for each Redmine version and publishes it to the GitHub Packages container registry (`ghcr.io`) (proposal; [architecture.md](architecture.md#distribution)). The deployment command pulls that image by digest and puts it in the target account's ECR.
 
 ### Templates
 

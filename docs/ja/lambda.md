@@ -105,8 +105,8 @@ ENTRYPOINT ["/var/task/bin/start"]
 | --- | --- | --- |
 | 置き場所 | `/var/task/redmine` | Lambda のベースイメージは、関数のコードを `/var/task`(`LAMBDA_TASK_ROOT`)に置く |
 | `config/database.yml` | ビルドのときに入れる。`adapter:` は文字で `postgresql` と書く。接続先、データベースの名前、ユーザーの名前、パスワードは、環境変数から ERB で読む(`REDMINE_DB_HOST`、`REDMINE_DB_NAME`、`REDMINE_DB_USERNAME`、`REDMINE_DB_PASSWORD`)。TLS は、イメージの中の RDS の CA の証明書の束で `verify-full` にする(`sslrootcert: /var/task/rds-global-bundle.pem`) | Redmine の `Gemfile` は、`config/database.yml` の `adapter:` の値で、入れるデータベースの gem を決める。`adapter:` の値を ERB にすると、Gemfile も ERB を評価するので、文字で書いておく方が確か。RDS for PostgreSQL なので、`pg` の gem を使う |
-| `Gemfile.local` | `puma`(Redmine はテスト用のグループにしか入れていない)、`aws-actionmailer-ses`(メール)、`aws-activejob-sqs`(ジョブ)、道筋を指定した gem としての `redmine_serverless_ssm`(設定と秘密の値。[architecture.md](architecture.md#the-plugins)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem(`redmine_serverless_s3` の `aws-sdk-s3` など)は、そのプラグインの `Gemfile` に書く |
-| 自前のプラグイン | `plugins/redmine_serverless`、`plugins/redmine_serverless_s3`、`plugins/redmine_serverless_ses`、`plugins/redmine_serverless_ssm`。それぞれ別のリポジトリから、決めたコミットで入れる(`redmine_serverless_ssm` は、`Gemfile.local` で道筋を指定した gem としても入れる) | 拡張の部分を自前のプラグインにする([architecture.md](architecture.md#the-plugins)) |
+| `Gemfile.local` | `puma`(Redmine はテスト用のグループにしか入れていない)、`aws-actionmailer-ses`(メール)、`aws-activejob-sqs`(ジョブ)、GitHub Packages のプラグインの gem(今は `redmine_serverless_ssm`。[architecture.md](architecture.md#distribution)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem(`redmine_serverless_s3` の `aws-sdk-s3` など)は、そのプラグインの gemspec の依存に書く |
+| 自前のプラグイン | 今は `plugins/redmine_serverless_ssm`。`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs` は、公開したら足す。どれも GitHub Packages の gem で、入れたディレクトリを `plugins/` にリンクする | 拡張の部分を自前のプラグインにする([architecture.md](architecture.md#the-plugins)) |
 | gem | ビルドのときに `vendor/bundle` に入れ、実行のときは入れない(`BUNDLE_DEPLOYMENT`、`BUNDLE_WITHOUT=development:test`) | 実行のときには書き込めない |
 | ファイルの権限 | どのユーザーからも読めるようにする | Lambda は、既定の権限の少ないユーザーで動かす。このユーザーが、実行に要るすべてのファイルを読める必要がある |
 | `HOME` | `/tmp` | Bundler、ImageMagick、Pandoc がホームに書くことがある(推測) |
@@ -202,7 +202,7 @@ Event Functions で書き込めるのは `/tmp` だけです。Redmine が実行
 1. Rails が設定を読む前に、プラグインの `redmine_serverless_ssm` が、関数の環境変数 `REDMINE_SSM_PATH` の道筋(`/<instance>/env/`)に、SSM の `GetParametersByPath`(復号あり)を呼びます。1 回に 10 件までなので、続きがあれば続けて読みます。`REDMINE_SSM_PATH` がなければ(手元の Docker など)、何も読みません。
 2. 読んだ値を `ENV` に入れます。すでに環境変数にある名前は上書きしません。手元の Docker で試すときに、環境変数で渡せるようにするためです。環境変数にできる名前(大文字、数字、`_`)だけを読み、指定した道筋より下の階層は読みません。
 
-- **コード:** 読み込みはプラグインの [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) が、Railtie の `before_configuration` で行います(`additional_environment.rb` を含む `config/application.rb` のクラスの本体より前)。プラグインの `init.rb` では遅すぎるので、プラグインは gem でもあり、`image/Gemfile.local` で道筋を指定して足します。SSM につながらなければ、秘密の値なしで続けずに、起動を失敗させます。
+- **コード:** 読み込みはプラグインの [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) が、Railtie の `before_configuration` で行います(`additional_environment.rb` を含む `config/application.rb` のクラスの本体より前)。プラグインの `init.rb` では遅すぎるので、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から足して、Bundler が読み込みます。SSM につながらなければ、秘密の値なしで続けずに、起動を失敗させます。
 - **タイミングの確認:** イメージのテストでは、データベースのホストを SSM(moto)だけに置き、`db:migrate`、web の画面、worker のジョブが通るので、`config/database.yml` より前に読めています(2026-11-09)。
 3. そのあとで、Rails が `config/database.yml` を読み、データベースに接続します。
 

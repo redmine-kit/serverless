@@ -211,7 +211,7 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 | イメージ | CI で、イメージの中の OS のパッケージと gem の知られた弱点を調べる(Trivy など)。重い弱点があれば、デプロイしない |
 | GitHub Actions | 使うアクションを、タグではなくコミットの SHA で固定する |
 | Lambda@Edge の関数 | 依存の npm のパッケージを使わない(`node:crypto` だけ) |
-| 配布するイメージとプラグイン | 使う側は、digest で参照する([architecture.md](architecture.md#distribution-proposal)) |
+| 配布するイメージとプラグイン | 使う側は、イメージを digest で参照する。プラグインの gem は、バージョンとチェックサムを `image/Gemfile.lock` で固定する([architecture.md](architecture.md#distribution)) |
 
 - **依存の更新:** Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md) の確認を通してから行います。
 

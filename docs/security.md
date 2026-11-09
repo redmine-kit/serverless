@@ -181,7 +181,7 @@ How long logs, records, temporary files and backups are kept. All periods are de
 | Images | Scan OS packages and gems in the image for known vulnerabilities in CI (Trivy, etc.). Do not deploy if there are serious vulnerabilities |
 | GitHub Actions | Pin actions by commit SHA, not by tag |
 | Lambda@Edge function | Use no npm package dependencies (only `node:crypto`) |
-| Distributed images and plugin | Adopters reference them by digest ([architecture.md](architecture.md#distribution-proposal)) |
+| Distributed image and plugins | Adopters reference the image by digest. The plugin gems are pinned with their versions and checksums in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)) |
 
 - **Updating dependencies:** Updates to Redmine, gems and images go through the checks in [upgrade.md](upgrade.md) first.
 

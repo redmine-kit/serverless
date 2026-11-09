@@ -153,22 +153,23 @@ Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み(�
 
 プラグインごとの機能と、有効にする条件は、それぞれのプラグインの資料(上の表)にあります。
 
-<a id="distribution-proposal"></a>
+<a id="distribution"></a>
 
-### 配布(案)
+### 配布
 
-Redmine の Lambda 用のイメージと、プラグインを、GitHub Packages のコンテナのレジストリ(`ghcr.io`)で公開する案です。置き場所の持ち主は redmine-kit の組織です。
+プラグインは、GitHub Packages の RubyGems のレジストリ(`https://rubygems.pkg.github.com/redmine-kit`)に gem として公開します。Redmine の Lambda 用のイメージは、GitHub Packages のコンテナのレジストリ(`ghcr.io`)で公開する案です。どちらも、置き場所の持ち主は redmine-kit の組織です。
 
 | もの | 置き場所 | 使い方 |
 | --- | --- | --- |
-| Redmine の Lambda 用のイメージ | `ghcr.io/redmine-kit/serverless:<Redmine のバージョン>-<このプロジェクトのバージョン>`(arm64) | `bin/deploy` が digest で取り、立てるアカウントの ECR に写す([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR のイメージしか使えない |
-| プラグインだけ | `ghcr.io/redmine-kit/<プラグイン>:<プラグインのバージョン>`。プラグインごとに、そのファイルだけを入れたイメージ(`FROM scratch`) | Docker で Redmine のイメージを作る人は、たとえば `COPY --from=ghcr.io/redmine-kit/redmine_serverless_s3:<バージョン> /redmine_serverless_s3 plugins/redmine_serverless_s3` で入れる |
-| プラグインだけ(Docker を使わない人) | GitHub の Releases に、tar.gz と SHA256 | `plugins/` に展開する |
+| Redmine の Lambda 用のイメージ(案) | `ghcr.io/redmine-kit/serverless:<Redmine のバージョン>-<このプロジェクトのバージョン>`(arm64) | `bin/deploy` が digest で取り、立てるアカウントの ECR に写す([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR のイメージしか使えない |
+| プラグイン | GitHub Packages の gem `redmine_serverless_x`。プラグインごとに 1 つで、それぞれのリポジトリのワークフローが、バージョンのタグごとに公開する。プラグインの動かすためのファイルを持つ | `Gemfile.local` で GitHub Packages の source から足し、`bundle install` を実行して、入れた gem を `plugins/` にリンクする(各プラグインの準備のページ) |
+| プラグイン(gem を使わない人) | リポジトリのチェックアウト | `plugins/` に clone する |
 
-- **コンテナのレジストリにする理由:** GitHub Packages のうち、公開のパッケージを認証なしで取れるのは、コンテナのレジストリだけです。RubyGems のレジストリは、公開の gem でも、入れるのにトークンが要ります(GitHub の資料、2026-11-09 に確認)。
-- **gem にしない理由:** Redmine 7.0.3 は、`plugins/` のディレクトリにあるプラグインだけを読み込みます(`lib/redmine/plugin_loader.rb`)。gem のプラグインを読み込む仕組みはないので、gem にしても、`plugins/` に置く手順が別に要ります。
-- **バージョン:** それぞれのプラグインのバージョンは `init.rb` の `version` と Git のタグでそろえ、対応する Redmine のバージョンを `requires_redmine` で書きます。
-- **使う側:** 使う側は、タグではなく digest で参照します([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
+- **gem にする理由:** gem は、ほかの gem と一緒に Bundler が入れ、バージョンとチェックサムが `image/Gemfile.lock` に残ります。プラグインの更新も、ほかの gem と同じく、毎週の gem の更新でイメージに届きます([testing.md](testing.md#order-in-ci))。`redmine_serverless_ssm` は、Rails が設定を読む前に SSM Parameter Store を読むので、もともと gem である必要があります。
+- **`plugins/` にリンクする理由:** Redmine 7.0.3 は、`plugins/` のディレクトリにあるプラグインだけを読み込みます(`lib/redmine/plugin_loader.rb`)。gem のプラグインを読み込む仕組みはありません。イメージは、入れたプラグインの gem を、そこにリンクします(`image/Dockerfile` の `link-plugins`)。gem にはプラグインの `Gemfile` を入れないので、Redmine の `Gemfile` がプラグインを 2 回読み込むことはありません。
+- **トークンが要る:** GitHub Packages の RubyGems のレジストリは、公開の gem でも、入れるのに `read:packages` の権限を持つトークンが要ります(GitHub の資料、2026-11-09 に確認)。CI はそのジョブの `GITHUB_TOKEN` を、手元は `gh` のログインのトークンを使います。組み立てには秘密として渡し、レイヤーには残しません(`bin/lib/plugin.sh`)。
+- **バージョン:** それぞれのプラグインのバージョンは、gemspec、`init.rb` の `version`、Git のタグでそろえ(公開のワークフローが確認します)、対応する Redmine のバージョンを `requires_redmine` で書きます。
+- **使う側:** 使う側は、Redmine のイメージを、タグではなく digest で参照します([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
 
 <a id="derived-images"></a>
 

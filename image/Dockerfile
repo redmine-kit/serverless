@@ -4,25 +4,10 @@
 
 FROM public.ecr.aws/lambda/ruby:4.0@sha256:9aea5f69767d2078ad1874471cf0c3064cf7fe46d95afc6c96bfeb62f51fdc02 AS base
 
-# The plugins at pinned commits. bin/lib/plugin.sh can replace a stage with a
-# local checkout (--build-context plugin=<dir>, plugin-ssm=<dir>).
-FROM base AS git
-RUN dnf install -y git-core && dnf clean all
-# fetch <repository> <commit> <dir>
-RUN printf '%s\n' '#!/bin/sh' 'set -e' 'git init -q "$3"' \
-    'git -C "$3" fetch -q --depth 1 "https://github.com/redmine-kit/$1.git" "$2"' \
-    'git -C "$3" checkout -q FETCH_HEAD' 'test "$(git -C "$3" rev-parse HEAD)" = "$2"' 'rm -rf "$3/.git"' \
-    > /usr/local/bin/fetch && chmod +x /usr/local/bin/fetch
-FROM git AS plugin-git
-ARG REDMINE_SERVERLESS_COMMIT=849873adc180e3eaaeb9c04208644d7336039575
-RUN fetch redmine_serverless "$REDMINE_SERVERLESS_COMMIT" /plugin
-FROM git AS plugin-ssm-git
-ARG REDMINE_SERVERLESS_SSM_COMMIT=9a78fcc1b6035a6ea7fb2d6c91831dd13e3c251d
-RUN fetch redmine_serverless_ssm "$REDMINE_SERVERLESS_SSM_COMMIT" /plugin-ssm
-FROM scratch AS plugin
-COPY --from=plugin-git /plugin /
-FROM scratch AS plugin-ssm
-COPY --from=plugin-ssm-git /plugin-ssm /
+# Local checkouts of plugins that replace the installed gems, for working on
+# several repositories at once (bin/lib/plugin.sh passes them as the build
+# context plugin-overrides, one directory per gem). Empty otherwise.
+FROM scratch AS plugin-overrides
 
 FROM base AS source
 RUN dnf install -y gcc gcc-c++ make libpq-devel libyaml-devel tar gzip && dnf clean all
@@ -47,10 +32,20 @@ WORKDIR /var/task/redmine
 COPY image/config/database.yml image/config/additional_environment.rb image/config/configuration.yml \
   image/config/aws_active_job_sqs.yml config/
 COPY image/Gemfile.local ./
-COPY --from=plugin / plugins/redmine_serverless/
-COPY --from=plugin-ssm / plugins/redmine_serverless_ssm/
 RUN bundle config set --local path vendor/bundle \
   && bundle config set --local without development:test
+# The plugin gems from Gemfile.local. link-plugins links each installed gem
+# into plugins/, where Redmine loads plugins from, after a local checkout
+# (plugin-overrides) has replaced it if one is given. Bundler's credential for
+# GitHub Packages is a build secret (bin/lib/plugin.sh), never in a layer.
+ENV PLUGIN_GEMS="redmine_serverless_ssm"
+RUN printf '%s\n' '#!/bin/sh' 'set -e' \
+    'for gem in $PLUGIN_GEMS; do' \
+    '  dir="$(bundle info --path "$gem")"' \
+    '  if [ -d "/tmp/plugin-overrides/$gem" ]; then rm -rf "$dir" && cp -R "/tmp/plugin-overrides/$gem" "$dir"; fi' \
+    '  ln -s "$dir" "plugins/$gem"' \
+    'done' 'rm -rf /tmp/plugin-overrides' > /usr/local/bin/link-plugins \
+  && chmod +x /usr/local/bin/link-plugins
 
 # bin/update-gems writes Gemfile.lock from this stage. It starts from the
 # current lock, so only new gems are resolved unless UPDATE is set, and the
@@ -60,7 +55,8 @@ RUN bundle config set --local path vendor/bundle \
 FROM source AS lock
 COPY image/Gemfile.lock ./
 ARG UPDATE=
-RUN bundle lock ${UPDATE:+--update --cooldown=7}
+RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM \
+  bundle lock ${UPDATE:+--update --cooldown=7}
 FROM scratch AS lockfile
 COPY --from=lock /var/task/redmine/Gemfile.lock /
 
@@ -72,18 +68,24 @@ COPY image/Gemfile.lock ./
 COPY test/core/database.yml config/database.yml
 # A branch resolves its gems afresh (see the source stage).
 ARG REDMINE_BRANCH=
-RUN bundle config set --local without development \
+RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM \
+  bundle config set --local without development \
   && if [ -n "$REDMINE_BRANCH" ]; then rm Gemfile.lock; else bundle config set --local deployment true; fi \
   && bundle install --jobs 4
+COPY --from=plugin-overrides / /tmp/plugin-overrides/
+RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM link-plugins
 ENV RAILS_ENV=test
 ENTRYPOINT []
 
 FROM source AS build
 COPY image/Gemfile.lock ./
 ARG REDMINE_BRANCH=
-RUN if [ -n "$REDMINE_BRANCH" ]; then rm Gemfile.lock; else bundle config set --local deployment true; fi \
+RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM \
+  if [ -n "$REDMINE_BRANCH" ]; then rm Gemfile.lock; else bundle config set --local deployment true; fi \
   && bundle install --jobs 4 \
   && rm -rf vendor/bundle/ruby/*/cache
+COPY --from=plugin-overrides / /tmp/plugin-overrides/
+RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM link-plugins
 RUN SECRET_KEY_BASE_DUMMY=1 RAILS_ENV=production bin/rails assets:precompile
 # Only /tmp is writable on Lambda. tmp is linked after the assets are built,
 # because building may use it (docs/lambda.md#read-only-file-system).

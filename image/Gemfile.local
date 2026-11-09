@@ -7,6 +7,13 @@
 gem 'puma'
 gem 'aws-actionmailer-ses', '~> 1.0'
 gem 'aws-activejob-sqs', '~> 1.2'
-# Reads SSM Parameter Store before Rails reads the configuration. It is a
-# plugin and also a gem, added by path here (not in the plugin's Gemfile).
-gem 'redmine_serverless_ssm', path: 'plugins/redmine_serverless_ssm'
+# The Redmine Serverless plugins, as gems from GitHub Packages
+# (docs/architecture.md#distribution). Installing from there needs a token
+# with read:packages (bin/lib/plugin.sh). The image links each installed gem
+# into plugins/, where Redmine loads plugins from. redmine_serverless_ssm
+# reads SSM Parameter Store before Rails reads the configuration, which is why
+# it is a gem loaded by Bundler. The other plugins are added when they are
+# published.
+source 'https://rubygems.pkg.github.com/redmine-kit' do
+  gem 'redmine_serverless_ssm', '>= 0.1.1'
+end

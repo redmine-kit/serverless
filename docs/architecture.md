@@ -135,20 +135,21 @@ Extensions for Lambda and AWS are the project's own plugins, built with Redmine'
 
 The features of each plugin and their enabling conditions are in the documentation of each plugin (the table above).
 
-### Distribution (proposal)
+### Distribution
 
-The proposal is to publish the Redmine image for Lambda and the plugins on the GitHub Packages container registry (`ghcr.io`). The owner of the location is the redmine-kit organization.
+The plugins are published as gems on the GitHub Packages RubyGems registry (`https://rubygems.pkg.github.com/redmine-kit`), and the Redmine image for Lambda is proposed for the GitHub Packages container registry (`ghcr.io`). The owner of both is the redmine-kit organization.
 
 | What | Location | How to use |
 | --- | --- | --- |
-| Redmine image for Lambda | `ghcr.io/redmine-kit/serverless:<Redmine version>-<this project's version>` (arm64) | `bin/deploy` pulls it by digest and copies it to ECR in the account where the instance is deployed ([deploy-config.md](deploy-config.md#deployment-commands)). Lambda can only use images in ECR in the same Region |
-| Plugins only | `ghcr.io/redmine-kit/<plugin>:<plugin version>`, one image per plugin, containing only the plugin's files (`FROM scratch`) | People who build a Redmine image with Docker add one with, for example, `COPY --from=ghcr.io/redmine-kit/redmine_serverless_s3:<version> /redmine_serverless_s3 plugins/redmine_serverless_s3` |
-| Plugins only (without Docker) | tar.gz and SHA256 in GitHub Releases | Extract into `plugins/` |
+| Redmine image for Lambda (proposal) | `ghcr.io/redmine-kit/serverless:<Redmine version>-<this project's version>` (arm64) | `bin/deploy` pulls it by digest and copies it to ECR in the account where the instance is deployed ([deploy-config.md](deploy-config.md#deployment-commands)). Lambda can only use images in ECR in the same Region |
+| Plugins | The gem `redmine_serverless_x` on GitHub Packages, one per plugin, published by each repository's workflow for every version tag. It holds the plugin's run-time files | Add it in `Gemfile.local` from the GitHub Packages source, run `bundle install`, and link the installed gem into `plugins/` (each plugin's setup page) |
+| Plugins (without the gem) | A checkout of the repository | Clone into `plugins/` |
 
-- **Why a container registry:** Among GitHub Packages registries, only the container registry lets anyone pull public packages without authentication. The RubyGems registry requires a token to install even public gems (GitHub documentation, checked on 2026-11-09).
-- **Why not a gem:** Redmine 7.0.3 loads only plugins in the `plugins/` directory (`lib/redmine/plugin_loader.rb`). There is no mechanism to load plugins from gems, so a gem would still need a separate step to place it in `plugins/`.
-- **Version:** Each plugin's version is kept in sync between `version` in `init.rb` and the Git tag, and the supported Redmine version is declared with `requires_redmine`.
-- **Adopters:** Adopters reference images by digest, not by tag (the same idea as "pin by digest" in [AGENTS.md](../AGENTS.md)).
+- **Why gems:** A gem is installed by Bundler with the other gems and recorded with its version and checksum in `image/Gemfile.lock`, so a plugin update reaches the image through the weekly gem update ([testing.md](testing.md#order-in-ci)) like any other gem. `redmine_serverless_ssm` must be a gem anyway: it reads SSM Parameter Store before Rails reads the configuration.
+- **Why linked into `plugins/`:** Redmine 7.0.3 loads only plugins in the `plugins/` directory (`lib/redmine/plugin_loader.rb`); it has no mechanism to load plugins from gems. The image links each installed plugin gem there (`link-plugins` in `image/Dockerfile`). The gem does not contain the plugin's `Gemfile`, so Redmine's `Gemfile` does not load the plugin twice.
+- **A token is needed:** The GitHub Packages RubyGems registry requires a token with `read:packages` to install, even for a public gem (GitHub documentation, checked on 2026-11-09). CI uses its `GITHUB_TOKEN`; locally, the token of the `gh` login. The build receives it as a secret and does not keep it in a layer (`bin/lib/plugin.sh`).
+- **Version:** Each plugin's version is kept in sync between the gemspec, `version` in `init.rb` and the Git tag (the publishing workflow checks it), and the supported Redmine version is declared with `requires_redmine`.
+- **Adopters:** Adopters reference the Redmine image by digest, not by tag (the same idea as "pin by digest" in [AGENTS.md](../AGENTS.md)).
 
 ### Derived images
 

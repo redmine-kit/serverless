@@ -62,8 +62,7 @@ Amazon Linux 2023 の標準のリポジトリで、次のパッケージが入�
 | gem のビルド | `gcc`<br>`make`<br>`libyaml-devel` | — |
 | ファイルの展開 | `tar`<br>`gzip` | — |
 
-- **Pandoc:** Amazon Linux 2023 のリポジトリにはありません(探したのは `microdnf repoquery`)。Pandoc の公式の Linux の arm64 の実行ファイル(`pandoc-3.13-linux-arm64.tar.gz`、2026-10-26)を、SHA256 を確認して入れます。Redmine 7.0 で xlsx と pptx をプレビューするには、3.8.3 以上が要ります。
-- **ImageMagick 6:** Redmine は、サムネイルを `convert` のコマンドで作ります(`lib/redmine/thumbnail.rb`)。ImageMagick 6 には `convert` があるので、そのまま使えます。
+Pandoc は Amazon Linux 2023 のリポジトリにないので(探したのは `microdnf repoquery`)、Pandoc の公式の Linux の arm64 の実行ファイル(`pandoc-3.13-linux-arm64.tar.gz`、2026-10-26)を、SHA256 を確認してインストールします。Redmine 7.0 で xlsx と pptx をプレビューするには、3.8.3 以上が要ります。ImageMagick 6 には、Redmine がサムネイルを作るのに使う `convert` のコマンドがあるので(`lib/redmine/thumbnail.rb`)、そのまま使えます。
 
 <a id="shape-of-the-dockerfile"></a>
 
@@ -175,9 +174,9 @@ Event Functions で書き込めるのは `/tmp` だけです。Redmine が実行
 | `public/assets/` | CSS と JavaScript | ビルドのときに書き出す(下記) |
 | `config/` | 設定ファイル | ビルドのときに入れる。値は環境変数から読む |
 
-- **シンボリックリンク:** イメージの `tmp` は `/tmp/redmine` へのシンボリックリンクにし、起動のスクリプトが `/tmp/redmine` を作ります。`Import#filepath` は `Rails.root/tmp/imports` に固定されているので、この形にします。アセットの書き出しが `tmp/` を使うことがあるので、シンボリックリンクにするのは書き出しのあとです。
-- **S3 との出し入れ:** 添付ファイル、サムネイル、インポートのファイルの S3 との出し入れは [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) にあります。
-- **アセット:** Redmine は、起動のときにアセットが古いと判断すると `public/assets` に書き出します(`config.assets.redmine_detect_update`)。ビルドのときに書き出し、この確認は止めます。書き出したアセットは S3 から配ります(下の「アセットの配信」)。
+イメージの `tmp` は `/tmp/redmine` へのシンボリックリンクにし、起動のスクリプトが `/tmp/redmine` を作ります。`Import#filepath` が `Rails.root/tmp/imports` に固定されているので、この形にしています。アセットの書き出しが `tmp/` を使うことがあるので、リンクを作るのは書き出しのあとです。添付ファイル、サムネイル、インポートのファイルの S3 との出し入れは [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) にあります。
+
+Redmine は、起動のときにアセットが古いと判断すると `public/assets` に書き出します(`config.assets.redmine_detect_update`)。ここではビルドのときにアセットを書き出し、この確認は止めます。書き出したアセットは S3 から配信します(下の「アセットの配信」)。
 
 <a id="settings-and-secrets-ssm-parameter-store"></a>
 
@@ -198,11 +197,11 @@ Event Functions で書き込めるのは `/tmp` だけです。Redmine が実行
 | `/redmine/env/SECRET_KEY_BASE` | SecureString | Rails の秘密の鍵 | 同じ |
 | `/redmine/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL の秘密鍵([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/setup.html#configuration)) | 同じ |
 
-- **つなぎ方:** インスタンスのスタックが、3 つの関数に環境変数 `REDMINE_SSM_PATH=/<instance>/env/` を渡し、実行ロールには、その道筋だけへの `ssm:GetParametersByPath` を許します([iam.md](iam.md#permissions-common-to-the-three-functions))。十分早く読み込まれるように、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から足します。
-- **秘密でない設定:** バケットの名前、ドメイン、リージョン、データベースの名前、データベースのユーザーの名前は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME`(既定は `redmine`)、`REDMINE_DB_USERNAME`(既定は `redmine`)、`REDMINE_JOBS_QUEUE_URL`(ジョブのキュー)、`REDMINE_HOST`(ドメイン)として読みます。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE`(既定は `verify-full`)は、手元のテストでだけ変えます。
-- **暗号化:** SecureString は、SSM の既定の鍵(`aws/ssm`)で暗号化します。この鍵のときに、実行ロールに `kms:Decrypt` が要るかは、作るときに確認します。
-- **値を変えたとき:** 実行環境は、起動のときに 1 回だけパラメーターを読みます。値を変えたら、関数の設定を更新して、新しい環境を起動させます。
-- **タイミングの確認:** イメージのテストでは、データベースのホストを SSM(moto)だけに置き、`db:migrate`、web の画面、worker のジョブが通るので、`config/database.yml` より前に読めています(2026-11-09。[testing.md](testing.md#image-tests))。
+インスタンスのスタックが、3 つの関数に環境変数 `REDMINE_SSM_PATH=/<instance>/env/` を渡し、実行ロールには、そのパスだけへの `ssm:GetParametersByPath` を許します([iam.md](iam.md#permissions-common-to-the-three-functions))。十分早く読み込まれるように、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から足します。イメージのテストでは、データベースのホストを SSM(moto)だけに置いても、`db:migrate`、web の画面、worker のジョブが通るので、`config/database.yml` より前に読めていることが分かります(2026-11-09。[testing.md](testing.md#image-tests))。
+
+秘密でない設定(バケットの名前、ドメイン、リージョン、データベースの名前、データベースのユーザーの名前)は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME`(既定は `redmine`)、`REDMINE_DB_USERNAME`(既定は `redmine`)、`REDMINE_JOBS_QUEUE_URL`(ジョブのキュー)、`REDMINE_HOST`(ドメイン)として読みます。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE`(既定は `verify-full`)は、手元のテストでだけ変えます。
+
+SecureString は SSM の既定の鍵(`aws/ssm`)で暗号化します。この鍵で実行ロールに `kms:Decrypt` が要るかは、作るときに確認します。実行環境は起動のときに 1 回だけパラメーターを読むので、値を変えたら、関数の設定を更新して新しい環境を起動させます。
 
 <a id="how-they-reach-the-function"></a>
 

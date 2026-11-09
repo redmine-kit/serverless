@@ -54,8 +54,7 @@ The following packages were confirmed to be installable from the standard Amazon
 | Building gems | `gcc`<br>`make`<br>`libyaml-devel` | — |
 | Unpacking files | `tar`<br>`gzip` | — |
 
-- **Pandoc:** Not in the Amazon Linux 2023 repositories (searched with `microdnf repoquery`). The official Pandoc Linux arm64 executable (`pandoc-3.13-linux-arm64.tar.gz`, 2026-10-26) is installed after checking its SHA256. Redmine 7.0 needs 3.8.3 or later to preview xlsx and pptx.
-- **ImageMagick 6:** Redmine creates thumbnails with the `convert` command (`lib/redmine/thumbnail.rb`). ImageMagick 6 has `convert`, so it works as is.
+Pandoc is not in the Amazon Linux 2023 repositories (searched with `microdnf repoquery`), so the official Pandoc Linux arm64 executable (`pandoc-3.13-linux-arm64.tar.gz`, 2026-10-26) is installed after checking its SHA256; Redmine 7.0 needs 3.8.3 or later to preview xlsx and pptx. ImageMagick 6 has the `convert` command that Redmine uses for thumbnails (`lib/redmine/thumbnail.rb`), so it works as is.
 
 ### Shape of the Dockerfile
 
@@ -153,9 +152,9 @@ In Event Functions, only `/tmp` is writable. The places Redmine writes to at run
 | `public/assets/` | CSS and JavaScript | Compiled at build time (below) |
 | `config/` | Configuration files | Added at build time. Values are read from environment variables |
 
-- **Symbolic link:** `tmp` in the image is a symbolic link to `/tmp/redmine`, and the start-up script creates `/tmp/redmine`. `Import#filepath` is fixed to `Rails.root/tmp/imports`, which is why this approach is used. Asset compilation may use `tmp/`, so the symbolic link is created after compilation.
-- **Moving files to and from S3:** How attachments, thumbnails and import files move to and from S3 is in [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html).
-- **Assets:** When Redmine decides at start-up that assets are outdated, it writes them to `public/assets` (`config.assets.redmine_detect_update`). Assets are compiled at build time, and this check is disabled. The compiled assets are served from S3 (see "Serving assets" below).
+`tmp` in the image is a symbolic link to `/tmp/redmine`, which the start-up script creates. This approach is used because `Import#filepath` is fixed to `Rails.root/tmp/imports`. Asset compilation may use `tmp/`, so the link is created after compilation. How attachments, thumbnails and import files move to and from S3 is in [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html).
+
+When Redmine decides at start-up that assets are outdated, it writes them to `public/assets` (`config.assets.redmine_detect_update`). Here the assets are compiled at build time and this check is disabled; the compiled assets are served from S3 ("Serving assets" below).
 
 ## Settings and secrets (SSM Parameter Store)
 
@@ -172,11 +171,11 @@ The plugin [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_server
 | `/redmine/env/SECRET_KEY_BASE` | SecureString | The Rails secret key | Same as above |
 | `/redmine/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | The private key for signed attachment URLs ([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#configuration)) | Same as above |
 
-- **Wiring:** The three functions get `REDMINE_SSM_PATH=/<instance>/env/` as an environment variable from the instance stack, and their execution roles may call `ssm:GetParametersByPath` only on that path ([iam.md](iam.md#permissions-common-to-the-three-functions)). The plugin is a gem as well as a plugin, so that it is loaded early enough; `image/Gemfile.local` adds it from GitHub Packages.
-- **Non-secret settings:** The bucket names, domain, region, database name and database user name are passed from CloudFormation as function environment variables. The image reads them as `REDMINE_DB_NAME` (default `redmine`), `REDMINE_DB_USERNAME` (default `redmine`), `REDMINE_JOBS_QUEUE_URL` (the job queue) and `REDMINE_HOST` (the domain). `REDMINE_DB_PORT` and `REDMINE_DB_SSLMODE` (default `verify-full`) are changed only in local tests.
-- **Encryption:** SecureString parameters are encrypted with the SSM default key (`aws/ssm`). Whether the execution role needs `kms:Decrypt` with this key will be checked when building.
-- **Changing a value:** Each execution environment reads the parameters once when it starts. After changing a value, update the function configuration so that new environments start.
-- **Timing checked:** In the image tests, the database host is only in SSM (moto), and `db:migrate`, the web page and the worker job pass, so the parameters are read before `config/database.yml` (2026-11-09; [testing.md](testing.md#image-tests)).
+The instance stack gives the three functions `REDMINE_SSM_PATH=/<instance>/env/` as an environment variable, and their execution roles may call `ssm:GetParametersByPath` only on that path ([iam.md](iam.md#permissions-common-to-the-three-functions)). The plugin is a gem as well as a plugin, so that it is loaded early enough; `image/Gemfile.local` adds it from GitHub Packages. In the image tests, the database host is only in SSM (moto), and `db:migrate`, the web page and the worker job pass, which shows the parameters are read before `config/database.yml` (2026-11-09; [testing.md](testing.md#image-tests)).
+
+Settings that are not secret, such as the bucket names, domain, region, database name and database user name, are passed from CloudFormation as function environment variables. The image reads them as `REDMINE_DB_NAME` (default `redmine`), `REDMINE_DB_USERNAME` (default `redmine`), `REDMINE_JOBS_QUEUE_URL` (the job queue) and `REDMINE_HOST` (the domain). `REDMINE_DB_PORT` and `REDMINE_DB_SSLMODE` (default `verify-full`) are changed only in local tests.
+
+SecureString parameters are encrypted with the SSM default key (`aws/ssm`); whether the execution role needs `kms:Decrypt` with this key will be checked when building. Each execution environment reads the parameters once, when it starts, so after changing a value, update the function configuration so that new environments start.
 
 ### How they reach the function
 

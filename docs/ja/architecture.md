@@ -67,7 +67,7 @@ flowchart LR
 | アセット | CloudFront の `/assets/*` を S3 に向ける | Lambda を通さず、起動待ちと同時の要求を減らす | [lambda.md](lambda.md#serving-assets) |
 | データベース | RDS for PostgreSQL(db.t4g.micro、Single-AZ)。VPC のプライベートのサブネットに置き、外から届かないようにする。パスワードは SSM Parameter Store に置く。Redmine の標準の migration をそのまま実行する | Redmine は PostgreSQL にそのまま対応しているので、アダプターや migration の手直しが要らない。費用の見通しが立つ | [rds.md](rds.md) |
 | 設定と秘密の値 | SSM Parameter Store(`/<instance>/env/`)に置き、起動のときに読む | Lambda の環境変数に秘密の値を置かない。パラメーターを足すだけで設定を増やせる | [lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store) |
-| 管理画面 | メールの送信と受信、ジョブ、添付ファイルの S3、AWS への接続の状態を、Redmine の管理のメニューで確認し、操作できるようにする | 状態の確認と、送り直しなどの操作を、AWS のコンソールを開かずに行える | [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html) |
+| 管理画面 | メールの送信と受信、ジョブ、添付ファイルの S3、AWS への接続の状態を、すべてのプラグインが共有する Redmine の管理のメニューの「Serverless」の項目で確認し、操作できるようにする | 状態の確認と、送り直しなどの操作を、AWS のコンソールを開かずに行える | [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#the-serverless-menu) |
 | IAM | 関数ごとに実行ロールを分け、対象を ARN で絞る。アクセスキーを作らない | 画面の関数が rake やメールの受信の権限を持たない | [iam.md](iam.md) |
 | セキュリティ | 外から届くのは CloudFront だけ。AWS WAF(定額プラン Free の 5 つのルール)、二要素認証、安全な既定の設定、ログと記録の保持の期間 | 守るもの、起きうること、残るリスク、事故のときの手順を 1 か所にまとめる | [security.md](security.md) |
 | 添付ファイル | S3 の API で読み書きする。Redmine の S3 のプラグインのやり方を参考にする | S3 を唯一の保存先にできる。Lambda の環境どうしでファイルを共有できる | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) |

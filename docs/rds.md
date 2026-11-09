@@ -91,10 +91,11 @@ Amazon RDS for PostgreSQL db.t4g.micro, placed inside the VPC.
 | Automated backups | Free up to the amount of provisioned storage | USD 0 |
 | Total | | USD 21.01 |
 
-- **Predictable cost:** Idle hours cost the same, but the cost does not grow because a lingering connection keeps the database from pausing, as can happen with Aurora.
-- **CPU credits:** T4g runs in Unlimited mode. Sustained CPU use adds USD 0.075 per vCPU-hour.
-- **No stopping the instance:** RDS can be stopped for up to 7 days, but the official documentation says starting can take "minutes to hours". To keep it usable outside business hours, it keeps running.
-- **Engine:** PostgreSQL (the latest major version on RDS; check when creating it). Redmine 7.0 supports PostgreSQL 14 or later (RedmineInstall wiki).
+The engine is PostgreSQL, the latest major version on RDS (checked when creating it); Redmine 7.0 supports PostgreSQL 14 or later (RedmineInstall wiki).
+
+The cost is predictable. Idle hours cost the same, but the cost does not grow because a lingering connection keeps the database from pausing, as can happen with Aurora. T4g runs in Unlimited mode, so sustained CPU use adds USD 0.075 per vCPU-hour.
+
+The instance is not stopped outside business hours. RDS can be stopped for up to 7 days, but the official documentation says starting can take "minutes to hours", and Redmine should stay usable at any time.
 
 ### Settings
 
@@ -191,7 +192,8 @@ Like `redmine-web`, `redmine-worker` and `redmine-task` also use RDS and the S3 
 
 - **Pros:** The three interface endpoints (about USD 30.7 per month) are no longer needed, which saves about USD 22 per month. Webhooks and external APIs (such as AI features; [ai.md](ai.md)) also work.
 - **Cons:** It is a single instance, so when it goes down, SES, SSM and SQS become unreachable. Lambda start-up (reading SSM), jobs and email sending stop. You handle OS updates and recovery yourself (below).
-- **S3 does not go through the NAT:** Attachment reads and writes are high in volume, so they stay on the gateway endpoint and do not go through the NAT instance.
+
+Attachment reads and writes are high in volume, so S3 stays on the gateway endpoint and does not go through the NAT instance.
 
 #### Building the NAT instance
 

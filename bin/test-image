@@ -119,6 +119,8 @@ check "IPA Gothic font" contents 'test -r /usr/share/fonts/ipa-gothic-fonts/ipag
 check "everything readable by the low-privilege user" contents \
   'ruby -rfind -e "Find.find(%q(/var/task), %q(/opt)) { |f| ok = File.directory?(f) ? File.executable?(f) : File.readable?(f); abort(f) unless ok || File.symlink?(f) }"'
 check "compiled assets" contents 'test -r /var/task/redmine/public/assets/.manifest.json'
+check "the S3 plugin's upload script is in the assets" contents \
+  'grep -q "s3_upload" /var/task/redmine/public/assets/.manifest.json'
 check "tmp links to /tmp/redmine" contents 'test "$(readlink /var/task/redmine/tmp)" = /tmp/redmine'
 unknown_role() {
   local code=0
@@ -157,6 +159,11 @@ from_ssm() {
     tail -n 1 | grep -qx true
 }
 check "the secrets come from SSM" from_ssm
+plugins_loaded() {
+  task '{"command":"runner","args":["puts %w[redmine_serverless_ssm redmine_serverless_s3].all? { |id| Redmine::Plugin.installed?(id) }"]}' |
+    tail -n 1 | grep -qx true
+}
+check "the plugins are loaded (SSM, S3)" plugins_loaded
 rejected() { jq -e '.errorType == "Function<ArgumentError>"' <<<"$(invoke task "$1")" >/dev/null; }
 check "env outside the allowed names is rejected" rejected '{"command":"rake","args":["-T"],"env":{"REDMINE_DB_HOST":"x"}}'
 check "unknown command is rejected" rejected '{"command":"sh","args":["-c","id"]}'

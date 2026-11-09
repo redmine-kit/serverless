@@ -95,6 +95,9 @@ GEM
       concurrent-ruby (~> 1)
     aws-eventstream (1.4.1)
     aws-partitions (1.1303.0)
+    aws-sdk-cloudfront (1.164.0)
+      aws-sdk-core (~> 3, >= 3.265.0)
+      aws-sigv4 (~> 1.5)
     aws-sdk-core (3.265.0)
       aws-eventstream (~> 1, >= 1.4.1)
       aws-partitions (~> 1, >= 1.992.0)
@@ -104,6 +107,13 @@ GEM
       jmespath (~> 1, >= 1.6.1)
       logger
       rexml (~> 3.4, >= 3.4.2)
+    aws-sdk-kms (1.140.0)
+      aws-sdk-core (~> 3, >= 3.265.0)
+      aws-sigv4 (~> 1.5)
+    aws-sdk-s3 (1.239.0)
+      aws-sdk-core (~> 3, >= 3.265.0)
+      aws-sdk-kms (~> 1)
+      aws-sigv4 (~> 1.5)
     aws-sdk-ses (1.111.0)
       aws-sdk-core (~> 3, >= 3.265.0)
       aws-sigv4 (~> 1.5)
@@ -421,6 +431,9 @@ GEM
 GEM
   remote: https://rubygems.pkg.github.com/redmine-kit/
   specs:
+    redmine_serverless_s3 (0.1.0)
+      aws-sdk-cloudfront (~> 1.164)
+      aws-sdk-s3 (~> 1.239)
     redmine_serverless_ssm (0.1.1)
       aws-sdk-ssm (~> 1.0)
 
@@ -464,6 +477,7 @@ DEPENDENCIES
   rails (= 8.1.4)
   rails-dom-testing (>= 2.3.0)
   rbpdf (~> 1.21.4)
+  redmine_serverless_s3 (>= 0.1.0)!
   redmine_serverless_ssm (>= 0.1.1)!
   requestjs-rails (~> 0.0.13)
   roadie-rails (~> 3.4.0)
@@ -505,7 +519,10 @@ CHECKSUMS
   aws-activejob-sqs (1.2.0) sha256=f3cbe400da6cef875db0a19c8b4d366cf71ddbe89c6326f1544b1643fce43245
   aws-eventstream (1.4.1) sha256=ceb6a99c61df4bb00344e54aed0351574beca24f87a0d1487d1d2ed80929ce96
   aws-partitions (1.1303.0) sha256=4debb9488e514ab87ee68cf55184cb8db9bd0256668883c3fe6e8bb76f32929c
+  aws-sdk-cloudfront (1.164.0) sha256=dbb1a2c75ba1b91a55a485d90cf0d34233a074d6119d7b6f7b23b7f44bde60be
   aws-sdk-core (3.265.0) sha256=6e2910a8d9d4ff155351e5bed6b19f97edf7d01fcd7bf5bc524bd36695fdbc1a
+  aws-sdk-kms (1.140.0) sha256=1ba7cf795e5680fe5041a10d636aca01f1d2b6fa18e7b5d60ec6197319bce1c9
+  aws-sdk-s3 (1.239.0) sha256=f6c1a952066e0103863b25a35ba391b3a8c08443a604c777e549eaa553621ad0
   aws-sdk-ses (1.111.0) sha256=119b21f166f0ab55d861f40d94f082e15d83a247ded1ef3f45a2d5c76e733e3c
   aws-sdk-sesv2 (1.119.0) sha256=6c6240f8a17b0e710eed82e62e7a966346b50e115652b3cc7db4b350ede4a3c0
   aws-sdk-sqs (1.126.0) sha256=637d50d8fa609a5b9efdf0a06667bec8a2e77813aec52fac6abf378bbda2b1d5
@@ -597,6 +614,7 @@ CHECKSUMS
   rbpdf-font (1.19.1) sha256=3b3498ea4f9e71bea0f7a069408d50c3c4e85b1aa496e22f2ee8b84d28c8b45f
   rbs (4.2.0) sha256=51f7b886dcc05bc09e10b901daa6a81829f6adc03101d6ca9ea4aac6103e0674
   rdoc (8.1.0) sha256=befc37880a5cfd36dcb176c748b5fd5ee39dd3536a75e81824e4972ce230f60a
+  redmine_serverless_s3 (0.1.0) sha256=aca6868bc596201982aaea7d61f1b9f7d4c9bfe7cb2da6ea20d50c12879b2ec5
   redmine_serverless_ssm (0.1.1) sha256=f5c791e06bfb480e09423d9585f22114aeffd7805079a93b627732172ab951d8
   regexp_parser (2.13.1) sha256=5aedb6b7c35688f51e86eef17a15374dfd287c83f4ca644b2c5f3ec50a33b44b
   reline (0.7.0) sha256=5b012d8e55dbf9d450f12bde2cf7d15ff546ae80b3f8f3b30e570d431815583d

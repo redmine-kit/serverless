@@ -38,7 +38,7 @@ RUN bundle config set --local path vendor/bundle \
 # into plugins/, where Redmine loads plugins from, after a local checkout
 # (plugin-overrides) has replaced it if one is given. Bundler's credential for
 # GitHub Packages is a build secret (bin/lib/plugin.sh), never in a layer.
-ENV PLUGIN_GEMS="redmine_serverless_ssm"
+ENV PLUGIN_GEMS="redmine_serverless_ssm redmine_serverless_s3"
 RUN printf '%s\n' '#!/bin/sh' 'set -e' \
     'for gem in $PLUGIN_GEMS; do' \
     '  dir="$(bundle info --path "$gem")"' \

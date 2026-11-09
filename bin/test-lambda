@@ -26,8 +26,10 @@ instance=lambda-test
 network=serverless-lambda-test
 ssm_path=/$instance/env/
 tmp=$(mktemp -d)
+local_tag=""
 cleanup() {
   rm -rf "$tmp"
+  [[ -z "$local_tag" ]] || docker rmi "$local_tag" >/dev/null 2>&1 || true
   [[ -n "${KEEP:-}" ]] || "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -61,13 +63,27 @@ aws() { in_tools 'aws "$@"' aws "$@"; }
 # Runs a function of deploy/lib.sh.
 lib() { in_tools 'set -euo pipefail; source deploy/lib.sh; "$@"' lib "$@"; }
 
-echo "== Image in ECR"
-repository=$(aws ecr create-repository --repository-name "$instance" --query repository.repositoryUri --output text)
-image_uri="$repository:test"
-docker tag "$image" "$image_uri"
-push() { docker push --quiet "$image_uri" >/dev/null; }
-check "the image is pushed to LocalStack's ECR" push
-docker rmi "$image_uri" >/dev/null
+echo "== Image"
+# LocalStack's ECR when the license includes it. Otherwise the image is only
+# tagged in the local Docker under an ECR name, which LocalStack's Lambda
+# starts from the same Docker.
+local_registry=000000000000.dkr.ecr.us-east-1.localhost.localstack.cloud:4566
+if repository=$(aws ecr create-repository --repository-name "$instance" --query repository.repositoryUri \
+  --output text 2>"$tmp/ecr.err"); then
+  image_uri="$repository:test"
+  docker tag "$image" "$image_uri"
+  push() { docker push --quiet "$image_uri" >/dev/null; }
+  check "the image is pushed to LocalStack's ECR" push
+  docker rmi "$image_uri" >/dev/null
+elif grep -q 'not included within your LocalStack license' "$tmp/ecr.err"; then
+  echo "LocalStack's ECR is not in the license: the image is tagged locally"
+  image_uri="$local_registry/$instance:test"
+  docker tag "$image" "$image_uri"
+  local_tag=$image_uri
+else
+  cat "$tmp/ecr.err" >&2
+  exit 1
+fi
 case "$(docker image inspect -f '{{.Architecture}}' "$image")" in
   arm64) architecture=arm64 ;;
   *) architecture=x86_64 ;;
@@ -104,11 +120,19 @@ create() { # <role> <timeout>
     --environment "$(jq -nc --arg role "$1" --arg ssm "$ssm_path" --arg queue "$queue_url" '{Variables: {
       REDMINE_ROLE: $role, REDMINE_SSM_PATH: $ssm, REDMINE_JOBS_QUEUE_URL: $queue,
       REDMINE_DB_NAME: "postgres", REDMINE_DB_USERNAME: "postgres", REDMINE_DB_SSLMODE: "disable"}}')" >/dev/null
-  aws lambda wait function-active-v2 --function-name "$instance-$1"
+  if ! aws lambda wait function-active-v2 --function-name "$instance-$1"; then
+    aws lambda get-function-configuration --function-name "$instance-$1" \
+      --query '[State, StateReason, StateReasonCode]' --output text >&2
+    return 1
+  fi
 }
 check "redmine-task is created" create task 900
 check "redmine-worker is created" create worker 60
 check "redmine-web is created" create web 60
+if ((failures)); then
+  "${compose[@]}" logs --tail 60 localstack
+  exit 1
+fi
 
 echo "== task (deploy/lib.sh)"
 task() { lib task "$1" 2>&1; }

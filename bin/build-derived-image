@@ -8,8 +8,9 @@
 # commit hash of a public HTTPS repository, so a branch or a repository that
 # needs credentials is refused. Directories are relative to redmine.json.
 # Bundler's credential for GitHub Packages comes from
-# BUNDLE_RUBYGEMS__PKG__GITHUB__COM, or from the gh login when gh is there,
-# and goes to the build as a secret.
+# BUNDLE_RUBYGEMS__PKG__GITHUB__COM, or from the gh login when gh is there and
+# the variable is not set, and goes to the build as a secret. Gems from
+# RubyGems need none.
 # jq programs are in single quotes on purpose.
 # shellcheck disable=SC2016
 set -euo pipefail
@@ -89,7 +90,8 @@ done < <(jq -r '(.image.plugins // [] | .[] | ["plugins"] + [.name, .version, .s
   | map(. // "") | join("\u001f")' "$config")
 
 secret=()
-if [[ -z "${BUNDLE_RUBYGEMS__PKG__GITHUB__COM:-}" ]] && command -v gh >/dev/null && gh auth token >/dev/null 2>&1; then
+# Set to empty, the variable keeps the gh login out (no credential).
+if [[ ! -v BUNDLE_RUBYGEMS__PKG__GITHUB__COM ]] && command -v gh >/dev/null && gh auth token >/dev/null 2>&1; then
   BUNDLE_RUBYGEMS__PKG__GITHUB__COM="x-access-token:$(gh auth token)"
 fi
 if [[ -n "${BUNDLE_RUBYGEMS__PKG__GITHUB__COM:-}" ]]; then

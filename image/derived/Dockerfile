@@ -20,8 +20,10 @@ COPY . /tmp/derived/
 # Bundler runs only when a gem or a plugin's Gemfile is added. The lock is the
 # base image's lock with the added gems, and the base image's gems keep their
 # versions (lock.rb): if an added plugin needs another version of one, the
-# build fails. Bundler's credential for GitHub Packages is a build secret,
-# never in a layer. The plugin gems are linked
+# build fails. Without a token for GitHub Packages, the added gems are
+# installed from a Gemfile of their own and locked from the installed gems,
+# so gems from RubyGems need none. Bundler's credential for GitHub Packages
+# is a build secret, never in a layer. The plugin gems are linked
 # into plugins/ as the base image links its own. tmp links to /tmp/redmine,
 # which building the assets uses.
 RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM \
@@ -55,10 +57,21 @@ if [ -s /tmp/derived/Gemfile.plugins ] || $gemfiles; then
   cat /tmp/derived/Gemfile.plugins >>Gemfile.local
   BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false ruby /tmp/lock.rb pins /tmp/base-gems >/tmp/pins
   cat /tmp/pins >>Gemfile.local
-  BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false bundle lock || fail "bundle lock failed"
-  ruby /tmp/lock.rb check /tmp/base-gems
-  bundle install --jobs 4
-  rm -rf vendor/bundle/ruby/*/cache /tmp/pins
+  if [ -n "${BUNDLE_RUBYGEMS__PKG__GITHUB__COM:-}" ]; then
+    BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false bundle lock || fail "bundle lock failed"
+    ruby /tmp/lock.rb check /tmp/base-gems
+    bundle install --jobs 4
+  else
+    mkdir -p /tmp/added
+    ruby /tmp/lock.rb gemfile /tmp/base-gems /tmp/added/Gemfile
+    (cd /tmp/added && BUNDLE_APP_CONFIG=/tmp/added/.bundle BUNDLE_PATH=/var/task/redmine/vendor/bundle \
+      BUNDLE_WITHOUT=development:test bundle install --jobs 4) || fail "installing the added gems failed"
+    BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false bundle lock --local || fail "bundle lock failed"
+    ruby /tmp/lock.rb checksums /tmp/added/Gemfile.lock
+    ruby /tmp/lock.rb check /tmp/base-gems
+    bundle install --local
+  fi
+  rm -rf vendor/bundle/ruby/*/cache /tmp/added /tmp/pins
 fi
 while read -r gem; do
   [ -n "$gem" ] || continue

@@ -1,0 +1,15 @@
+{
+  "region": "ap-northeast-1",
+  "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-infra-deploy",
+  "domain": "redmine.example.com",
+  "dns": { "mode": "external" },
+  "database": { "majorVersion": "17" },
+  "image": {
+    "plugins": [
+      { "name": "redmine_derived_rubygems", "path": "plugins/redmine_derived_rubygems" }
+    ],
+    "themes": [
+      { "name": "derived-sample", "path": "../themes/derived-sample" }
+    ]
+  }
+}

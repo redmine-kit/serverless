@@ -1,0 +1,5 @@
+# frozen_string_literal: true
+
+# A gem from RubyGems that the base image does not have, installed without a
+# GitHub token (bin/test-derived-image).
+gem 'chronic', '0.10.2'

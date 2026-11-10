@@ -1,30 +1,29 @@
 #!/usr/bin/env bash
-# Draws the AWS architecture diagrams (docs/diagrams/*.py) with the Python
-# library diagrams and the AWS Architecture Icons it ships, in Docker, and
-# writes self-contained SVGs next to them (docs/architecture.md#aws-resources).
-#   bin/diagrams          # writes docs/diagrams/architecture.svg and .ja.svg
-#   bin/diagrams --lock   # writes docs/diagrams/requirements.txt from .in
+# Draws the AWS architecture diagram (docs/architecture.md#aws-resources):
+# docs/diagrams/gen.py lays it out for draw.io with the AWS Architecture Icons,
+# and draw.io, in Docker, exports it as an SVG that holds the diagram, so that
+# draw.io can open it again.
+#   AWS_ICONS=<unpacked icon package> bin/diagrams
+# writes docs/diagrams/architecture.drawio.svg and architecture.ja.drawio.svg.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+: "${AWS_ICONS:?the unpacked AWS Architecture Icons package (https://aws.amazon.com/architecture/icons/)}"
+export AWS_ICONS
 dir=docs/diagrams
-image=serverless-diagrams
-base=$(sed -n 's/^FROM //p' "$dir/Dockerfile")
+# rlespinasse/drawio-desktop-headless v1.77.0 (2026-10-26).
+drawio=rlespinasse/drawio-desktop-headless@sha256:617683fbcbc373fa30901999e05b83f5874f0e3165e177245ceb1d69154f2c54
 
-if [[ "${1:-}" == --lock ]]; then
-  # Versions at least 7 days old, with hashes.
-  cutoff=$(date -u -v-7d +%Y-%m-%d 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%d)
-  docker run --rm -v "$PWD/$dir:/w" -w /w "$base" sh -c \
-    "pip install -q --root-user-action=ignore uv==0.9.5 && uv pip compile --quiet --generate-hashes \
-     --python-version 3.13 --python-platform linux --exclude-newer $cutoff requirements.in -o requirements.txt"
-  exit
-fi
-
-docker build -q -t "$image" "$dir" >/dev/null
-for lang in en ja; do
-  out=architecture
-  [[ "$lang" == en ]] || out="architecture.$lang"
-  docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" "$image" \
-    sh -c "python architecture.py $lang $out && python embed.py $out.svg"
-  echo "wrote $dir/$out.svg"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+mkdir "$work/in" "$work/out"
+python3 "$dir/gen.py" en "$work/in/architecture.drawio"
+python3 "$dir/gen.py" ja "$work/in/architecture.ja.drawio"
+# One run of draw.io exports the folder; labels are plain text, so the SVGs
+# hold no foreignObject.
+docker run --rm -e DRAWIO_DESKTOP_COMMAND_TIMEOUT=600s -v "$work:/data" -w /data "$drawio" \
+  --export --format svg --embed-diagram --svg-theme light --border 0 --output out in >/dev/null
+for name in architecture architecture.ja; do
+  cp "$work/out/$name.svg" "$dir/$name.drawio.svg"
+  echo "wrote $dir/$name.drawio.svg"
 done

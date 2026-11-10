@@ -8,11 +8,17 @@
 
 ## AWS リソース
 
-1 つのインスタンスが AWS に作成するリソース (`infra/*.yaml`) を、AWS アーキテクチャアイコンで描いた図です。NAT インスタンスと VPC エンドポイントは、デプロイ設定の `network.mode` に応じて、どちらか一方だけを作成します ([deploy-config.md](deploy-config.md))。
+1 つのインスタンスが AWS に作成するリソース (`infra/*.yaml`) を、共有基盤とアカウントのリソースと合わせて、AWS アーキテクチャアイコンで描いた図です。NAT インスタンスとインターフェイスエンドポイントは、デプロイ設定の `network.mode` に応じて、どちらか一方だけを作成します ([deploy-config.md](deploy-config.md))。S3 のゲートウェイエンドポイントは常に作成します。Cost Explorer など、デフォルトで無効のオプションは描いていません。
 
-![1 つのインスタンスの AWS のリソース](../diagrams/architecture.ja.svg)
+![1 つのインスタンスの AWS リソース](../diagrams/architecture.ja.drawio.svg)
 
-元は `docs/diagrams/architecture.py` です。`bin/diagrams` が、Docker の中で Python のライブラリー [diagrams](https://diagrams.mingrammer.com/) で描き、アイコンを埋め込んだ `docs/diagrams/architecture.svg` と `architecture.ja.svg` を書きます。テンプレートのリソースを変えたら実行し、SVG をコミットします。
+図は `docs/diagrams/gen.py` が draw.io の形式で配置します。`bin/diagrams` がこれを実行し、Docker の中の draw.io で `docs/diagrams/architecture.drawio.svg` と `architecture.ja.drawio.svg` に書き出します。SVG には図が埋め込まれているので、draw.io で開いて編集できます。展開した AWS アーキテクチャアイコンのパッケージ ([AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)) を `AWS_ICONS` で指定して実行します。
+
+```sh
+AWS_ICONS=~/Downloads/Icon-package_07312026 bin/diagrams
+```
+
+テンプレートのリソースを変えたら、`gen.py` を直して実行し、SVG をコミットします。
 
 <a id="diagram"></a>
 

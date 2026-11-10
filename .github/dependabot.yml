@@ -18,20 +18,6 @@ updates:
     cooldown:
       default-days: 7
       semver-patch-days: 3
-  - package-ecosystem: docker
-    directory: /docs/diagrams
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
-      semver-patch-days: 3
-  - package-ecosystem: pip
-    directory: /docs/diagrams
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
-      semver-patch-days: 3
   - package-ecosystem: docker-compose
     directory: /test
     schedule:

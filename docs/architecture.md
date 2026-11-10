@@ -6,11 +6,17 @@ The specifications in this document were checked against official information as
 
 ## AWS resources
 
-The resources one instance creates in AWS (`infra/*.yaml`), drawn with the AWS Architecture Icons. Only one of the NAT instance and the VPC endpoints is created, by `network.mode` in the deployment configuration ([deploy-config.md](deploy-config.md)).
+The resources one instance creates in AWS (`infra/*.yaml`), with those of the shared base and the account, drawn with the AWS Architecture Icons. Only one of the NAT instance and the interface endpoints is created, by `network.mode` in the deployment configuration ([deploy-config.md](deploy-config.md)); the S3 gateway endpoint is always created. Options that are off by default, such as Cost Explorer, are not drawn.
 
-![The AWS resources of one instance](diagrams/architecture.svg)
+![The AWS resources of one instance](diagrams/architecture.drawio.svg)
 
-The source is `docs/diagrams/architecture.py`. `bin/diagrams` draws it in Docker with the Python library [diagrams](https://diagrams.mingrammer.com/) and writes `docs/diagrams/architecture.svg` and `architecture.ja.svg`, with the icons embedded. Run it after changing the templates' resources, and commit the SVGs.
+`docs/diagrams/gen.py` lays out the diagram for draw.io. `bin/diagrams` runs it and exports `docs/diagrams/architecture.drawio.svg` and `architecture.ja.drawio.svg` with draw.io in Docker. The SVGs hold the diagram, so draw.io can open them. The script needs the AWS Architecture Icons package ([AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)), unpacked, in `AWS_ICONS`:
+
+```sh
+AWS_ICONS=~/Downloads/Icon-package_07312026 bin/diagrams
+```
+
+After changing the templates' resources, change `gen.py`, run the script and commit the SVGs.
 
 ## Diagram
 

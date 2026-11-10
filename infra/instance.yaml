@@ -1092,6 +1092,17 @@ Resources:
           - Id: redmine
             DomainName: !Select [2, !Split ["/", !GetAtt WebUrl.FunctionUrl]]
             OriginAccessControlId: !GetAtt FunctionUrlAccess.Id
+            # Host is the function URL's own host name, which the function URL
+            # and origin access control need. Redmine takes the domain from
+            # X-Forwarded-Host (redmine_serverless makes it the Host, and
+            # config.hosts holds only the domain) and the scheme from
+            # X-Forwarded-Proto. CloudFront replaces headers of these names
+            # sent by the viewer (docs/lambda.md#cloudfront-and-function-urls).
+            OriginCustomHeaders:
+              - HeaderName: X-Forwarded-Host
+                HeaderValue: !Ref Domain
+              - HeaderName: X-Forwarded-Proto
+                HeaderValue: https
             CustomOriginConfig:
               OriginProtocolPolicy: https-only
               OriginSSLProtocols: [TLSv1.2]

@@ -57,6 +57,7 @@ Serverless のセキュリティ設計です。保護対象、脅威、層ごと
 | レスポンスヘッダー | すべてのビヘイビアに、CloudFront の AWS マネージドのレスポンスヘッダーポリシー `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`) を設定する。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので (`config/environments/production.rb`)、HSTS は CloudFront で付ける |
 | 添付ファイル | ビヘイビア `/files/*` (添付ファイルの GET) と `/tmp/*` (サムネイルと zip の GET、`/tmp/incoming/` へのアップロードの PUT) は、OAC で添付ファイル用バケットに転送し、CloudFront 署名付き URL を必須にする。どちらにも、`SecurityHeadersPolicy` が `nosniff` を付け、ビューワーレスポンスの CloudFront Functions (`<instance>-attachment-headers`) が、sandbox の CSP と、署名付き URL のファイル名と種類を付ける ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
 | 関数 URL | OAC の署名がないリクエストは、関数が呼び出される前に拒否される ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
+| ホストとスキーム | CloudFront は、ドメインを `X-Forwarded-Host` で、`https` を `X-Forwarded-Proto` で渡す。どちらもオリジンカスタムヘッダーで、ビューワーが送った同じ名前のヘッダーを上書きする。Rails はドメインだけを受け付け (`config.hosts`)、Lambda では `redmine_serverless` が `X-Forwarded-Host` を `Host` にするので、関数 URL のホスト名は受け付けない。ヘッダーがないリクエストやほかのホストのリクエストは 403 になる ([lambda.md](lambda.md#host-and-scheme)) |
 | キャッシュするレスポンス | CloudFront がキャッシュするのは、`/assets/*` (S3 のコンパイル済みのアセット) と `/favicons/*` (Redmine 7.1 のファビコン。Redmine が誰にでも public、immutable で返すもの) だけ。`/favicons/*` は Cookie を Redmine に転送せず、CloudFront がレスポンスから `Set-Cookie` を削除するので、キャッシュしたレスポンスにセッションは入らない。Redmine の画面、アバター (Redmine 7.1)、添付ファイルは CloudFront でキャッシュしない ([lambda.md](lambda.md#the-favicon)) |
 | リクエスト本文 | Redmine のビヘイビアでは 1 MB まで。超えると Lambda@Edge が 413 を返す。`/tmp/incoming/` へのアップロードは、Lambda ではなく S3 に到達し、アップロードの上限を超える本文は CloudFront Functions が拒否する ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
 
@@ -260,6 +261,7 @@ Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md
 - WAF の Common Rule Set のうち、Redmine の正当なリクエストをブロックするルール (本文のサイズ、XSS のパターンなど)
 - Common Rule Set の `SizeRestrictions_BODY` 以外の本文のルールが、Redmine 7.1 のファビコンを含む設定のフォーム (PNG や ICO の画像のバイト列) に一致するか
 - Rails の `remote_ip` が、CloudFront を経由したリクエストで、ユーザーの IP アドレスになるか
+- 関数 URL が、CloudFront の `X-Forwarded-Host` と `X-Forwarded-Proto` をそのまま関数に渡すか ([lambda.md](lambda.md#host-and-scheme))
 - GuardDuty と、S3 のマルウェアスキャンの費用
 - `bin/deploy` が、デプロイ用ロールで、すべてのリージョンの Lambda@Edge のロググループに保持設定を適用できるか (そのロググループへの `logs:PutRetentionPolicy`、`logs:DescribeLogGroups`、`ec2:DescribeRegions`。[iam.md](iam.md#role-for-deploying-infrastructure))
 - WAF のサンプルリクエストを確認できる期間

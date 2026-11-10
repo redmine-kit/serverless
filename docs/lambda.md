@@ -195,7 +195,7 @@ Whether a Rails setting takes effect depends on where it is written.
 | `config.cache_store` | The Rails 8.1 default is files in `tmp/cache/`. `production.rb` does not set it. What is cached, tuning and a shared cache: [cache.md](cache.md); sessions: [session.md](session.md) | `:memory_store` (per environment, up to 64 MB) | `additional_environment.rb` |
 | `config.active_job.queue_adapter` | With the default `:async`, jobs are lost when the environment shuts down (below). `production.rb` does not set it | `:inline`; `redmine_serverless_sqs` makes it `:sqs` when `REDMINE_JOBS_QUEUE_URL` is set (on Lambda) | `additional_environment.rb` and the plugin |
 | `config.active_record.dump_schema_after_migration` | Stops writing `db/schema.rb` after migrations. Commented out in `production.rb` | `false` | `additional_environment.rb` |
-| `config.hosts` | The host names Rails accepts | The Redmine domain | `additional_environment.rb` |
+| `config.hosts` | The host names Rails accepts. Rails checks both `Host` and `X-Forwarded-Host` against it ("Host and scheme" below) | The Redmine domain only (`REDMINE_HOST`), not the function URL's host name | `additional_environment.rb` |
 | `config.filter_redirect` | Makes redirects to attachment signed URLs appear as `[FILTERED]` in logs ([security.md](security.md#logs)) | URLs on the CloudFront domain under `/files/` and `/tmp/` | `additional_environment.rb` |
 | `config.action_mailer.raise_delivery_errors` | `production.rb` sets it to `false`. Sending errors fail the job so that it can be retried ([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/sending.html#raising-errors)) | `true` only in `redmine-worker` | The plugin `redmine_serverless_ses` |
 | `config.assets.redmine_detect_update` | `production.rb` sets it to `true` | `false` | The plugin `redmine_serverless` ([its README](https://redmine-kit.github.io/redmine_serverless/#running-on-lambda)) |
@@ -307,9 +307,26 @@ flowchart LR
 - **OAC:** Type Lambda, always sign (`SigningBehavior: always`, `sigv4`).
 - **Body hash:** Function URLs do not accept unsigned bodies (`UNSIGNED-PAYLOAD`), so PUT and POST must send the body's SHA256 in `x-amz-content-sha256` (CloudFront documentation). Forms in Redmine pages in the browser do not add it. So the Lambda@Edge function `redmine-body-hash`, which runs at the origin request, computes the hash from the body and adds it. OAC then signs the request.
 - **Not possible with CloudFront Functions:** The request data in CloudFront Functions has no body (only the method, URI, query string, headers and cookies). Only Lambda@Edge can read the body.
-- **`Host`:** The viewer's `Host` is not forwarded to the function URL (the origin request policy is `AllViewerExceptHostHeader`). OAC signs with the function URL's host name. The Redmine domain is passed in the origin custom header `X-Forwarded-Host`. Rails builds URLs from `X-Forwarded-Host`.
+- **`Host`:** The viewer's `Host` is not forwarded to the function URL (the origin request policy is `AllViewerExceptHostHeader`). OAC signs with the function URL's host name. The Redmine domain and the scheme are passed in the origin custom headers `X-Forwarded-Host` and `X-Forwarded-Proto` ("Host and scheme" below).
 - **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below). Attachments use the behaviors `/files/*` and `/tmp/*` (thumbnails, zips and uploads), which go to the attachments bucket through OAC and require signed URLs ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)). They are not cached either (`CachingDisabled`), because no AWS-managed cache policy keeps the file name and type of the signed URL in the cache key (below). `/favicons/*`, the favicon of Redmine 7.1, goes to the function URL and is cached (see "The favicon" below).
 - **Origin response timeout:** The CloudFront default is 30 seconds, configurable from 1 to 120 seconds. It is set to 60 seconds to match the function timeout.
+
+### Host and scheme
+
+CloudFront sends the function URL's own host name as `Host` to the function URL (the CloudFront documentation: CloudFront sets `Host` to the origin's domain name unless the viewer's `Host` is forwarded). The function URL and the OAC signature need it, so the viewer's `Host` cannot be forwarded. Redmine gets the domain and the scheme from two origin custom headers on the origin `redmine` (the default behavior and `/favicons/*`; `infra/instance.yaml`).
+
+| Header | Value | What Redmine uses it for |
+| --- | --- | --- |
+| `X-Forwarded-Host` | The domain (the `Domain` parameter, `domain` in `redmine.json`) | The host that Rails checks (`config.hosts`) and builds URLs with: redirects, links and `request.base_url` |
+| `X-Forwarded-Proto` | `https` | The scheme: `Secure` cookies ([session.md](session.md#the-secure-attribute-of-the-session-cookie)) and `https://` in URLs. CloudFront removes the viewer's `X-Forwarded-Proto` (CloudFront documentation), so without this header the scheme would depend on what the function URL adds |
+
+- **Headers sent by the viewer:** When the viewer's request has a header with the name of an origin custom header, CloudFront overwrites its value before sending the request to the origin (CloudFront documentation, checked on 2026-11-10). A viewer cannot choose the host or the scheme that Redmine sees with these headers. Neither header is in the list of headers CloudFront cannot add.
+- **Rails checks `Host` too:** Rails' host authorization (`ActionDispatch::HostAuthorization`) blocks a request with 403 when `Host` is not in `config.hosts`, or when `X-Forwarded-Host` is present and not in it (Rails 8.1.4, `blocked_hosts`). `config.hosts` holds only the domain, so with the function URL's host name in `Host` every request through CloudFront would be blocked. On Lambda, a Rack middleware of `redmine_serverless` (0.2.0 or later) puts the last value of `X-Forwarded-Host` in `Host` before host authorization ([its README](https://redmine-kit.github.io/redmine_serverless/#running-on-lambda)). Rails then checks and builds URLs with the domain alone.
+- **The function URL's host name is never accepted:** It is not in `config.hosts`. A request without `X-Forwarded-Host`, or with another host or the function URL's host name in it, gets 403 from Rails. Direct requests to the function URL are already rejected by IAM authentication before the function is invoked (above); host authorization is a second check for a request that reaches Redmine without CloudFront.
+- **The `Forwarded` header:** `AllViewerExceptHostHeader` forwards the viewer's other headers, including the standard `Forwarded`. Rails takes the host only from `X-Forwarded-Host` and `Host`, so `Forwarded` cannot change the host. Rack reads the scheme from `Forwarded` before `X-Forwarded-Proto` (Rack 3.2.8, `forwarded_priority`), so a viewer that sends `Forwarded: proto=http` makes only its own request look like HTTP: it gets no session cookie and cannot sign in.
+- **CSRF protection:** Redmine does not turn on Rails' origin check (`forgery_protection_origin_check` stays `false`, because Redmine does not call `load_defaults`; Rails 8.1.4), so CSRF protection checks the session's token, and the host does not take part in it.
+- **Mail:** URLs in mail do not come from the request. Redmine builds them from its settings "Host name and path" and "Protocol" (Administration › Settings › General; `Mailer.default_url_options`), which are set with `redmine.settings` ([deploy-config.md](deploy-config.md)).
+- **Tests:** The deployment tests check the two headers on the origin in the template ([testing.md](testing.md#deployment-tests)).
 
 ### Function that adds the body hash (Lambda@Edge)
 
@@ -448,7 +465,8 @@ Synchronous invocations of Event Functions are limited to 6 MB each for the requ
 - How much warming during business hours reduces waits for start-up
 - Whether ImageMagick 6.9.13 on Amazon Linux 2023 can create Redmine thumbnails and Gantt PNG files
 - Whether Lambda's default user can read all of the gems, assets and ImageMagick settings
-- Whether redirects and URLs in mail use the correct domain with `X-Forwarded-Host`
+- Whether the function URL passes `X-Forwarded-Host` and `X-Forwarded-Proto` from CloudFront to the function unchanged, and whether OAC signs requests with origin custom headers that the function URL accepts. Lambda Web Adapter passes the request headers to Puma as they are (1.1.0, `src/lib.rs`); Lambda's documentation does not say how function URLs treat these headers
+- Whether redirects and sign-in work through CloudFront with the domain
 - Whether, after Lambda@Edge adds `x-amz-content-sha256` and OAC signs the request, the function URL accepts POST, PUT, PATCH and DELETE. Whether POST without a body and multipart forms also pass
 - Whether returning 413 on Lambda@Edge `inputTruncated` gives a response that browsers and API clients can understand
 - Whether CloudFront caches `/favicons/*` from the function URL as Redmine's `Cache-Control` says, with the function URL's own `Host`, and returns no `Set-Cookie`

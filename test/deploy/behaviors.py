@@ -1,8 +1,11 @@
-"""Checks the cache behaviors of the distribution in infra/instance.yaml
-against the decisions in docs/lambda.md: within the 5 behaviors of the Free
-flat-rate plan, and /favicons/* (the favicon of Redmine 7.1) cached from
-Redmine without cookies, a body or the body-hash function. Prints each
-problem; prints nothing when the template matches. Run by test/deploy/run.sh
+"""Checks the cache behaviors and the Redmine origin of the distribution in
+infra/instance.yaml against the decisions in docs/lambda.md: within the 5
+behaviors of the Free flat-rate plan, /favicons/* (the favicon of Redmine
+7.1) cached from Redmine without cookies, a body or the body-hash function,
+and the origin custom headers that give Redmine its domain and scheme
+(X-Forwarded-Host with the Domain parameter, X-Forwarded-Proto https), which
+replace headers of the same names sent by the viewer. Prints each problem;
+prints nothing when the template matches. Run by test/deploy/run.sh
 with python3.13 of the tools image, whose ruamel.yaml reads the
 CloudFormation tags."""
 import sys
@@ -39,6 +42,16 @@ else:
     for key in ('OriginRequestPolicyId', 'LambdaFunctionAssociations', 'FunctionAssociations', 'TrustedKeyGroups'):
         if key in favicons:
             problems.append(f'/favicons/*: {key} is set')
+
+# The function URL, behind the default behavior and /favicons/*.
+origins = {o['Id']: o for o in config['Origins']}
+redmine = origins.get('redmine', {})
+headers = {h['HeaderName'].lower(): h['HeaderValue'] for h in redmine.get('OriginCustomHeaders', [])}
+host = headers.get('x-forwarded-host')
+if not (getattr(host, 'tag', None) is not None and host.tag.value == '!Ref' and host.value == 'Domain'):
+    problems.append(f'redmine origin: X-Forwarded-Host is {host!r}, not !Ref Domain')
+if headers.get('x-forwarded-proto') != 'https':
+    problems.append(f"redmine origin: X-Forwarded-Proto is {headers.get('x-forwarded-proto')!r}, not https")
 
 for problem in problems:
     print(problem)

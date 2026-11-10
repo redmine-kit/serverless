@@ -225,7 +225,7 @@ Rails の設定は、どこに書くかで有効になるかどうかが変わ�
 | `config.cache_store` | Rails 8.1 のデフォルトは `tmp/cache/` のファイル。`production.rb` は設定していない。キャッシュするデータ、調整、共有キャッシュは [cache.md](cache.md)、セッションは [session.md](session.md) | `:memory_store` (環境ごと、上限 64 MB) | `additional_environment.rb` |
 | `config.active_job.queue_adapter` | デフォルトの `:async` は、環境が停止するとジョブが失われる (下記)。`production.rb` は設定していない | `:inline`。`REDMINE_JOBS_QUEUE_URL` がある場合 (Lambda 上)、`redmine_serverless_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン |
 | `config.active_record.dump_schema_after_migration` | migration 後の `db/schema.rb` の書き出しを無効にする。`production.rb` ではコメントアウトされている | `false` | `additional_environment.rb` |
-| `config.hosts` | Rails が受け付けるホスト名 | Redmine のドメイン | `additional_environment.rb` |
+| `config.hosts` | Rails が受け付けるホスト名。Rails は `Host` と `X-Forwarded-Host` の両方をこれと照合する (下の「ホストとスキーム」) | Redmine のドメインだけ (`REDMINE_HOST`)。関数 URL のホスト名は入れない | `additional_environment.rb` |
 | `config.filter_redirect` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と記録させる ([security.md](security.md#logs)) | CloudFront のドメインの `/files/` と `/tmp/` の下の URL | `additional_environment.rb` |
 | `config.action_mailer.raise_delivery_errors` | `production.rb` が `false` にしている。送信エラーでジョブを失敗させ、再試行できるようにする ([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#raising-errors)) | `redmine-worker` でだけ `true` | プラグイン `redmine_serverless_ses` |
 | `config.assets.redmine_detect_update` | `production.rb` が `true` にしている | `false` | プラグイン `redmine_serverless` ([その README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda)) |
@@ -353,9 +353,28 @@ flowchart LR
 - **OAC:** オリジンタイプは Lambda、署名は常に行う (`SigningBehavior: always`、`sigv4`)。
 - **本文のハッシュ:** 関数 URL は、署名のない本文 (`UNSIGNED-PAYLOAD`) を受け付けないので、PUT と POST では、本文の SHA256 を `x-amz-content-sha256` に入れて送る必要があります (CloudFront のドキュメント)。ブラウザーで表示する Redmine の画面のフォームは、このヘッダーを付けません。そこで、オリジンリクエストで実行される Lambda@Edge 関数 `redmine-body-hash` が、本文からハッシュを計算して追加します。そのあとで、OAC がリクエストに署名します。
 - **CloudFront Functions では実装できない:** CloudFront Functions のリクエストのデータには、本文が含まれません (メソッド、URI、クエリ文字列、ヘッダー、Cookie だけ)。本文を読めるのは Lambda@Edge だけです。
-- **`Host`:** 関数 URL には、ビューワーの `Host` を転送しません (オリジンリクエストポリシーは `AllViewerExceptHostHeader`)。OAC は関数 URL のホスト名で署名します。Redmine のドメインは、オリジンのカスタムヘッダー `X-Forwarded-Host` で渡します。Rails は `X-Forwarded-Host` から URL を生成します。
+- **`Host`:** 関数 URL には、ビューワーの `Host` を転送しません (オリジンリクエストポリシーは `AllViewerExceptHostHeader`)。OAC は関数 URL のホスト名で署名します。Redmine のドメインとスキームは、オリジンのカスタムヘッダー `X-Forwarded-Host` と `X-Forwarded-Proto` で渡します (下の「ホストとスキーム」)。
 - **キャッシュ:** デフォルトのキャッシュビヘイビア (関数 URL) はキャッシュしません (`CachingDisabled`)。`/assets/*` は S3 から配信し、キャッシュします (下の「アセットの配信」)。添付ファイルは、`/files/*` と `/tmp/*` (サムネイル、zip、アップロード) のビヘイビアを使い、OAC で添付ファイル用のバケットに転送し、署名付き URL を必須にします ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download))。これらもキャッシュしません (`CachingDisabled`)。署名付き URL のファイル名と種類をキャッシュキーに含める、マネージドキャッシュポリシーがないためです (下記)。Redmine 7.1 のファビコンの `/favicons/*` は、関数 URL に転送し、キャッシュします (下の「ファビコン」)。
 - **オリジンの応答タイムアウト:** CloudFront のデフォルトは 30 秒で、1〜120 秒に設定できます。60 秒にして、関数のタイムアウトと合わせます。
+
+<a id="host-and-scheme"></a>
+
+### ホストとスキーム
+
+CloudFront は、関数 URL 自身のホスト名を `Host` として関数 URL に送ります (CloudFront のドキュメント。ビューワーの `Host` を転送しなければ、`Host` はオリジンのドメイン名になる)。関数 URL と OAC の署名にはこのホスト名が要るので、ビューワーの `Host` は転送できません。Redmine は、ドメインとスキームを、オリジン `redmine` (デフォルトのキャッシュビヘイビアと `/favicons/*`。`infra/instance.yaml`) の 2 つのオリジンカスタムヘッダーから受け取ります。
+
+| ヘッダー | 値 | Redmine での用途 |
+| --- | --- | --- |
+| `X-Forwarded-Host` | ドメイン (パラメーター `Domain`、`redmine.json` の `domain`) | Rails が照合し (`config.hosts`)、URL の生成に使うホスト。リダイレクト、リンク、`request.base_url` |
+| `X-Forwarded-Proto` | `https` | スキーム。`Secure` の Cookie ([session.md](session.md#the-secure-attribute-of-the-session-cookie)) と URL の `https://`。CloudFront はビューワーの `X-Forwarded-Proto` を削除するので (CloudFront のドキュメント)、このヘッダーがなければ、スキームは関数 URL が追加するものに左右される |
+
+- **ビューワーが送るヘッダー:** ビューワーのリクエストに、オリジンカスタムヘッダーと同じ名前のヘッダーがあれば、CloudFront はオリジンに送る前にその値を上書きします (CloudFront のドキュメント、2026-11-10 に確認)。ビューワーは、これらのヘッダーで、Redmine から見えるホストやスキームを選べません。どちらのヘッダーも、CloudFront が追加できないヘッダーの一覧には入っていません。
+- **Rails は `Host` も照合する:** Rails のホストの認可 (`ActionDispatch::HostAuthorization`) は、`Host` が `config.hosts` にないとき、または `X-Forwarded-Host` があってそれが `config.hosts` にないときに、リクエストを 403 でブロックします (Rails 8.1.4 の `blocked_hosts`)。`config.hosts` はドメインだけなので、`Host` が関数 URL のホスト名のままだと、CloudFront を通るリクエストがすべてブロックされます。Lambda では、`redmine_serverless` (0.2.0 以降) の Rack のミドルウェアが、ホストの認可より前に、`X-Forwarded-Host` の最後の値を `Host` に入れます ([README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda))。これで Rails は、ドメインだけで照合し、URL を生成します。
+- **関数 URL のホスト名は受け付けない:** `config.hosts` に入っていません。`X-Forwarded-Host` がないリクエスト、ほかのホストや関数 URL のホスト名が入ったリクエストは、Rails が 403 を返します。関数 URL への直接のリクエストは、関数の呼び出し前に IAM 認証で拒否されます (上記)。ホストの認可は、CloudFront を通らずに Redmine に届いたリクエストに対する 2 つ目の確認です。
+- **`Forwarded` ヘッダー:** `AllViewerExceptHostHeader` は、標準の `Forwarded` を含め、ビューワーのほかのヘッダーを転送します。Rails はホストを `X-Forwarded-Host` と `Host` からだけ取るので、`Forwarded` でホストは変わりません。Rack はスキームを `X-Forwarded-Proto` より先に `Forwarded` から読むので (Rack 3.2.8 の `forwarded_priority`)、`Forwarded: proto=http` を送ったビューワーは、自分のリクエストだけを HTTP に見せることになります。そのリクエストにはセッション Cookie が付かず、ログインできません。
+- **CSRF 対策:** Redmine は Rails のオリジンの確認を有効にしていません (Redmine は `load_defaults` を呼ばないので、`forgery_protection_origin_check` は `false` のまま。Rails 8.1.4)。CSRF 対策はセッションのトークンを確認し、ホストは関係しません。
+- **メール:** メールの URL は、リクエストから作りません。Redmine は、設定「ホスト名とパス」と「プロトコル」(管理 › 設定 › 全般。`Mailer.default_url_options`) から作り、これらは `redmine.settings` で設定します ([deploy-config.md](deploy-config.md))。
+- **テスト:** デプロイテストは、テンプレートのオリジンにある 2 つのヘッダーを確認します ([testing.md](testing.md#deployment-tests))。
 
 <a id="function-that-adds-the-body-hash-lambdaedge"></a>
 
@@ -512,7 +531,8 @@ Event Functions の同期呼び出しは、リクエストとレスポンスが�
 - 業務時間のウォームアップで、コールドスタートの待ち時間がどれだけ減るか
 - Amazon Linux 2023 の ImageMagick 6.9.13 で、Redmine のサムネイルとガントチャートの PNG を生成できるか
 - Lambda のデフォルトのユーザーで、gem、アセット、ImageMagick の設定をすべて読めるか
-- `X-Forwarded-Host` で、リダイレクトとメールの URL が正しいドメインになるか
+- 関数 URL が、CloudFront からの `X-Forwarded-Host` と `X-Forwarded-Proto` をそのまま関数に渡すか。オリジンカスタムヘッダーのあるリクエストに OAC が署名し、関数 URL が受け付けるか。Lambda Web Adapter は、リクエストヘッダーをそのまま Puma に渡します (1.1.0 の `src/lib.rs`)。関数 URL でのこれらのヘッダーの扱いは、Lambda のドキュメントにありません
+- CloudFront を通して、リダイレクトとログインがドメインで動くか
 - Lambda@Edge で `x-amz-content-sha256` を追加したあと、OAC の署名で、関数 URL が POST、PUT、PATCH、DELETE を受け付けるか。本文のない POST と、マルチパートのフォームでも成功するか
 - Lambda@Edge の `inputTruncated` で 413 を返したときに、ブラウザーと API クライアントが理解できる応答になるか
 - CloudFront が、関数 URL 自身の `Host` で `/favicons/*` を取得し、Redmine の `Cache-Control` のとおりにキャッシュし、`Set-Cookie` を返さないか

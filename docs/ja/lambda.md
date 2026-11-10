@@ -497,6 +497,7 @@ Redmine は、ファイルと差分を毎回リポジトリから読み、コミ
 Event Functions の同期呼び出しは、リクエストとレスポンスがそれぞれ 6 MB までです。関数 URL は、画像などのバイナリの本文を base64 にエンコードしてイベントに含めるので、実際に送れるファイルは約 4.5 MB です (推測)。さらに、CloudFront を経由するリクエスト本文は、本文のハッシュを追加する Lambda@Edge が読める 1 MB までになります (上の「本文のハッシュを追加する関数」)。
 
 - **添付ファイル:** アップロードもダウンロードも Lambda を経由せず、CloudFront を通してブラウザーと S3 がやり取りします ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html))。REST API の `POST /uploads.json` は Lambda を経由するので、1 MB までです。大きなファイルは、CloudFront を経由するアップロード (`/s3_uploads/presign`、`/s3_uploads/complete`。API キーと OAuth でも使える) で送ります ([ai.md](ai.md))。
+- **アバター (Redmine 7.1):** アバターのフォームも、同じ方法で画像を CloudFront 経由で S3 に送るので、数 MB の写真も使えます。Redmine は S3 から画像を読み、Redmine 自身のフォームで登録します。JavaScript がなければ、フォームがファイルを Redmine に送るので 1 MB までです。アバターは、Redmine が小さなサムネイルで返します ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#avatars))。
 - **CSV のインポート:** インポートファイルは、画面のフォームで Lambda に送るので、1 MB までです。大きな CSV は、分割してインポートします。
 - **添付ファイルの一括ダウンロード (zip):** S3 の一時ファイルにして、CloudFront の署名付き URL にリダイレクトします ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#downloading-all-attachments))。
 - **エクスポート (CSV、PDF、wiki の HTML など):** Redmine から、そのまま返します。チケットの CSV と PDF は、デフォルトで 500 件まで (`issues_export_limit`) です。作業時間、ユーザー、プロジェクトなどの CSV には件数の上限がありませんが、この規模なら 6 MB に達しない見込みです。達した場合は、フィルター (期間など) で対象を絞り込んでエクスポートします。

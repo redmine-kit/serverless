@@ -30,10 +30,8 @@ instance=lambda-test
 network=serverless-lambda-test
 ssm_path=/$instance/env/
 tmp=$(mktemp -d)
-local_tag=""
 cleanup() {
   rm -rf "$tmp"
-  [[ -z "$local_tag" ]] || docker rmi "$local_tag" >/dev/null 2>&1 || true
   [[ -n "${KEEP:-}" ]] || "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -55,10 +53,12 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 
-# The AWS CLI and the deployment's functions, in the tools image on the
-# network of LocalStack.
+# The AWS CLI, crane and the deployment's functions, in the tools image on
+# the network of LocalStack. The registry's host name resolves to 127.0.0.1,
+# so it is pointed at LocalStack's container once the repository is known.
+hosts=()
 in_tools() {
-  docker run --rm -i --network "$network" -v "$PWD:/work:ro" -v "$tmp:$tmp" -w /work \
+  docker run --rm -i --network "$network" ${hosts[@]+"${hosts[@]}"} -v "$PWD:/work:ro" -v "$tmp:$tmp" -w /work \
     -e AWS_ENDPOINT_URL=http://serverless-lambda-test-localstack:4566 -e AWS_DEFAULT_REGION=us-east-1 \
     -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test -e AWS_PAGER= \
     -e instance="$instance" -e work="$tmp" --entrypoint bash "$tools" -c "$@"
@@ -74,11 +74,21 @@ if ! repository=$(aws ecr create-repository --repository-name "$instance" --quer
   echo "FAILED: LocalStack's ECR (is it in the license?)" >&2
   exit 1
 fi
-image_uri="$repository:test"
-docker tag "$image" "$image_uri"
-local_tag=$image_uri
-push() { docker push --quiet "$image_uri" >/dev/null; }
-check "the image is pushed to LocalStack's ECR" push
+# As bin/deploy pushes a derived image (deploy/lib.sh push_tarball): saved
+# as a tarball, pushed with crane under the digest computed from it, and the
+# functions created from the repository by that digest.
+localstack_ip=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$network\").IPAddress}}" serverless-lambda-test-localstack)
+registry=${repository%%/*}
+hosts=(--add-host "${registry%:*}:$localstack_ip")
+docker save -o "$tmp/image.tar" "$image"
+digest=$(in_tools 'crane digest --tarball "$1"' crane "$tmp/image.tar")
+image_uri="$repository@$digest"
+push() {
+  in_tools 'set -euo pipefail; source deploy/lib.sh
+    aws ecr get-login-password | crane auth login "${2%%/*}" -u AWS --password-stdin >/dev/null
+    push_tarball "$@"' push "$tmp/image.tar" "$repository" "$digest"
+}
+check "the image's tarball is pushed to LocalStack's ECR under its digest" push
 case "$(docker image inspect -f '{{.Architecture}}' "$image")" in
   arm64) architecture=arm64 ;;
   *) architecture=x86_64 ;;

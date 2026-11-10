@@ -121,6 +121,16 @@ edge_log_retention() {
   done
 }
 
+# Pushes the tarball of a derived image (docker save) to ECR, tagged with its
+# digest as the copies are, and fails unless the registry has it under the
+# digest that crane digest --tarball gave for it.
+#   push_tarball <tarball> <repository URI> <digest>
+push_tarball() {
+  local pushed
+  pushed=$(crane push "$1" "$2:sha256-${3#sha256:}")
+  [[ "$pushed" == "$2@$3" ]] || fail "pushed $pushed, not $2@$3"
+}
+
 # Invokes <instance>-task synchronously and fails when the command does not
 # exit with 0 (docs/tasks.md). The command's output goes to standard error.
 #   task <JSON event>

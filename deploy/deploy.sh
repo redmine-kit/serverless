@@ -204,8 +204,7 @@ if aws ecr describe-images --repository-name "${repository_uri#*/}" --image-ids 
 else
   aws ecr get-login-password | crane auth login "${repository_uri%%/*}" -u AWS --password-stdin >/dev/null
   if [[ -n "$derived_image" ]]; then
-    pushed=$(crane push "$derived_image" "$repository_uri:sha256-${image_digest#sha256:}")
-    [[ "$pushed" == "$image_uri" ]] || fail "pushed $pushed, not $image_uri"
+    push_tarball "$derived_image" "$repository_uri" "$image_digest"
   else
     crane copy "$image_repository@$image_digest" "$repository_uri:sha256-${image_digest#sha256:}"
   fi

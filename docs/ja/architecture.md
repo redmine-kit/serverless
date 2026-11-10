@@ -1,14 +1,14 @@
-# 全体の構成
+# 全体構成
 
-最新の Redmine (7.0.3) を、AWS Lambda Event Functions で動かす設計です。添付ファイルとアセットは S3 に置きます。データベースは、VPC の中の RDS for PostgreSQL です。外部のプラグインは入れず、テーマは標準のままにします。Lambda、S3、SES のための拡張は、自前のプラグインにします。
+最新の Redmine (7.0.3) を、AWS Lambda Event Functions で動かす設計です。添付ファイルとアセットは S3 に保存します。データベースは、VPC 内の RDS for PostgreSQL です。サードパーティーのプラグインはインストールせず、テーマは標準のままにします。Lambda、S3、SES のための拡張機能は、独自プラグインとして実装します。
 
-この資料の仕様は、2026-11-08 時点の公式の情報で確認したものです。出典は [sources.md](sources.md) にあります。
+この資料の仕様は、2026-11-08 時点の公式情報で確認したものです。出典は [sources.md](sources.md) にあります。
 
 <a id="aws-resources"></a>
 
-## AWS のリソース
+## AWS リソース
 
-1 つのインスタンスが AWS に作るリソース (`infra/*.yaml`) を、AWS のアーキテクチャアイコンで描いたものです。NAT インスタンスと VPC エンドポイントは、デプロイの設定の `network.mode` で、どちらか一方だけを作ります ([deploy-config.md](deploy-config.md))。
+1 つのインスタンスが AWS に作成するリソース (`infra/*.yaml`) を、AWS アーキテクチャアイコンで描いた図です。NAT インスタンスと VPC エンドポイントは、デプロイ設定の `network.mode` に応じて、どちらか一方だけを作成します ([deploy-config.md](deploy-config.md))。
 
 ![1 つのインスタンスの AWS のリソース](../diagrams/architecture.ja.svg)
 
@@ -36,8 +36,8 @@ flowchart LR
   mail[("S3<br>redmine-mail")]
   ses["SES"]
   ssm["SSM<br>Parameter Store"]
-  ext["webhook の<br>送り先"]
-  cli["bin/rake<br>(手元)"]
+  ext["webhook の<br>送信先"]
+  cli["bin/rake<br>(ローカル)"]
   sch["EventBridge<br>Scheduler"]
 
   user --> cf
@@ -60,51 +60,51 @@ flowchart LR
   task --> mail
 ```
 
-`redmine-web`、`redmine-worker`、`redmine-task` は同じイメージです。3 つとも VPC のプライベートのサブネットで動き、データベースを使います (図では一部の線を省いています)。RDS は外から届きません。S3 にはゲートウェイのエンドポイントで、SQS、SES、SSM には VPC のエンドポイントか NAT インスタンスで届きます。インターネットの webhook の送り先には、NAT インスタンスのときだけ届きます。道を描いた構成図と選び方は [rds.md](rds.md#routes-out-of-the-vpc) にあります。15 分を超える 1 回だけのタスクは、同じプライベートのサブネットの Fargate で動かします ([tasks.md](tasks.md#tasks-longer-than-15-minutes))。
+`redmine-web`、`redmine-worker`、`redmine-task` は同じイメージです。3 つとも VPC のプライベートサブネットで動作し、データベースに接続します (図では一部の線を省いています)。RDS には外部からアクセスできません。S3 にはゲートウェイエンドポイントで、SQS、SES、SSM には VPC エンドポイントか NAT インスタンスで接続します。インターネット上の webhook の送信先には、NAT インスタンスの場合だけ接続できます。経路を描いた構成図と選び方は [rds.md](rds.md#routes-out-of-the-vpc) にあります。15 分を超える 1 回限りのタスクは、同じプライベートサブネットの Fargate で実行します ([tasks.md](tasks.md#tasks-longer-than-15-minutes))。
 
 <a id="decisions"></a>
 
-## 決めたこと
+## 決定事項
 
-| 項目 | 決めたこと | 理由 | 詳しい資料 |
+| 項目 | 決定内容 | 理由 | 参照先 |
 | --- | --- | --- | --- |
-| Redmine | 7.0.3 (最新の安定バージョン)。外部のプラグインなし、標準のテーマ | 依頼のとおり | [lambda.md](lambda.md) |
-| 拡張 | 自前のプラグイン。`redmine_serverless` (Lambda での実行)、`redmine_serverless_s3` (S3 の添付ファイル)、`redmine_serverless_ses` (SES でのメール)、`redmine_serverless_sqs` (SQS でのジョブ)、`redmine_serverless_ssm` (SSM Parameter Store の設定と秘密の値) | Redmine の標準の拡張の仕組みで、本体のファイルを書き換えない | 下の「自前のプラグイン」 |
-| 実行環境 | Event Functions、コンテナイメージ、arm64 | Ruby を動かせる。Web Functions は Node.js だけ (下記) | [lambda.md](lambda.md) |
-| イメージ | Lambda の Ruby のベースイメージ (`public.ecr.aws/lambda/ruby:4.0`) に、Redmine、ImageMagick などの依存、Lambda Web Adapter を入れる | Lambda と同じ OS と Ruby で、Lambda で動かす前提の作り。HTTP サーバー (Puma) をそのまま使える | [lambda.md](lambda.md#choosing-the-base) |
+| Redmine | 7.0.3 (最新の安定バージョン)。サードパーティーのプラグインなし、標準テーマ | 依頼のとおり | [lambda.md](lambda.md) |
+| 拡張機能 | 独自プラグイン。`redmine_serverless` (Lambda での実行)、`redmine_serverless_s3` (S3 の添付ファイル)、`redmine_serverless_ses` (SES でのメール)、`redmine_serverless_sqs` (SQS でのジョブ)、`redmine_serverless_ssm` (SSM Parameter Store の設定とシークレット) | Redmine 標準の拡張の仕組みを使い、本体のファイルを書き換えない | 下の「独自プラグイン」 |
+| 実行環境 | Event Functions、コンテナイメージ、arm64 | Ruby を実行できる。Web Functions は Node.js だけ (下記) | [lambda.md](lambda.md) |
+| イメージ | Lambda の Ruby ベースイメージ (`public.ecr.aws/lambda/ruby:4.0`) に、Redmine、ImageMagick などの依存関係、Lambda Web Adapter をインストールする | Lambda と同じ OS と Ruby で、Lambda で動かす前提の構成。HTTP サーバー (Puma) をそのまま使える | [lambda.md](lambda.md#choosing-the-base) |
 | 3 つの関数 | `redmine-web` (画面)、`redmine-worker` (ジョブ)、`redmine-task` (rake とメールの取り込み)。同じイメージを、環境変数 `REDMINE_ROLE` で切り替える。Puma を起動するのは `redmine-web` だけ | ビルドが 1 回で済み、同じコードが動く | [tasks.md](tasks.md#how-one-image-runs-everything) |
-| 入口 | CloudFront → 関数 URL。関数 URL は IAM の認証にし、OAC で署名した要求だけを受ける。POST などの本文のハッシュは、Lambda@Edge (`redmine-body-hash`) が入れる | 署名のない直接の要求は、関数が呼ばれる前に断られる。秘密のヘッダーを持たなくてよい。CloudFront Functions は本文を読めないので Lambda@Edge にする。要求の本文は 1 MB までになる | [lambda.md](lambda.md#cloudfront-and-function-urls) |
-| アセット | CloudFront の `/assets/*` を S3 に向ける | Lambda を通さず、起動待ちと同時の要求を減らす | [lambda.md](lambda.md#serving-assets) |
-| データベース | RDS for PostgreSQL (db.t4g.micro、Single-AZ)。VPC のプライベートのサブネットに置き、外から届かないようにする。パスワードは SSM Parameter Store に置く。Redmine の標準の migration をそのまま実行する | Redmine は PostgreSQL にそのまま対応しているので、アダプターや migration の手直しが要らない。費用の見通しが立つ | [rds.md](rds.md) |
-| 設定と秘密の値 | SSM Parameter Store (`/<instance>/env/`) に置き、起動のときに読む | Lambda の環境変数に秘密の値を置かない。パラメーターを足すだけで設定を増やせる | [lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store) |
-| 管理画面 | メールの送信と受信、ジョブ、添付ファイルの S3、AWS への接続の状態を、すべてのプラグインが共有する Redmine の管理のメニューの「Serverless」の項目で確認し、操作できるようにする | 状態の確認と、送り直しなどの操作を、AWS のコンソールを開かずに行える | [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#the-serverless-menu) |
-| IAM | 関数ごとに実行ロールを分け、対象を ARN で絞る。アクセスキーを作らない | 画面の関数が rake やメールの受信の権限を持たない | [iam.md](iam.md) |
-| セキュリティ | 外から届くのは CloudFront だけ。AWS WAF (定額プラン Free の 5 つのルール)、二要素認証、安全な既定の設定、ログと記録の保持の期間 | 守るもの、起きうること、残るリスク、事故のときの手順を 1 か所にまとめる | [security.md](security.md) |
-| 添付ファイル | S3 の API で読み書きする。Redmine の S3 のプラグインのやり方を参考にする | S3 を唯一の保存先にできる。Lambda の環境どうしでファイルを共有できる | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) |
-| アップロード | ブラウザー → CloudFront → S3 の PUT。CloudFront の署名付き URL と、S3 が確認する SHA256 を使う | Lambda の要求は 6 MB まで。CloudFront を通って Lambda に届く要求の本文は 1 MB まで | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
-| ダウンロード | すべて Redmine のドメインの CloudFront の署名付き URL にリダイレクトする。CloudFront が S3 から読み、sandbox の CSP を付ける | Lambda の応答は 6 MB まで。S3 では sandbox の CSP を付けられない | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
-| バックグラウンドのジョブ | ActiveJob を AWS の公式の gem `aws-activejob-sqs` で SQS に積み、`redmine-worker` で実行する | 自前のコードが要らない。やり直しとデッドレターキューがある。画面の要求がジョブを待たない | [lambda.md](lambda.md#background-jobs) |
-| メールの送信 | Rails の ActionMailer の送信方法 (`aws-actionmailer-ses` の `:ses_v2`) で、SES の API から送る。送るのは `redmine-worker` | Rails の標準の仕組みで、自前のコードが要らない | [mail.md](mail.md#sending) |
-| ドメインと DNS | Web とメールを同じホスト名 (Redmine のサブドメイン) にする。Web は CloudFront を向く別名の種類のレコード、同じ名前に MX を置く。親のドメインの DNS で置けなければ、サブドメインを Route 53 に委任する | URL とメールのアドレスがそろう。CNAME と MX は同じ名前に置けない | [mail.md](mail.md#receiving-domain) |
-| メールの受信 | SES で受けて S3 に置き、`redmine-task` が Redmine の `MailHandler` で取り込む。アドレスはプロジェクトごと (`<識別子>@<サブドメイン>`) と全体用。DMARC が通らないメールは捨てる | ap-northeast-1 の SES で受信できる。差出人を偽ったメールを取り込まない | [mail.md](mail.md#receiving) |
-| migration と rake | `redmine-task` で、手元のコマンドから任意の rake と `rails runner` を実行する | 本番と同じイメージと設定で動く。`rake db:migrate` と `redmine:plugins:migrate` を、RDS の上でそのまま実行する | [tasks.md](tasks.md) |
-| Redmine の更新 | 新しいバージョンが出たら、増えた migration を読み分け、試験用のデータベース (PostgreSQL) で実行し、プラグインの差し替えへの影響を確認してからバージョンアップする。結果はバージョンごとに記録する | バージョンアップしてから壊れたことに気づくのを防ぐ | [upgrade.md](upgrade.md) |
-| テスト | 差し替えた処理ごとにテストを付け、Redmine 本体のテストも通す。AWS は手元で moto と LocalStack に、データベースは PostgreSQL のコンテナに代える。デプロイのたびに本物の AWS で確認する | 差し替えた処理が Redmine の更新で壊れたことに気づける | [testing.md](testing.md) |
-| ネットワーク | VPC を 1 つ作り、2 つの AZ にプライベートのサブネットを置く。Lambda と RDS はプライベートのサブネットに置く。AWS のサービスには、VPC のエンドポイントか NAT インスタンスで届く。どちらにするかは、設定のファイルの `network.mode` で選ぶ | RDS には VPC の中からしか届かない。エンドポイントは運用が要らず、インターネットへの出口がない。NAT インスタンスは費用が安く、webhook も送れる | [rds.md](rds.md#routes-out-of-the-vpc) |
-| AI の機能 | 別のプロジェクトに分ける。AI の側は、Redmine の標準の REST API、OAuth、webhook でつなぐ | AI のサービスや費用の判断を、Redmine の基盤から切り離す | [ai.md](ai.md) |
-| リージョン | ap-northeast-1。ほかのリージョンでも、エンドポイントの名前と単価を読み替えれば同じ | 日本の利用者に近い。単価もこのリージョンで見積もる | — |
+| エントリーポイント | CloudFront → 関数 URL。関数 URL は IAM 認証にし、OAC で署名したリクエストだけを受け付ける。POST などのリクエスト本文のハッシュは、Lambda@Edge (`redmine-body-hash`) が追加する | 署名のない直接のリクエストは、関数が呼び出される前に拒否される。秘密のヘッダーを持たなくてよい。CloudFront Functions は本文を読めないので Lambda@Edge を使う。リクエスト本文は 1 MB までになる | [lambda.md](lambda.md#cloudfront-and-function-urls) |
+| アセット | CloudFront の `/assets/*` のオリジンを S3 にする | Lambda を通さず、コールドスタートと同時リクエストを減らす | [lambda.md](lambda.md#serving-assets) |
+| データベース | RDS for PostgreSQL (db.t4g.micro、シングル AZ)。VPC のプライベートサブネットに配置し、外部からアクセスできないようにする。パスワードは SSM Parameter Store に保存する。Redmine 標準の migration をそのまま実行する | Redmine は PostgreSQL に標準で対応しているので、アダプターや migration の修正が不要。費用の見通しが立つ | [rds.md](rds.md) |
+| 設定とシークレット | SSM Parameter Store (`/<instance>/env/`) に保存し、起動時に読み込む | Lambda の環境変数にシークレットを置かない。パラメーターを追加するだけで設定を増やせる | [lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store) |
+| 管理画面 | メールの送信と受信、ジョブ、添付ファイルの S3、AWS への接続状態を、すべてのプラグインが共有する Redmine の管理メニューの「Serverless」で確認し、操作できるようにする | 状態の確認と再送などの操作を、AWS コンソールを開かずに行える | [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#the-serverless-menu) |
+| IAM | 関数ごとに実行ロールを分け、対象を ARN で絞り込む。アクセスキーを作成しない | Web 用の関数が rake やメール受信の権限を持たない | [iam.md](iam.md) |
+| セキュリティ | 外部からアクセスできるのは CloudFront だけ。AWS WAF (定額料金プランの無料プランの 5 つのルール)、二要素認証、安全な既定の設定、ログと記録の保持期間 | 保護対象、脅威、残存リスク、インシデント対応の手順を 1 か所にまとめる | [security.md](security.md) |
+| 添付ファイル | S3 の API で読み書きする。Redmine の S3 プラグインの方式を参考にする | S3 を唯一の保存先にできる。Lambda の実行環境間でファイルを共有できる | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) |
+| アップロード | ブラウザー → CloudFront → S3 への PUT。CloudFront 署名付き URL と、S3 が検証する SHA256 を使う | Lambda のリクエストは 6 MB まで。CloudFront 経由で Lambda に送られるリクエスト本文は 1 MB まで | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
+| ダウンロード | すべて Redmine のドメインの CloudFront 署名付き URL にリダイレクトする。CloudFront が S3 から読み込み、sandbox の CSP を付ける | Lambda のレスポンスは 6 MB まで。S3 では sandbox の CSP を付けられない | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
+| バックグラウンドジョブ | ActiveJob のジョブを AWS 公式の gem `aws-activejob-sqs` で SQS に送り、`redmine-worker` で実行する | 独自のコードが不要。再試行とデッドレターキューがある。画面のリクエストがジョブを待たない | [lambda.md](lambda.md#background-jobs) |
+| メール送信 | Rails の ActionMailer の配信方法 (`aws-actionmailer-ses` の `:ses_v2`) で、SES の API から送信する。送信するのは `redmine-worker` | Rails 標準の仕組みで、独自のコードが不要 | [mail.md](mail.md#sending) |
+| ドメインと DNS | Web とメールを同じホスト名 (Redmine のサブドメイン) にする。Web は CloudFront を指すエイリアスレコード、同じ名前に MX レコードを置く。親ドメインの DNS で設定できなければ、サブドメインを Route 53 に委任する | URL とメールアドレスがそろう。CNAME と MX は同じ名前に置けない | [mail.md](mail.md#receiving-domain) |
+| メール受信 | SES で受信して S3 に保存し、`redmine-task` が Redmine の `MailHandler` で取り込む。アドレスはプロジェクトごと (`<識別子>@<サブドメイン>`) と全体用。DMARC に合格しないメールは破棄する | ap-northeast-1 の SES で受信できる。差出人を偽ったメールを取り込まない | [mail.md](mail.md#receiving) |
+| migration と rake | `redmine-task` で、ローカルのコマンドから任意の rake と `rails runner` を実行する | 本番と同じイメージと設定で動く。`rake db:migrate` と `redmine:plugins:migrate` を、RDS に対してそのまま実行する | [tasks.md](tasks.md) |
+| Redmine の更新 | 新しいバージョンが出たら、追加された migration を分類し、試験用データベース (PostgreSQL) で実行し、プラグインによる置き換えへの影響を確認してからバージョンアップする。結果はバージョンごとに記録する | バージョンアップ後に不具合に気づく事態を防ぐ | [upgrade.md](upgrade.md) |
+| テスト | 置き換えた処理ごとにテストを書き、Redmine 本体のテストも通す。ローカルでは AWS を moto と LocalStack で、データベースを PostgreSQL コンテナで代替する。デプロイのたびに実際の AWS で確認する | 置き換えた処理が Redmine の更新で壊れたときに気づける | [testing.md](testing.md) |
+| ネットワーク | VPC を 1 つ作成し、2 つの AZ にプライベートサブネットを置く。Lambda と RDS はプライベートサブネットに配置する。AWS サービスには、VPC エンドポイントか NAT インスタンスで接続する。どちらにするかは、設定ファイルの `network.mode` で選ぶ | RDS には VPC 内からしかアクセスできない。エンドポイントは運用が不要で、インターネットへの出口がない。NAT インスタンスは費用が安く、webhook も送信できる | [rds.md](rds.md#routes-out-of-the-vpc) |
+| AI 機能 | 別のプロジェクトに分ける。AI 側とは、Redmine 標準の REST API、OAuth、webhook で連携する | AI サービスや費用の判断を、Redmine の基盤から切り離す | [ai.md](ai.md) |
+| リージョン | ap-northeast-1。ほかのリージョンでも、エンドポイント名と単価を読み替えれば同じ | 日本の利用者に近い。単価もこのリージョンで見積もる | — |
 
 <a id="why-not-web-functions"></a>
 
 ## Web Functions を使わない理由
 
-Web Functions は、ポートで待ち受ける HTTP サーバーをそのまま動かせる新しい Lambda です。Redmine では、次の理由で使いません。
+Web Functions は、ポートで待ち受ける HTTP サーバーをそのまま実行できる新しい Lambda です。Redmine では、次の理由で使いません。
 
-- **ランタイム:** 対応しているのは `nodejs24.x` だけです。Ruby のランタイムとコンテナイメージには対応していません。Node.js の入口から、同梱した Ruby を子プロセスで起動する方法は考えられますが、公式の資料にない構成です。
-- **`/tmp`:** 512 MB で固定です。添付ファイルのキャッシュ ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache)) に使える大きさが限られます。
-- **常時の費用:** メモリは、環境があるあいだ (リクエストの合間も) 課金されます。2 GB で 1 か月つけたままにすると、約 22 ドルです。
+- **ランタイム:** 対応しているのは `nodejs24.x` だけです。Ruby のランタイムとコンテナイメージには対応していません。Node.js のエントリーポイントから、同梱した Ruby を子プロセスで起動する方法も考えられますが、公式ドキュメントにない構成です。
+- **`/tmp`:** 512 MB で固定です。添付ファイルのキャッシュ ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache)) に使える容量が限られます。
+- **常時かかる費用:** メモリは、実行環境が存在するあいだ (リクエストの合間も) 課金されます。2 GB で 1 か月稼働させ続けると、約 22 ドルです。
 
-Lambda Managed Instances (1 環境で複数のリクエストを処理する Event Functions) も、対応する言語に Ruby がなく、最小で 3 環境が動き続けるので使いません。
+Lambda Managed Instances (1 つの実行環境で複数のリクエストを処理する Event Functions) も、対応言語に Ruby がなく、最小で 3 つの実行環境が常時稼働するので使いません。
 
 <a id="request-flow"></a>
 
@@ -115,19 +115,19 @@ Lambda Managed Instances (1 環境で複数のリクエストを処理する Eve
 ### 画面の表示と保存
 
 1. ブラウザーが `https://redmine.example.com/` を開きます (ドメインは例)。
-2. CloudFront が、`/assets/*` を S3 から返し、そのほかを関数 URL に転送します。転送の前に、Lambda@Edge が本文のハッシュを入れ、OAC が要求に署名します。
-3. Lambda Web Adapter が、要求を HTTP に戻して Puma に渡します。
+2. CloudFront が、`/assets/*` を S3 から返し、それ以外を関数 URL に転送します。転送の前に、Lambda@Edge がリクエスト本文のハッシュを追加し、OAC がリクエストに署名します。
+3. Lambda Web Adapter が、イベントを HTTP リクエストに変換して Puma に渡します。
 4. Redmine が RDS を読み書きし、HTML を返します。
 
-1 つの環境は、同時に 1 件の要求だけを処理します。同時の要求が増えると、Lambda が環境を増やします。
+1 つの実行環境は、同時に 1 件のリクエストだけを処理します。同時リクエストが増えると、Lambda が実行環境を増やします。
 
 <a id="attachments"></a>
 
 ### 添付ファイル
 
-- **アップロード:** ブラウザーがファイルの SHA256 を計算し、Redmine から CloudFront の署名付き URL を受け取って、CloudFront を通して S3 に PUT します。中身が SHA256 と合わなければ、S3 が断ります。Redmine は、S3 が確認したチェックサムを読んで、添付のレコードを作ります。
-- **ダウンロード:** Redmine が権限を確認してから、`/files/` の下の CloudFront の署名付き URL へリダイレクトします。CloudFront が OAC で S3 からオブジェクトを読み、Redmine の sandbox の CSP を付けます。
-- **サーバーでの処理:** サムネイルや Office のファイルのプレビューなど、ローカルのファイルが要る処理は、S3 から `/tmp` のキャッシュに取って行います。
+- **アップロード:** ブラウザーがファイルの SHA256 を計算し、Redmine から CloudFront 署名付き URL を受け取って、CloudFront 経由で S3 に PUT します。内容が SHA256 と一致しなければ、S3 が拒否します。Redmine は、S3 が検証したチェックサムを読み取って、添付ファイルのレコードを作成します。
+- **ダウンロード:** Redmine が権限を確認してから、`/files/` の下の CloudFront 署名付き URL へリダイレクトします。CloudFront が OAC で S3 からオブジェクトを読み込み、Redmine の sandbox の CSP を付けます。
+- **サーバーでの処理:** サムネイルや Office ファイルのプレビューなど、ローカルファイルが必要な処理は、S3 から `/tmp` のキャッシュに取得して行います。
 
 詳しくは [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) にあります。
 
@@ -135,133 +135,133 @@ Lambda Managed Instances (1 環境で複数のリクエストを処理する Eve
 
 ### メール
 
-- **送信:** Redmine が通知のメールのジョブを SQS に積み、`redmine-worker` が SES の API で送ります。
-- **受信:** SES が受けたメールを S3 に置き、`redmine-task` を呼びます。`redmine-task` が、S3 から全文を取り、Redmine の `MailHandler` でチケットや注記にします。
+- **送信:** Redmine が通知メールのジョブを SQS に送り、`redmine-worker` が SES の API で送信します。
+- **受信:** SES が受信したメールを S3 に保存し、`redmine-task` を呼び出します。`redmine-task` が、S3 から全文を取得し、Redmine の `MailHandler` でチケットや注記にします。
 
 詳しくは [mail.md](mail.md) にあります。
 
 <a id="the-plugins"></a>
 
-## 自前のプラグイン
+## 独自プラグイン
 
-Lambda と AWS のための拡張は、Redmine の標準の拡張の仕組み (プラグイン) で作る、自前のプラグインです。プラグインはそれぞれ別のリポジトリで開発し、イメージを作るときに `plugins/` に入れます。Redmine 本体のファイルは書き換えません。プラグインは、管理画面の「プラグイン」の一覧に、バージョンとともに出ます。
+Lambda と AWS のための拡張機能は、Redmine 標準の拡張の仕組み (プラグイン) で作る独自プラグインです。プラグインはそれぞれ別のリポジトリで開発し、イメージのビルド時に `plugins/` に配置します。Redmine 本体のファイルは書き換えません。プラグインは、管理画面の「プラグイン」の一覧に、バージョンとともに表示されます。
 
-| プラグイン | すること | 有効にする条件 | 資料 |
+| プラグイン | 機能 | 有効にする条件 | 資料 |
 | --- | --- | --- | --- |
-| [`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless) | Lambda での実行。Lambda Web Adapter の `/events` に答える Rack のミドルウェア、アセットの自動の書き出しを止める設定、Lambda で使えない Redmine の設定を無効に固定すること、管理画面の「状態と接続」 | `REDMINE_ROLE` がある | [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/ja/) |
-| [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) | S3 の添付ファイル。保存、CloudFront を通した S3 へのアップロード、sandbox の CSP を付ける CloudFront の署名付き URL へのリダイレクト、`/tmp` のキャッシュ、管理画面の「添付ファイルの S3」 | S3 のバケットの設定がある | [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/) |
-| [`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses) | SES でのメール。送信のやり直し、受けたメールの取り込み、プロジェクトごとのアドレス、メールの管理画面 | SES の設定がある | [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/ja/) |
-| [`redmine_serverless_sqs`](https://github.com/redmine-kit/redmine_serverless_sqs) | SQS でのジョブ。`aws-activejob-sqs` の設定 (キューと、実行してよいジョブのクラス)、最後に失敗したジョブの記録、管理画面の「ジョブ」 | `REDMINE_JOBS_QUEUE_URL` がある | [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/ja/) |
-| [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | 設定と秘密の値。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。そのタイミングで動くように gem でもあり、`image/Gemfile.local` で道筋を指定して足す | `REDMINE_SSM_PATH` がある | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) |
+| [`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless) | Lambda での実行。Lambda Web Adapter の `/events` に応答する Rack ミドルウェア、アセットの自動書き出しを止める設定、Lambda で使えない Redmine の設定の無効化 (固定)、管理画面の「状態と接続」 | `REDMINE_ROLE` がある | [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/ja/) |
+| [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) | S3 の添付ファイル。保存、CloudFront 経由の S3 へのアップロード、sandbox の CSP を付ける CloudFront 署名付き URL へのリダイレクト、`/tmp` のキャッシュ、管理画面の「添付ファイルの S3」 | S3 バケットの設定がある | [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/) |
+| [`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses) | SES でのメール。送信の再試行、受信したメールの取り込み、プロジェクト別のアドレス、メールの管理画面 | SES の設定がある | [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/ja/) |
+| [`redmine_serverless_sqs`](https://github.com/redmine-kit/redmine_serverless_sqs) | SQS でのジョブ。`aws-activejob-sqs` の設定 (キューと、実行を許可するジョブクラス)、最後に失敗したジョブの記録、管理画面の「ジョブ」 | `REDMINE_JOBS_QUEUE_URL` がある | [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/ja/) |
+| [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | 設定とシークレット。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読み込む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。そのタイミングで動作するように gem でもあり、`image/Gemfile.local` でパスを指定して追加する | `REDMINE_SSM_PATH` がある | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) |
 
-S3 の添付ファイル、SES でのメール、SQS でのジョブ、SSM の設定は、Lambda 以外でも動きます。その場合、ジョブは Lambda のイベントソースの代わりに gem の取り出し役で動かします。プラグインを分けておくと、ふつうのサーバーの Redmine でも、Lambda のための部分なしで必要なものだけを使えます。Lambda ではファイルシステムに書けず、メールの受信箱もないので、イメージに 5 つともインストールします。
+S3 の添付ファイル、SES でのメール、SQS でのジョブ、SSM の設定は、Lambda 以外でも動作します。その場合、ジョブは Lambda のイベントソースの代わりに gem のポーラーで実行します。プラグインを分けておくと、一般的なサーバー上の Redmine でも、Lambda 向けの部分なしで必要なものだけを使えます。Lambda ではファイルシステムに書き込めず、メールの受信箱もないので、イメージには 5 つともインストールします。
 
-GitHub のリポジトリの検索では、`redmine_serverless` という名前の Redmine のプラグインは見つかりませんでした (2026-11-08。見つかったのは関係のない Slack のボットだけ)。S3、SES、SQS、SSM のプラグインの名前は、まだ確認していません。
+GitHub リポジトリの検索では、`redmine_serverless` という名前の Redmine プラグインは見つかりませんでした (2026-11-08。見つかったのは無関係の Slack ボットだけ)。S3、SES、SQS、SSM のプラグインの名前は、まだ確認していません。
 
 <a id="features"></a>
 
 ### プラグインの機能
 
-プラグインごとの機能と、有効にする条件は、それぞれのプラグインの資料 (上の表) にあります。
+プラグインごとの機能と有効にする条件は、各プラグインの資料 (上の表) にあります。
 
 <a id="distribution"></a>
 
 ### 配布
 
-プラグインは、GitHub Packages の RubyGems のレジストリ (`https://rubygems.pkg.github.com/redmine-kit`) に gem として公開します。Redmine の Lambda 用のイメージは、GitHub Packages のコンテナのレジストリ (`ghcr.io`) で公開します。どちらも、置き場所の持ち主は redmine-kit の組織です。
+プラグインは、GitHub Packages の RubyGems レジストリ (`https://rubygems.pkg.github.com/redmine-kit`) に gem として公開します。Redmine の Lambda 用イメージは、GitHub Packages のコンテナレジストリ (`ghcr.io`) で公開します。どちらも、所有者は redmine-kit 組織です。
 
-| もの | 保存先 | 使い方 |
+| 対象 | 保存先 | 使い方 |
 | --- | --- | --- |
-| Redmine の Lambda 用のイメージ | `ghcr.io/redmine-kit/serverless` (arm64 の 1 つのアーキテクチャで、index にしない)。main のコミットで、リリースのバージョンのテストが通ったものを、CI が push する (`.github/workflows/ci.yml` の `publish` のジョブ。バージョンは `bin/redmine-version` で読む)。タグは、Redmine のバージョン (`7.0.3`)、Redmine のマイナーバージョン (`7.0`)、`main`。基本は Redmine のバージョンのタグを使う。そのバージョンの新しいビルド (gem とプラグインの更新) に付け替わり、`bin/deploy` も既定でこれを使う。`7.0` は Redmine のパッチリリースにも付いていく。古いビルドはタグなしで残り、digest で取れる。コミットは `org.opencontainers.image.revision` のラベルにある | `bin/deploy` が digest で取り、立てるアカウントの ECR にコピーする ([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR のイメージしか使えない |
-| プラグイン | GitHub Packages の gem `redmine_serverless_x`。プラグインごとに 1 つで、それぞれのリポジトリのワークフローが、バージョンのタグごとに公開する。プラグインの動かすためのファイルを持つ | `Gemfile.local` で GitHub Packages の source から足し、`bundle install` を実行して、入れた gem を `plugins/` にリンクする (各プラグインの導入のページ) |
-| プラグイン (gem を使わない人) | リポジトリのチェックアウト | `plugins/` に clone する |
+| Redmine の Lambda 用イメージ | `ghcr.io/redmine-kit/serverless` (arm64 の単一アーキテクチャで、イメージインデックスにしない)。main へのコミットで、リリースバージョンのテストに合格したものを、CI が push する (`.github/workflows/ci.yml` の `publish` ジョブ。バージョンは `bin/redmine-version` で取得する)。タグは、Redmine のバージョン (`7.0.3`)、Redmine のマイナーバージョン (`7.0`)、`main`。基本は Redmine のバージョンタグを使う。このタグはそのバージョンの新しいビルド (gem とプラグインの更新) に付け替わり、`bin/deploy` も既定でこれを使う。`7.0` は Redmine のパッチリリースにも追従する。古いビルドはタグなしで残り、digest で取得できる。コミットは `org.opencontainers.image.revision` ラベルにある | `bin/deploy` が digest で取得し、デプロイ先アカウントの ECR にコピーする ([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR イメージしか使えない |
+| プラグイン | GitHub Packages の gem `redmine_serverless_x`。プラグインごとに 1 つで、各リポジトリのワークフローが、バージョンタグごとに公開する。プラグインの実行に必要なファイルを含む | `Gemfile.local` で GitHub Packages の source から追加し、`bundle install` を実行して、インストールした gem を `plugins/` にリンクする (各プラグインの導入ページ) |
+| プラグイン (gem を使わない場合) | リポジトリのチェックアウト | `plugins/` に clone する |
 
-プラグインを gem にするのは、ほかの gem と一緒に Bundler がインストールし、バージョンとチェックサムを `image/Gemfile.lock` に残すためです。プラグインの更新も、ほかの gem と同じく、毎週の gem の更新でイメージに届きます ([testing.md](testing.md#order-in-ci))。`redmine_serverless_ssm` は、Rails が設定を読む前に SSM Parameter Store を読むので、もともと gem である必要があります。
+プラグインを gem にするのは、ほかの gem と一緒に Bundler でインストールし、バージョンとチェックサムを `image/Gemfile.lock` に記録するためです。プラグインの更新も、ほかの gem と同じく、毎週の gem の更新でイメージに反映されます ([testing.md](testing.md#order-in-ci))。`redmine_serverless_ssm` は、Rails が設定を読み込む前に SSM Parameter Store を読むので、もともと gem である必要があります。
 
-Redmine 7.0.3 は、`plugins/` のディレクトリにあるプラグインだけを読み込み (`lib/redmine/plugin_loader.rb`)、gem のプラグインを読み込む仕組みはありません。そこでイメージは、インストールしたプラグインの gem を `plugins/` にリンクします (`image/Dockerfile` の `link-plugins`)。gem にはプラグインの `Gemfile` を入れないので、Redmine の `Gemfile` がプラグインを 2 回読み込むことはありません。
+Redmine 7.0.3 は、`plugins/` ディレクトリにあるプラグインだけを読み込み (`lib/redmine/plugin_loader.rb`)、gem のプラグインを読み込む仕組みはありません。そこでイメージでは、インストールしたプラグインの gem を `plugins/` にリンクします (`image/Dockerfile` の `link-plugins`)。gem にはプラグインの `Gemfile` を含めないので、Redmine の `Gemfile` がプラグインを 2 回読み込むことはありません。
 
-GitHub Packages の RubyGems のレジストリからインストールするには、公開の gem でも、`read:packages` の権限を持つトークンが要ります (GitHub の資料、2026-11-09 に確認)。CI はそのジョブの `GITHUB_TOKEN` を、手元のビルドは `gh` のログインのトークンを使います。ビルドには秘密として渡し、レイヤーには残しません (`bin/lib/plugin.sh`)。
+GitHub Packages の RubyGems レジストリからインストールするには、公開されている gem でも、`read:packages` 権限を持つトークンが必要です (GitHub のドキュメント、2026-11-09 に確認)。CI はそのジョブの `GITHUB_TOKEN` を、ローカルのビルドは `gh` のログイントークンを使います。トークンはビルドにシークレットとして渡し、レイヤーには残しません (`bin/lib/plugin.sh`)。
 
-それぞれのプラグインは、バージョンを gemspec、`init.rb` の `version`、Git のタグでそろえ (公開のワークフローが確認します)、対応する Redmine のバージョンを `requires_redmine` で書きます。使う側は、Redmine のイメージをタグではなく digest で参照します ([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
+各プラグインは、バージョンを gemspec、`init.rb` の `version`、Git のタグでそろえ (公開用のワークフローが確認します)、対応する Redmine のバージョンを `requires_redmine` で指定します。利用者は、Redmine のイメージをタグではなく digest で参照します ([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
 
 <a id="derived-images"></a>
 
-### 派生のイメージ
+### 派生イメージ
 
-このプロジェクトのイメージは、標準のテーマと 5 つのプラグインだけを入れます。テーマやプラグインを足したい使う側は、このプロジェクトのイメージを土台にした派生のイメージを作り、設定のファイルの `image` で指します ([deploy-config.md](deploy-config.md#fields-of-redminejson))。
+このプロジェクトのイメージには、標準テーマと 5 つのプラグインだけを含めます。テーマやプラグインを追加したい利用者は、このプロジェクトのイメージをベースにした派生イメージを作成し、設定ファイルの `image` で指定します ([deploy-config.md](deploy-config.md#fields-of-redminejson))。
 
-作るときは、`FROM` でこのプロジェクトのイメージを digest で指し、テーマを `themes/<テーマ>/` に、プラグインを `plugins/<プラグイン>/` に置いて、アセットを作り直します (`assets:precompile`)。Redmine 7.0 は、テーマを `themes/` か `app/assets/themes/` から読み、Propshaft のアセットとして配信します (`lib/redmine/themes.rb`)。`bin/deploy` は派生のイメージの中のアセットを S3 に同期するので、テーマのアセットも CloudFront の `/assets/*` から配信されます。
+作成するときは、`FROM` でこのプロジェクトのイメージを digest で指定し、テーマを `themes/<テーマ>/` に、プラグインを `plugins/<プラグイン>/` に配置して、アセットを再生成します (`assets:precompile`)。Redmine 7.0 は、テーマを `themes/` か `app/assets/themes/` から読み込み、Propshaft のアセットとして配信します (`lib/redmine/themes.rb`)。`bin/deploy` は派生イメージ内のアセットを S3 に同期するので、テーマのアセットも CloudFront の `/assets/*` から配信されます。
 
-派生のイメージも、このプロジェクトのイメージのテスト (読み取り専用、権限の少ないユーザー、3 つの役割) を通します ([testing.md](testing.md#image-tests))。使う側が足したプラグインは、このプロジェクトでは確認しません。
+派生イメージでも、このプロジェクトのイメージテスト (読み取り専用、権限の少ないユーザー、3 つの役割) を実行します ([testing.md](testing.md#image-tests))。利用者が追加したプラグインは、このプロジェクトでは確認しません。
 
 
 <a id="what-is-not-in-the-plugins"></a>
 
-### プラグインにしないもの
+### プラグインに含めないもの
 
-次のものは、プラグインより前に読み込む必要があるか、Redmine の外で動くので、プラグインにしません。
+次のものは、プラグインより前に読み込む必要があるか、Redmine の外で動作するので、プラグインにしません。
 
-| もの | 保存先 | 理由 |
+| 対象 | 配置先 | 理由 |
 | --- | --- | --- |
-| キャッシュ、ジョブ、スキーマの書き出しの設定 | `config/additional_environment.rb` | データベースへの接続とキャッシュの作成より前に要る。プラグインは、そのあとで読み込まれる |
-| データベース、添付の置き場所、メールの送信の設定 | `config/database.yml`<br>`config/configuration.yml` | Redmine の設定ファイル |
-| 起動のスクリプト、拡張機能のスクリプト | `image/` | Redmine より前に動く |
-| 本文のハッシュを入れる関数 | `edge/` | CloudFront の Lambda@Edge で動く (Node.js) |
-| タスクのハンドラー | `image/` | Rails を読み込まずに、rake を子プロセスで起動する |
-| `bin/rake`<br>`bin/rails` | `bin/` | 手元から、デプロイした Redmine に向けて使う |
-| `bin/test`<br>`bin/check-migrations` | `bin/` | 手元と CI で、テストと migration の読み分けに使う |
+| キャッシュ、ジョブ、スキーマの書き出しの設定 | `config/additional_environment.rb` | データベースへの接続とキャッシュの作成より前に必要。プラグインは、そのあとで読み込まれる |
+| データベース、添付ファイルの保存先、メール送信の設定 | `config/database.yml`<br>`config/configuration.yml` | Redmine の設定ファイル |
+| 起動スクリプト、拡張機能のスクリプト | `image/` | Redmine より前に動作する |
+| リクエスト本文のハッシュを追加する関数 | `edge/` | CloudFront の Lambda@Edge で動作する (Node.js) |
+| タスクハンドラー | `image/` | Rails を読み込まずに、rake を子プロセスで起動する |
+| `bin/rake`<br>`bin/rails` | `bin/` | ローカルから、デプロイした Redmine に対して使う |
+| `bin/test`<br>`bin/check-migrations` | `bin/` | ローカルと CI で、テストと migration の分類に使う |
 
-メールの送信 (`aws-actionmailer-ses`) とジョブ (`aws-activejob-sqs`) は、AWS の公式の gem を使い、送信の仕組みやキューのアダプターは書きません。ジョブの設定は `redmine_serverless_sqs` が持ちます。
+メール送信 (`aws-actionmailer-ses`) とジョブ (`aws-activejob-sqs`) には AWS 公式の gem を使い、配信の仕組みやキューアダプターは書きません。ジョブの設定は `redmine_serverless_sqs` が持ちます。
 
 <a id="repository-layout"></a>
 
-## リポジトリの構成
+## リポジトリ構成
 
 ```text
 serverless/
-  image/          コンテナイメージ(Dockerfile、設定ファイル、起動のスクリプト、拡張機能のスクリプト、タスクのハンドラー)
-  edge/           CloudFront で動く関数。redmine-body-hash(Lambda@Edge。本文のハッシュとアップロードのチェックサムを入れる)と、アップロードの大きさを制限し、添付ファイルのヘッダーを付ける CloudFront Functions の関数、そのテスト
-  infra/          CloudFormation(アカウントのロール。共有の土台。インスタンスごとの VPC の利用、データベース、S3、SQS、Lambda、CloudFront、WAF、SES、スケジュール、アラーム。us-east-1 の Lambda@Edge、証明書、Web ACL)
-  deploy/         bin/deploy の段と、その道具のイメージ
+  image/          コンテナイメージ(Dockerfile、設定ファイル、起動スクリプト、拡張機能のスクリプト、タスクハンドラー)
+  edge/           CloudFront で動作する関数。redmine-body-hash(Lambda@Edge。リクエスト本文のハッシュとアップロードのチェックサムを追加する)と、アップロードのサイズを制限し、添付ファイルのヘッダーを付ける CloudFront Functions の関数、そのテスト
+  infra/          CloudFormation(アカウント単位のロール。共有基盤。インスタンス別の VPC の利用、データベース、S3、SQS、Lambda、CloudFront、WAF、SES、スケジュール、アラーム。us-east-1 の Lambda@Edge、証明書、Web ACL)
+  deploy/         bin/deploy の手順と、そのツールのイメージ
   schema/         redmine.json の JSON Schema
   bin/            コマンド。ビルド、検査、テスト、update-gems、デプロイ
-  test/           プラグインの外のテスト(イメージ、デプロイ、LocalStack の上の Lambda)と、それが使うサービス
+  test/           プラグイン外のテスト(イメージ、デプロイ、LocalStack 上の Lambda)と、それが使うサービス
   .github/        CI とほかのワークフロー
   docs/           資料
 ```
 
-プラグインは、それぞれ別のリポジトリにあります (上の「自前のプラグイン」)。イメージを作るときに、それぞれの決めたバージョンを `plugins/` に入れます。
+プラグインは、それぞれ別のリポジトリにあります (上の「独自プラグイン」)。イメージのビルド時に、それぞれ指定したバージョンを `plugins/` にインストールします。
 
-インフラは CloudFormation で書きます。スタックは、`bin/deploy` が、インフラのデプロイ用のロール (SSO の管理者か、承認の要る GitHub の Environment) で当てます。Redmine のイメージだけの更新は、GitHub Actions がコードのデプロイ用のロールで行います ([iam.md](iam.md))。デプロイの段は [deploy-config.md](deploy-config.md#deployment-commands) にあります。
+インフラは CloudFormation で記述します。スタックは、`bin/deploy` が、インフラデプロイ用ロール (SSO の管理者か、承認が必要な GitHub の Environment) で適用します。Redmine のイメージだけの更新は、GitHub Actions がコードデプロイ用ロールで行います ([iam.md](iam.md))。デプロイ手順は [deploy-config.md](deploy-config.md#deployment-commands) にあります。
 
 <a id="order-of-work"></a>
 
-## 作る順番
+## 作業の順序
 
-動くかどうかに効く点から、順に作ります。各段で、テストを同じ段のうちに書き、CI で通してから次へ進みます ([testing.md](testing.md))。
+動作の可否に影響する点から、順に作ります。各段階で、テストを同じ段階のうちに書き、CI で合格してから次へ進みます ([testing.md](testing.md))。
 
-| 段 | 作るもの | 同じ段で書くテスト |
+| 段階 | 作るもの | 同じ段階で書くテスト |
 | --- | --- | --- |
-| 1 | CI の土台 (静的な検査、PostgreSQL、moto、LocalStack のコンテナ) | RuboCop、ShellCheck、actionlint、cfn-lint |
-| 2 | イメージ (Lambda の Ruby のベースイメージ、Redmine、依存、3 つの役割の切り替え) | イメージのテスト (読み取り専用、権限の少ないユーザー、3 つの役割の起動)、Redmine 本体のテスト |
-| 3 | Lambda の上での起動 (VPC、RDS、SSM、`redmine-task`、`redmine-web` を関数 URL で開く) | SSM の読み込みとタスクのハンドラーのテスト。起動にかかる時間の計測 |
-| 4 | CloudFront とアセット (ドメイン、`/assets/*` の S3、OAC と Lambda@Edge の `redmine-body-hash`) | `redmine-body-hash` のテスト。OAC で POST が通るかの確認。デプロイしたあとの確認の最初のもの |
-| 5 | 添付ファイル (`redmine_serverless_s3`) | プラグインのユニット、機能、統合、システムのテスト。本体の添付ファイルのテストを S3 の形で通す |
-| 6 | ジョブとメールの送信 (SQS、`redmine-worker`、SES と `redmine_serverless_ses` の送信の部分、送り直し) | ジョブとメールの送信のテスト、エラーの種類ごとのやり直しのテスト。メールボックスシミュレーターでの確認 |
-| 7 | 管理画面 (状態と接続、メールの送信、ジョブ、添付ファイルの S3) | 画面ごとの機能とシステムのテスト。管理者でない人が開けないこと |
-| 8 | メールの受信 (MX、受信のルール、`redmine_serverless_ses` での取り込み、管理画面の「メールの受信」) | 取り込みのテスト (なりすまし、迷惑メール、自動応答)。本物の受信の確認 |
-| 9 | 移行 (古い Redmine のデータを移すなら) | 移したデータで、デプロイしたあとの確認を通す |
+| 1 | CI 基盤 (静的解析、PostgreSQL、moto、LocalStack のコンテナ) | RuboCop、ShellCheck、actionlint、cfn-lint |
+| 2 | イメージ (Lambda の Ruby ベースイメージ、Redmine、依存関係、3 つの役割の切り替え) | イメージテスト (読み取り専用、権限の少ないユーザー、3 つの役割の起動)、Redmine 本体のテスト |
+| 3 | Lambda 上での起動 (VPC、RDS、SSM、`redmine-task`、`redmine-web` を関数 URL で開く) | SSM の読み込みとタスクハンドラーのテスト。起動時間の計測 |
+| 4 | CloudFront とアセット (ドメイン、`/assets/*` の S3、OAC と Lambda@Edge の `redmine-body-hash`) | `redmine-body-hash` のテスト。OAC で POST が通るかの確認。デプロイ後の確認の最初の項目 |
+| 5 | 添付ファイル (`redmine_serverless_s3`) | プラグインのユニットテスト、機能テスト、統合テスト、システムテスト。本体の添付ファイルのテストを S3 構成で通す |
+| 6 | ジョブとメール送信 (SQS、`redmine-worker`、SES と `redmine_serverless_ses` の送信部分、再送) | ジョブとメール送信のテスト、エラーの種類ごとの再試行のテスト。メールボックスシミュレーターでの確認 |
+| 7 | 管理画面 (状態と接続、メール送信、ジョブ、添付ファイルの S3) | 画面ごとの機能テストとシステムテスト。管理者以外が開けないこと |
+| 8 | メール受信 (MX、受信ルール、`redmine_serverless_ses` での取り込み、管理画面の「メールの受信」) | 取り込みのテスト (なりすまし、迷惑メール、自動応答)。実際の受信の確認 |
+| 9 | 移行 (古い Redmine のデータを移行する場合) | 移行したデータで、デプロイ後の確認を通す |
 
 <a id="open-questions"></a>
 
-## まだ決めていないこと
+## 未決定事項
 
-| 項目 | 選択肢 | 決めるのに要るもの |
+| 項目 | 選択肢 | 判断に必要な情報 |
 | --- | --- | --- |
-| 古い Redmine のデータを移すか | 移す / 新しく始める | 移行元の構成 (バージョン、データベース、添付ファイルの置き場所)。[migration.md](migration.md) |
-| VPC の外への道 | VPC のエンドポイント / NAT インスタンス (`network.mode`) | webhook や外の API が要るか、それぞれの月の費用。[rds.md](rds.md#which-to-choose) |
-| 月の費用 | [cost.md](cost.md) の見込み | デプロイしたあとに測った使用量。[cost.md](cost.md) |
-| ドメイン | Redmine のサブドメインの名前 (たとえば `redmine.example.com`)。親のドメインの DNS のままにするか、Route 53 に委任するか | [mail.md](mail.md#receiving-domain) |
-| CloudFront の料金プラン | 定額プラン Free (WAF を含む) / 従量 | Free のプランの枠がアカウントに残っているか。[lambda.md](lambda.md#flat-rate-free-plan-and-waf) |
-| 添付ファイルの大きさの上限 | Redmine の `attachment_max_size`。アップロード (`/tmp/incoming/`) は、`/tmp/*` の CloudFront Functions で守る。登録のときに Redmine はファイルを読まないので、限るのは 1 回の PUT で CloudFront が受け付ける大きさと、ブラウザーでのハッシュの計算の時間 | 測った結果。[attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
-| メールで受ける既定のプロジェクト | サブアドレスがないときのプロジェクト | [mail.md](mail.md#importing) |
+| 古い Redmine のデータを移行するか | 移行する / 新規に始める | 移行元の構成 (バージョン、データベース、添付ファイルの保存先)。[migration.md](migration.md) |
+| VPC 外への経路 | VPC エンドポイント / NAT インスタンス (`network.mode`) | webhook や外部の API が必要か、それぞれの月額費用。[rds.md](rds.md#which-to-choose) |
+| 月額費用 | [cost.md](cost.md) の見積もり | デプロイ後に計測した使用量。[cost.md](cost.md) |
+| ドメイン | Redmine のサブドメイン名 (たとえば `redmine.example.com`)。親ドメインの DNS のままにするか、Route 53 に委任するか | [mail.md](mail.md#receiving-domain) |
+| CloudFront の料金プラン | 定額料金プランの無料プラン (WAF を含む) / 従量課金 | 無料プランの枠がアカウントに残っているか。[lambda.md](lambda.md#flat-rate-free-plan-and-waf) |
+| 添付ファイルのサイズ上限 | Redmine の `attachment_max_size`。アップロード (`/tmp/incoming/`) は、`/tmp/*` の CloudFront Functions で制限する。登録時に Redmine はファイルを読まないので、制約になるのは 1 回の PUT で CloudFront が受け付けるサイズと、ブラウザーでのハッシュ計算の時間 | 計測結果。[attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
+| メール受信の既定のプロジェクト | サブアドレスがない場合のプロジェクト | [mail.md](mail.md#importing) |

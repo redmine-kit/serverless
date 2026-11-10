@@ -1,257 +1,257 @@
 # セキュリティ
 
-Serverless のセキュリティの設計です。守るもの、起きうること、層ごとの守り、残るリスク、事故のときの手順をまとめます。権限、ネットワーク、データベースの細かい設定は、それぞれの資料にあり、この資料からリンクします。AWS の側のセキュリティの設定 (GuardDuty とアップロードのマルウェアのスキャン、CloudTrail、IAM Access Analyzer など) は [aws-security.md](aws-security.md) にあります。
+Serverless のセキュリティ設計です。保護対象、脅威、層ごとの対策、残存リスク、インシデント対応の手順をまとめます。権限、ネットワーク、データベースの詳細な設定は、それぞれの資料にあり、この資料からリンクします。AWS 側のセキュリティ設定 (GuardDuty とアップロードのマルウェアスキャン、CloudTrail、IAM Access Analyzer など) は [aws-security.md](aws-security.md) にあります。
 
-この資料の仕様は、2026-11-09 時点の公式の情報と、Redmine 7.0.3 のソースで確認したものです。出典は [sources.md](sources.md) にあります。
+この資料の仕様は、2026-11-09 時点の公式情報と、Redmine 7.0.3 のソースで確認したものです。出典は [sources.md](sources.md) にあります。
 
 <a id="approach"></a>
 
 ## 方針
 
-- **Redmine の外に出る道を少なくする:** 外から届くのは CloudFront だけにします。関数 URL は OAC の署名がないと呼べず、データベースは、パブリックアクセスのない VPC のプライベートのサブネットに置きます。
-- **権限を小さく分ける:** 関数ごと、インスタンスごとに権限を分け、1 つが破られても広がらないようにします。
-- **秘密の値を減らす:** AWS のアクセスキーは作りません。残る秘密の値 (データベースのパスワードと `SECRET_KEY_BASE`) は、SSM Parameter Store の SecureString に置きます。
-- **Redmine の標準の守りを使う:** 二要素認証、パスワードの決まり、権限とロールは、Redmine の標準の機能を使い、プラグインで作り直しません。
-- **安全な既定値:** 設定のファイルと Redmine の設定の初めの値は、安全な側にします (下の「Redmine の設定」)。緩めるときは、使う人が理由を決めて変えます。
+- **外部からの経路を少なくする:** 外部からアクセスできるのは CloudFront だけにします。関数 URL は OAC の署名がないと呼び出せず、データベースは、パブリックアクセスのない VPC のプライベートサブネットに置きます。
+- **権限を小さく分ける:** 関数ごと、インスタンスごとに権限を分け、1 つが侵害されても影響が広がらないようにします。
+- **シークレットを減らす:** AWS のアクセスキーは作成しません。残るシークレット (データベースパスワードと `SECRET_KEY_BASE`) は、SSM Parameter Store の SecureString に保存します。
+- **Redmine の標準の対策を使う:** 二要素認証、パスワードのポリシー、権限とロールは、Redmine の標準機能を使い、プラグインで作り直しません。
+- **安全な既定値:** 設定ファイルと Redmine の設定の初期値は、安全な側にします (下の「Redmine の設定」)。緩めるときは、導入者が理由を決めて変更します。
 
 <a id="what-to-protect"></a>
 
-## 守るもの
+## 保護対象
 
-| 守るもの | 保存先 | 漏れたり壊れたりしたときの影響 |
+| 保護対象 | 保存先 | 漏えい・破損時の影響 |
 | --- | --- | --- |
-| Redmine のデータ (チケット、wiki、利用者、パスワードのハッシュ、API キー) | RDS for PostgreSQL | 業務の情報と、利用者のアカウントが漏れる |
-| 添付ファイル | S3 の添付ファイルのバケット | 業務の文書が漏れる |
-| 受け取ったメール | S3 のメールのバケット (`inbound/`、`processed/`) | メールの全文が漏れる |
-| 秘密の値 (`SECRET_KEY_BASE`、データベースのパスワード) | SSM Parameter Store | セッションの Cookie を偽造される。VPC の中からデータベースを読み書きされる |
-| AWS の権限 | 実行ロール、デプロイ用のロール、管理者の SSO | AWS のリソースを読み書きされる。費用を使われる |
-| 管理者のアカウント | Redmine と SSO | すべてのデータと設定を変えられる |
+| Redmine のデータ (チケット、wiki、ユーザー、パスワードのハッシュ、API キー) | RDS for PostgreSQL | 業務情報と、ユーザーのアカウントが漏えいする |
+| 添付ファイル | S3 の添付ファイル用バケット | 業務文書が漏えいする |
+| 受信したメール | S3 のメール用バケット (`inbound/`、`processed/`) | メールの全文が漏えいする |
+| シークレット (`SECRET_KEY_BASE`、データベースパスワード) | SSM Parameter Store | セッション Cookie を偽造される。VPC 内からデータベースを読み書きされる |
+| AWS の権限 | 実行ロール、デプロイ用ロール、管理者の SSO | AWS リソースを読み書きされる。費用を発生させられる |
+| 管理者アカウント | Redmine と SSO | すべてのデータと設定を変更される |
 
 <a id="threats-and-protections"></a>
 
-## 起きうることと守り
+## 脅威と対策
 
-| 起きうること | 主な守り | 資料 |
+| 脅威 | 主な対策 | 資料 |
 | --- | --- | --- |
-| Redmine の弱点を突かれる | Redmine を早めにバージョンアップする、WAF、読み取り専用のファイルシステム | [upgrade.md](upgrade.md)、下の「AWS WAF」 |
-| パスワードの総当たり、使い回しのパスワード | 二要素認証 (管理者は必須)、パスワードの決まり、WAF のログインへの回数の制限 | 下の「Redmine の設定」「AWS WAF」 |
-| 関数 URL を直接呼ばれる | 関数 URL は IAM の認証で、OAC の署名がないと関数が呼ばれない | [lambda.md](lambda.md#cloudfront-and-function-urls) |
-| データベースに外からつながれる | RDS はパブリックアクセスのないプライベートのサブネットに置く。セキュリティグループは関数からだけを許す。パスワードは SSM と RDS にだけ置く | [rds.md](rds.md#security) |
-| 添付ファイルを権限のない人に読まれる | Redmine が権限を確認してから、5 分の CloudFront の署名付き URL を出す。バケットは公開せず、OAC を通した CloudFront だけを許す | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
-| 署名付き URL が漏れる | 期限は 5 分。ログに残さない (下の「ログ」) | 下の「ログ」 |
-| 添付ファイルで悪いコードを動かされる (HTML、SVG) | 添付ファイルは、Redmine の標準と同じく Redmine のオリジンから、CloudFront のビヘイビア `/files/*` と `/tmp/*` (サムネイルと zip) を通して返り、Redmine が付けるのと同じ `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` と `X-Content-Type-Options: nosniff` が付く。sandbox の文書は不透明なオリジンになり、スクリプトも動かないので、Redmine の Cookie を読むことも、Redmine を呼ぶこともできない。PDF のほかは、ダウンロードとして返す (`Content-Disposition: attachment`。Redmine の標準と同じ)。デプロイのあとの確認で、ヘッダーを確認する ([testing.md](testing.md#checks-after-deployment)) | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
-| 差出人を偽ったメールで、チケットを作られる | DMARC が通らないメール、迷惑メール、ウイルスのメールを捨てる。登録のないアドレスのメールを受けない | [mail.md](mail.md#spoofing-and-spam) |
-| webhook で、内向きのアドレスに要求を送らされる (SSRF) | `webhook_blocklist` で、プライベート、ループバック、リンクローカルのアドレスを断る | [lambda.md](lambda.md#rails-and-redmine-settings) |
-| 依存の gem やイメージに悪いコードが混ざる | digest と SHA256 で固定する、依存の弱点の検査、GitHub Actions を SHA で固定する | 下の「供給網」 |
-| AWS の権限を広げられる | 関数ごとのロール、権限の境界、インフラの変更は承認が要る | [iam.md](iam.md) |
-| 費用を使われる (大量の要求) | 同時実行数の予約、WAF の回数の制限、CloudFront の定額プラン (WAF が止めた要求は使用量に数えない) | 下の「AWS WAF」 |
-| インスタンスのあいだでデータが混ざる | 名前とロールをインスタンスごとに分け、対象を ARN で絞る | [deploy-config.md](deploy-config.md) |
+| Redmine の脆弱性を悪用される | Redmine を早めにバージョンアップする、WAF、読み取り専用のファイルシステム | [upgrade.md](upgrade.md)、下の「AWS WAF」 |
+| パスワードの総当たり攻撃、使い回しのパスワード | 二要素認証 (管理者は必須)、パスワードのポリシー、WAF によるログインのレート制限 | 下の「Redmine の設定」「AWS WAF」 |
+| 関数 URL を直接呼び出される | 関数 URL は IAM 認証で、OAC の署名がないと関数が呼び出されない | [lambda.md](lambda.md#cloudfront-and-function-urls) |
+| 外部からデータベースに接続される | RDS はパブリックアクセスのないプライベートサブネットに置く。セキュリティグループは関数からの接続だけを許可する。パスワードは SSM と RDS にだけ保存する | [rds.md](rds.md#security) |
+| 権限のないユーザーに添付ファイルを読まれる | Redmine が権限を確認してから、有効期限 5 分の CloudFront 署名付き URL を発行する。バケットは公開せず、OAC を通した CloudFront からのアクセスだけを許可する | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
+| 署名付き URL が漏えいする | 有効期限は 5 分。ログに記録しない (下の「ログ」) | 下の「ログ」 |
+| 添付ファイルで悪意のあるコードを実行される (HTML、SVG) | 添付ファイルは、Redmine の標準と同じく Redmine のオリジンから、CloudFront のビヘイビア `/files/*` と `/tmp/*` (サムネイルと zip) を通して返され、Redmine が付けるのと同じ `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` と `X-Content-Type-Options: nosniff` が付く。sandbox の文書は不透明なオリジンになり、スクリプトも実行されないので、Redmine の Cookie を読むことも、Redmine を呼び出すこともできない。PDF 以外は、ダウンロードとして返す (`Content-Disposition: attachment`。Redmine の標準と同じ)。デプロイ後の確認で、ヘッダーを確認する ([testing.md](testing.md#checks-after-deployment)) | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
+| 送信者を偽装したメールで、チケットを作成される | DMARC に合格しないメール、迷惑メール、ウイルスを含むメールを破棄する。登録されていないアドレスからのメールを受け付けない | [mail.md](mail.md#spoofing-and-spam) |
+| webhook で、内部のアドレスにリクエストを送信させられる (SSRF) | `webhook_blocklist` で、プライベート、ループバック、リンクローカルのアドレスを拒否する | [lambda.md](lambda.md#rails-and-redmine-settings) |
+| 依存する gem やイメージに悪意のあるコードが混入する | digest と SHA256 で固定する、依存関係の脆弱性スキャン、GitHub Actions を SHA で固定する | 下の「サプライチェーン」 |
+| AWS の権限を昇格される | 関数ごとのロール、アクセス許可の境界、インフラの変更には承認が必要 | [iam.md](iam.md) |
+| 費用を発生させられる (大量のリクエスト) | 予約された同時実行、WAF のレート制限、CloudFront の定額料金プラン (WAF がブロックしたリクエストは使用量に含まれない) | 下の「AWS WAF」 |
+| インスタンス間でデータが混在する | 名前とロールをインスタンスごとに分け、対象を ARN で限定する | [deploy-config.md](deploy-config.md) |
 
 <a id="entry-point-cloudfront"></a>
 
-## 入口 (CloudFront)
+## エントリーポイント (CloudFront)
 
-| 項目 | 決めたこと |
+| 項目 | 決定事項 |
 | --- | --- |
-| HTTPS | ビューアーには HTTPS だけを許し、HTTP は HTTPS にリダイレクトする。TLS の最低のバージョンは、CloudFront のセキュリティポリシー `TLSv1.2_2021` |
-| 応答のヘッダー | すべてのビヘイビアに、CloudFront の AWS 管理の応答のヘッダーのポリシー `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`) を付ける。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので (`config/environments/production.rb`)、HSTS は CloudFront で付ける |
-| 添付ファイル | ビヘイビアの `/files/*` (添付ファイルを GET) と `/tmp/*` (サムネイルと zip を GET、`/tmp/incoming/` へのアップロードを PUT) は、OAC で添付ファイルのバケットに送り、CloudFront の署名付き URL を必須にする。どちらにも、ビューワーレスポンスの CloudFront Functions (`<instance>-attachment-headers`) が、sandbox の CSP と `nosniff`、署名付き URL のファイル名と種類を付ける ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
-| 関数 URL | OAC の署名がない要求は、関数が呼ばれる前に断られる ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
-| 要求の本文 | Redmine のビヘイビアでは 1 MB まで。超えたら Lambda@Edge が 413 を返す。`/tmp/incoming/` へのアップロードは、Lambda ではなく S3 に届き、アップロードの上限を超える本文は CloudFront Functions が断る ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
+| HTTPS | ビューワーには HTTPS だけを許可し、HTTP は HTTPS にリダイレクトする。TLS の最小バージョンは、CloudFront のセキュリティポリシー `TLSv1.2_2021` |
+| レスポンスヘッダー | すべてのビヘイビアに、CloudFront の AWS マネージドのレスポンスヘッダーポリシー `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`) を設定する。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので (`config/environments/production.rb`)、HSTS は CloudFront で付ける |
+| 添付ファイル | ビヘイビア `/files/*` (添付ファイルの GET) と `/tmp/*` (サムネイルと zip の GET、`/tmp/incoming/` へのアップロードの PUT) は、OAC で添付ファイル用バケットに転送し、CloudFront 署名付き URL を必須にする。どちらにも、ビューワーレスポンスの CloudFront Functions (`<instance>-attachment-headers`) が、sandbox の CSP と `nosniff`、署名付き URL のファイル名と種類を付ける ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
+| 関数 URL | OAC の署名がないリクエストは、関数が呼び出される前に拒否される ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
+| リクエスト本文 | Redmine のビヘイビアでは 1 MB まで。超えると Lambda@Edge が 413 を返す。`/tmp/incoming/` へのアップロードは、Lambda ではなく S3 に到達し、アップロードの上限を超える本文は CloudFront Functions が拒否する ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
 
-Content Security Policy などを自分で決めるポリシー (キャッシュ、オリジンリクエスト、レスポンスヘッダーのポリシー) は、定額プランの Business 以上でだけ使えます。ディストリビューションは AWS 管理のポリシーだけを使い、添付ファイルのヘッダーは、どのプランにも含まれる CloudFront Functions で付けます ([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。
+Content Security Policy などを独自に定義するポリシー (キャッシュ、オリジンリクエスト、レスポンスヘッダーのポリシー) は、定額料金プランのビジネスプラン以上でだけ使えます。ディストリビューションは AWS マネージドのポリシーだけを使い、添付ファイルのヘッダーは、どのプランにも含まれる CloudFront Functions で付けます ([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。
 
 <a id="aws-waf"></a>
 
 ## AWS WAF
 
-CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よくある攻撃と、回数の多すぎる要求を止めます。
+CloudFront に AWS WAF のウェブ ACL を関連付け、Redmine に到達する前に、よくある攻撃と、過剰なリクエストをブロックします。
 
 <a id="plan-and-cost"></a>
 
 ### プランと費用
 
-| 形 | WAF の費用 | ルールの数 | ログ | 向いているとき |
+| 構成 | WAF の費用 | ルール数 | ログ | 適した用途 |
 | --- | --- | --- | --- | --- |
-| CloudFront の定額プラン Free (既定) | 0 ドル (プランに含まれる) | 5 | なし。セキュリティのダッシュボードと、止めた要求のサンプルだけ | 少人数で、ログを残す決まりがないとき |
-| 定額プラン Pro | 月 15 ドル (CloudFront と WAF を含む) | 25 | CloudFront のアクセスログと WAF のログを、CloudWatch Logs に送れる (取り込みは含まれ、保存と検索は別料金) | ログを残したいとき。CAPTCHA、ヘッダーでのルール、止めたときの応答を変えたいとき |
-| 従量 | Web ACL 1 つで月 5 ドル、ルールか管理ルールのグループ 1 つで月 1 ドル、100 万件の要求で 0.60 ドル。下の 5 つのルールなら月 10 ドルほど | 上限なし | 送れる (別料金) | 定額プランの決まり (下記) に合わないとき |
+| CloudFront の定額料金プランの無料プラン (既定) | 0 ドル (プランに含まれる) | 5 | なし。セキュリティダッシュボードと、ブロックしたリクエストのサンプルだけ | 少人数で、ログの保持が求められていない場合 |
+| 定額料金プランのプロプラン | 月額 15 ドル (CloudFront と WAF を含む) | 25 | CloudFront のアクセスログと WAF ログを、CloudWatch Logs に送信できる (取り込みは含まれ、保存と検索は別料金) | ログを保持したい場合。CAPTCHA、ヘッダーによるルール、ブロック時のレスポンスのカスタマイズを使いたい場合 |
+| 従量課金 | ウェブ ACL 1 つで月額 5 ドル、ルールかマネージドルールグループ 1 つで月額 1 ドル、リクエスト 100 万件で 0.60 ドル。下の 5 つのルールなら月額 10 ドル程度 | 上限なし | 送信できる (別料金) | 定額料金プランの制約 (下記) に合わない場合 |
 
-定額プランには、いくつかの決まりがあります。Web ACL は外せず (外すには従量に戻す)、自分で作るルールのグループは使えないので、ルールを 1 つずつ置きます。Free のプランは 1 つのアカウントで 3 つまでで、この上限は上げられません。ほかのディストリビューションが使っている Web ACL や CloudFront Functions は、プランのディストリビューションに付けられないので、自分で用意する Web ACL (`cloudfront.webAclArn`) は、このディストリビューションだけで使います。キャッシュのビヘイビアは、Free で 5 つまでです (この設計は 4 つ)。
+定額料金プランには、いくつかの制約があります。ウェブ ACL は関連付けを解除できず (解除するには従量課金に戻す)、独自のルールグループは使えないので、ルールを 1 つずつ設定します。無料プランは 1 つのアカウントで 3 つまでで、この上限は引き上げられません。ほかのディストリビューションが使っているウェブ ACL や CloudFront Functions は、プランのディストリビューションに関連付けられないので、独自に用意するウェブ ACL (`cloudfront.webAclArn`) は、このディストリビューション専用にします。キャッシュビヘイビアは、無料プランで 5 つまでです (この設計は 4 つ)。
 
-Free では、CAPTCHA、JavaScript のチャレンジ、ヘッダーや正規表現で絞るルール、止めたときの応答を変えること、Bot Control は使えません。そこで、ログインの回数の制限は、正規表現ではなく、文字列の一致 (前方一致) でパスを選びます。Free と Pro では、WAF が中身を調べる本文は最初の 16 KB までです。
+無料プランでは、CAPTCHA、JavaScript のチャレンジ、ヘッダーや正規表現で絞り込むルール、ブロック時のレスポンスのカスタマイズ、Bot Control は使えません。そのため、ログインのレート制限は、正規表現ではなく、文字列の一致 (前方一致) でパスを指定します。無料プランとプロプランでは、WAF が検査する本文は最初の 16 KB までです。
 
-CloudFront の Web ACL は us-east-1 に作り、インスタンスの us-east-1 のスタック (`<instance>-edge`) に置きます ([deploy-config.md](deploy-config.md))。
+CloudFront のウェブ ACL は us-east-1 に作成し、インスタンスの us-east-1 のスタック (`<instance>-edge`) に置きます ([deploy-config.md](deploy-config.md))。
 
 <a id="rules"></a>
 
 ### ルール
 
-ルールは 5 つです (Free の上限)。上から順に当てます。既定の動きは「通す」です。
+ルールは 5 つです (無料プランの上限)。上から順に評価します。デフォルトアクションは「許可」です。
 
-| 順 | ルール | 内容 | 既定の値 | 動き |
+| 優先順位 | ルール | 内容 | 既定値 | アクション |
 | --- | --- | --- | --- | --- |
-| 1 | ログインの回数の制限 (rate-based) | `POST` で、パスが `/login`、`/account/lost_password`、`/account/register`、`/account/twofa` のどれかで始まるものを、IP アドレスごとに数える | 5 分で 20 回 | 止める |
-| 2 | 全体の回数の制限 (rate-based) | すべての要求を、IP アドレスごとに数える | 5 分で 1,000 回 | 止める |
-| 3 | AWS の管理ルール: Amazon IP Reputation List | 悪い評判の IP アドレス | — | 止める |
-| 4 | AWS の管理ルール: Known Bad Inputs | 知られた悪い入力 (Log4j の形など) | — | 止める |
-| 5 | AWS の管理ルール: Common Rule Set | よくある攻撃 (SQL インジェクション、XSS の典型、パスの書き換えなど) | — | 初めは数えるだけ。確認してから止める (下記) |
+| 1 | ログインのレート制限 (レートベース) | `POST` で、パスが `/login`、`/account/lost_password`、`/account/register`、`/account/twofa` のいずれかで始まるリクエストを、IP アドレスごとにカウントする | 5 分で 20 回 | ブロック |
+| 2 | 全体のレート制限 (レートベース) | すべてのリクエストを、IP アドレスごとにカウントする | 5 分で 1,000 回 | ブロック |
+| 3 | AWS マネージドルール: Amazon IP Reputation List | 評価の低い IP アドレス | — | ブロック |
+| 4 | AWS マネージドルール: Known Bad Inputs | 既知の不正な入力 (Log4j のパターンなど) | — | ブロック |
+| 5 | AWS マネージドルール: Common Rule Set | よくある攻撃 (SQL インジェクション、典型的な XSS、パストラバーサルなど) | — | 最初はカウントだけ。確認してからブロック (下記) |
 
-Redmine には、ログインの失敗の回数でアカウントを止める仕組みがありません (Redmine 7.0.3 のソースで確認)。そのため総当たりは、ログインの回数の制限と二要素認証で防ぎます。二要素認証のコードの試行は、Redmine 自身がパスワード 1 回につき 3 回までに抑えています。
+Redmine には、ログインの失敗回数でアカウントをロックする仕組みがありません (Redmine 7.0.3 のソースで確認)。そのため総当たり攻撃は、ログインのレート制限と二要素認証で防ぎます。二要素認証のコードの試行は、Redmine 自身がパスワード 1 回につき 3 回までに制限しています。
 
-回数の制限のルールは、1、2、5、10 分のどれかの時間で数え、回数の下限は 10 です。WAF は決めた回数の近くで止めますが、ちょうどの回数は約束していません (WAF の資料)。CloudFront を通るので、数える IP アドレスは利用者のものです。全体の回数の 1,000 回は起点の値です。Redmine の 1 画面は、アセットを除いて数件の要求で、アセットも CloudFront を通るので数に入ります。使い方を測って決め、社内からの要求が 1 つの IP アドレスにまとまる (NAT など) ときは上げます。
+レートベースのルールは、1、2、5、10 分のいずれかの期間でカウントし、しきい値の下限は 10 です。WAF は設定した回数の近くでブロックしますが、正確な回数は保証していません (WAF の資料)。CloudFront を経由するので、カウントする IP アドレスはユーザーのものです。全体の 1,000 回は初期値です。Redmine の 1 画面は、アセットを除いて数件のリクエストで、アセットも CloudFront を経由するので回数に含まれます。利用状況を計測して決め、社内からのリクエストが 1 つの IP アドレスにまとまる (NAT など) 場合は引き上げます。
 
-Common Rule Set を初めは数えるだけにするのは、Redmine の正しい要求を止めるルールがあるためです。`SizeRestrictions_BODY` (本文が 8 KB を超えると止める) は、wiki やチケットの長い本文を止め、`CrossSiteScripting_BODY` などは、wiki に書いたコードの例を止めることがあります。初めの 2 週間ほどはグループ全体を数えるだけにし、止めたはずの要求をダッシュボードで見て、当たったルールだけを数えるだけのまま残し、ほかを止める形にします。
+Common Rule Set を最初はカウントだけにするのは、Redmine の正当なリクエストをブロックするルールがあるためです。`SizeRestrictions_BODY` (本文が 8 KB を超えるとブロック) は、wiki やチケットの長い本文をブロックし、`CrossSiteScripting_BODY` などは、wiki に書いたコード例をブロックすることがあります。最初の 2 週間ほどはルールグループ全体をカウントだけにし、ブロックされるはずだったリクエストをダッシュボードで確認して、該当したルールだけをカウントのまま残し、ほかはブロックにします。
 
-国での遮断は Free でも使えますが、出張先などから使う人がいるので、既定では使いません。使うなら、ルールが 5 つを超えないように全体の回数の制限と入れ替えるか、Pro にします。Free で WAF が要求を止めると、WAF の既定の 403 を返します。
+国によるブロックは無料プランでも使えますが、出張先などから使うユーザーがいるので、既定では使いません。使う場合は、ルールが 5 つを超えないように全体のレート制限と入れ替えるか、プロプランにします。無料プランで WAF がリクエストをブロックすると、WAF のデフォルトの 403 を返します。
 
-WAF は、要求がオリジンに届く前に当たります。WAF が止めた要求では、Lambda@Edge も Lambda も呼ばれず、定額プランの使用量にも数えません (CloudFront の資料)。
+WAF は、リクエストがオリジンに到達する前に評価されます。WAF がブロックしたリクエストでは、Lambda@Edge も Lambda も呼び出されず、定額料金プランの使用量にも含まれません (CloudFront の資料)。
 
 <a id="monitoring"></a>
 
-### 見張り
+### 監視
 
-- **ダッシュボード:** CloudFront のセキュリティのダッシュボード (Free でも使える) で、止めた要求と、当たったルールを見ます。
-- **アラーム:** WAF の CloudWatch のメトリクス (ルールごとの止めた数) に、アラームを付けます。ログインの回数の制限が急に増えたら、総当たりを疑います。
-- **ログ:** Free には WAF のログがありません。事故を調べるのにログが要るときは、Pro にします (上の「プランと費用」)。
+- **ダッシュボード:** CloudFront のセキュリティダッシュボード (無料プランでも使える) で、ブロックしたリクエストと、該当したルールを確認します。
+- **アラーム:** WAF の CloudWatch メトリクス (ルール別のブロック数) に、アラームを設定します。ログインのレート制限が急に増えたら、総当たり攻撃を疑います。
+- **ログ:** 無料プランには WAF ログがありません。インシデントの調査にログが必要な場合は、プロプランにします (上の「プランと費用」)。
 
 <a id="settings"></a>
 
 ### 設定
 
-プラン、回数の制限、Common Rule Set を止めるかは、設定のファイルの `cloudfront.plan` と `waf.*` で、インスタンスごとに決めます ([deploy-config.md](deploy-config.md#fields-of-redminejson))。
+プラン、レート制限、Common Rule Set をブロックにするかは、設定ファイルの `cloudfront.plan` と `waf.*` で、インスタンスごとに決めます ([deploy-config.md](deploy-config.md#fields-of-redminejson))。
 
 <a id="redmine-settings"></a>
 
 ## Redmine の設定
 
-設定のファイルの `redmine.settings` (初めて立てたときに入れる値。[deploy-config.md](deploy-config.md)) で、次の値を初めの値にします。
+設定ファイルの `redmine.settings` (初回のデプロイで設定する値。[deploy-config.md](deploy-config.md)) で、次の値を初期値にします。
 
-| 設定 (Redmine の画面の名前) | 値 | 理由 |
+| 設定 (Redmine の画面での名前) | 値 | 理由 |
 | --- | --- | --- |
-| 認証が必要 (`login_required`) | 有効 | ログインしていない人に見せない。`/robots.txt` も、すべてを拒む |
-| ユーザーによるアカウント登録 (`self_registration`) | 無効 | 知らない人がアカウントを作れないようにする (Redmine の既定は、管理者の承認での登録) |
-| 二要素認証 (`twofa`) | システム管理者のみ必須 (できれば必須) | 管理者のアカウントが、パスワードだけで破られないようにする |
-| パスワードの最低必要文字数 (`password_min_length`) | 12 (Redmine の既定は 8) | 総当たりへの備え |
-| 無操作タイムアウト、有効期間の最大値 (`session_timeout`、`session_lifetime`) | 決めた時間にする (Redmine の既定は無効) | 置き忘れた端末のセッションを長く残さない |
-| RESTによるWebサービスを有効にする (`rest_api_enabled`) | 使うときだけ有効 | 使わないなら、API キーでの操作を受けない (Redmine の既定も無効) |
-| JSONPを有効にする (`jsonp_enabled`) | 無効 | 別のオリジンから API の応答を読ませない |
-| 禁止する拡張子 (`attachment_extensions_denied`) | 実行できるファイル (`exe`、`bat` など) を、使う側で決める | 添付ファイルで悪いファイルを配らせない |
+| 認証が必要 (`login_required`) | 有効 | ログインしていないユーザーに表示しない。`/robots.txt` も、すべてを拒否する |
+| ユーザーによるアカウント登録 (`self_registration`) | 無効 | 不特定のユーザーがアカウントを作成できないようにする (Redmine の既定は、管理者の承認による登録) |
+| 二要素認証 (`twofa`) | システム管理者のみ必須 (できれば必須) | 管理者アカウントが、パスワードだけで侵害されないようにする |
+| パスワードの最低必要文字数 (`password_min_length`) | 12 (Redmine の既定は 8) | 総当たり攻撃への対策 |
+| 無操作タイムアウト、有効期間の最大値 (`session_timeout`、`session_lifetime`) | 決めた時間にする (Redmine の既定は無効) | 放置された端末のセッションを長く残さない |
+| RESTによるWebサービスを有効にする (`rest_api_enabled`) | 使う場合だけ有効 | 使わないなら、API キーによる操作を受け付けない (Redmine の既定も無効) |
+| JSONPを有効にする (`jsonp_enabled`) | 無効 | 別のオリジンから API のレスポンスを読ませない |
+| 禁止する拡張子 (`attachment_extensions_denied`) | 実行可能ファイル (`exe`、`bat` など) を、導入者が決める | 添付ファイルで有害なファイルを配布させない |
 
-デプロイしたらすぐに、初めの管理者 (`admin`、パスワードも `admin`) のパスワードを変え、二要素認証を設定します。このアカウントを使わないなら、別の管理者を作ってからロックします。Lambda で使えない設定 (リポジトリと受信メールの Web サービス) は、プラグインが無効に固定します ([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
+デプロイしたらすぐに、初期の管理者 (`admin`、パスワードも `admin`) のパスワードを変更し、二要素認証を設定します。このアカウントを使わない場合は、別の管理者を作成してからロックします。Lambda で使えない設定 (リポジトリと受信メールの Web サービス) は、プラグインが無効に固定します ([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
 
 <a id="aws-accounts-and-permissions"></a>
 
-## AWS のアカウントと権限
+## AWS アカウントと権限
 
-- **権限:** ロールと権限の詳しい内容は [iam.md](iam.md) にあります。関数ごとのロール、権限の境界、インフラの変更の承認、アクセスキーを作らないことが要点です。
-- **アカウントの守り:** root のユーザーには MFA を付け、ふだんは使いません。人は IAM Identity Center (SSO) で、MFA を付けて入ります。
-- **S3:** アカウントとバケットの両方で、パブリックアクセスのブロックを有効にします。バケットポリシーで、TLS でない要求を断ります ([iam.md](iam.md#resource-based-policies))。
-- **見張り:** CloudTrail (管理のイベント) をアカウントで有効にし、IAM Access Analyzer で外から使えるリソースがないかを見ます。GuardDuty は、アカウントで有効にすることを勧めます (費用は、作るときに確認する)。
+- **権限:** ロールと権限の詳細は [iam.md](iam.md) にあります。関数ごとのロール、アクセス許可の境界、インフラの変更の承認、アクセスキーを作成しないことが要点です。
+- **アカウントの保護:** root ユーザーには MFA を設定し、通常は使いません。人は IAM Identity Center (SSO) で、MFA を使ってサインインします。
+- **S3:** アカウントとバケットの両方で、パブリックアクセスブロックを有効にします。バケットポリシーで、TLS を使わないリクエストを拒否します ([iam.md](iam.md#resource-based-policies))。
+- **監視:** CloudTrail (管理イベント) をアカウントで有効にし、IAM Access Analyzer で外部からアクセスできるリソースがないかを確認します。GuardDuty は、アカウントで有効にすることを推奨します (費用は、構築時に確認する)。
 
 <a id="protecting-data"></a>
 
-## データの守り
+## データの保護
 
-| データ | 保存のときの暗号化 | 通信の暗号化 | バックアップ |
+| データ | 保存時の暗号化 | 転送時の暗号化 | バックアップ |
 | --- | --- | --- | --- |
-| RDS for PostgreSQL | 保存時の暗号化 (AWS の管理する鍵) | TLS を強制する (`rds.force_ssl`)。関数は証明書を確認する (`verify-full`) | 自動バックアップ (ある時点に戻せる)。削除の保護を有効にする |
-| S3 (添付ファイル、メール、アセット) | SSE-S3 | TLS だけを許す | 添付ファイルのバケットはバージョニング。消しても、決めた期間は戻せる |
-| SSM Parameter Store | SecureString (`aws/ssm` の鍵) | TLS | 秘密の値は、`bin/deploy` が初めて作る。作り直しの手順は下の「事故のとき」 |
-| CloudWatch Logs | 既定で暗号化される | TLS | 下の「保持の期間」 |
+| RDS for PostgreSQL | 保存時の暗号化 (AWS マネージドキー) | TLS を強制する (`rds.force_ssl`)。関数は証明書を検証する (`verify-full`) | 自動バックアップ (ポイントインタイムリカバリ)。削除保護を有効にする |
+| S3 (添付ファイル、メール、アセット) | SSE-S3 | TLS だけを許可する | 添付ファイル用バケットはバージョニング。削除しても、決めた期間は復元できる |
+| SSM Parameter Store | SecureString (`aws/ssm` のキー) | TLS | シークレットは、`bin/deploy` が初回に作成する。再作成の手順は下の「インシデント対応」 |
+| CloudWatch Logs | デフォルトで暗号化される | TLS | 下の「保持期間」 |
 
-バックアップから、別の DB インスタンスとバケットに戻す練習を、定期的に行います。戻せることを確認していないバックアップは、当てにしません。
+バックアップから、別の DB インスタンスとバケットに復元する訓練を、定期的に行います。復元できることを確認していないバックアップは、当てにしません。
 
 <a id="retention-periods"></a>
 
-## 保持の期間
+## 保持期間
 
-ログ、記録、仮のファイル、バックアップを残す期間です。すべての期間を、ここで決めます。ほかの資料の期間は、この表に合わせます。設定のファイルの項目があるものは、インスタンスごとに変えられます ([deploy-config.md](deploy-config.md#fields-of-redminejson))。
+ログ、記録、一時ファイル、バックアップの保持期間です。すべての期間を、ここで決めます。ほかの資料の期間は、この表に合わせます。設定ファイルに項目があるものは、インスタンスごとに変更できます ([deploy-config.md](deploy-config.md#fields-of-redminejson))。
 
-| 対象 | 期間 (既定) | 消し方 | 設定のファイルの項目 |
+| 対象 | 期間 (既定) | 削除の方法 | 設定ファイルの項目 |
 | --- | --- | --- | --- |
-| CloudWatch Logs (`redmine-web`、`redmine-worker`、`redmine-task`) | 90 日 | ロググループの保持の設定。ロググループは CloudFormation で先に作る | `logs.retentionDays` |
-| CloudWatch Logs (Lambda@Edge の `redmine-body-hash`) | 90 日 | Lambda@Edge は、動いたリージョンごとに、ロググループを自動で作る。CloudFormation では先に作れないので、`bin/deploy` が、すべてのリージョンのロググループに保持の設定を当てる (作られたあとのものにも、デプロイのたびに当て直す) | `logs.retentionDays` |
-| CloudWatch Logs (Session Manager。NAT インスタンスの形だけ) | 90 日 | ロググループの保持の設定 | `logs.retentionDays` |
-| CloudTrail (管理のイベント) | 1 年 (案) | 証跡を置く S3 のバケットのライフサイクル。アカウントの決まりがあれば、それに従う。CloudTrail のイベントの履歴 (90 日) は、AWS が決めている | アカウントの土台で決める (この設計の外) |
-| 受け取ったメールの記録 (`serverless_received_mails`) | 90 日 | 毎日の定期の rake で消す ([tasks.md](tasks.md#scheduled-runs)) | `retention.recordsDays` |
+| CloudWatch Logs (`redmine-web`、`redmine-worker`、`redmine-task`) | 90 日 | ロググループの保持設定。ロググループは CloudFormation で先に作成する | `logs.retentionDays` |
+| CloudWatch Logs (Lambda@Edge の `redmine-body-hash`) | 90 日 | Lambda@Edge は、実行されたリージョンごとに、ロググループを自動で作成する。CloudFormation では先に作成できないので、`bin/deploy` が、すべてのリージョンのロググループに保持設定を適用する (作成されたあとのものにも、デプロイのたびに適用し直す) | `logs.retentionDays` |
+| CloudWatch Logs (Session Manager。NAT インスタンス構成だけ) | 90 日 | ロググループの保持設定 | `logs.retentionDays` |
+| CloudTrail (管理イベント) | 1 年 (案) | 証跡を保存する S3 バケットのライフサイクル。アカウントの規定があれば、それに従う。CloudTrail のイベント履歴 (90 日) は、AWS が決めている | アカウントの基盤で決める (この設計の対象外) |
+| 受信したメールの記録 (`serverless_received_mails`) | 90 日 | 毎日の定期 rake で削除する ([tasks.md](tasks.md#scheduled-runs)) | `retention.recordsDays` |
 | 失敗したジョブの記録 (`serverless_job_failures`) | 90 日 | 同上 | `retention.recordsDays` |
-| 取り込んだメール (`processed/`) | 30 日 | S3 のライフサイクル | `retention.mailDays` |
-| 取り込まなかったメール (`inbound/` に残ったもの。捨てたもの、失敗したもの) | 30 日 | S3 のライフサイクル。取り込み直しは、この期間のうちに行う | `retention.mailDays` |
-| SQS のデッドレターキュー | 14 日 | SQS のメッセージの保持 (SQS の上限) | — |
-| 添付ファイルの古いバージョン (消したものと、上書きされたもの) | 30 日 | S3 のライフサイクル (古いバージョンを消す) | `retention.noncurrentVersionDays` |
-| 仮のファイル (`tmp/`。一括のダウンロードの zip、読み書きの確認) | 1 日 | S3 のライフサイクル | — |
-| 登録の前のアップロード (`tmp/incoming/`) | 1 日 | S3 のライフサイクル | — |
-| CSV のインポートのファイル (`imports/`) | 7 日 | S3 のライフサイクル | — |
-| 古いアセット | 90 日 | S3 のライフサイクル (古いバージョンを消す) | — |
-| ECR のイメージ | 新しいものから 10 個 | ECR のライフサイクル。関数が使っているイメージは消さない ([lambda.md](lambda.md#image)) | — |
-| RDS の自動バックアップ | 7 日 | DB インスタンスのバックアップの保持の期間 ([rds.md](rds.md#settings)) | `retention.backupDays` |
-| WAF のサンプルの要求 | AWS が決めた期間 (直近の数時間。作るときに確認する) | — | — |
+| 取り込んだメール (`processed/`) | 30 日 | S3 ライフサイクル | `retention.mailDays` |
+| 取り込まなかったメール (`inbound/` に残ったもの。破棄したもの、失敗したもの) | 30 日 | S3 ライフサイクル。取り込みのやり直しは、この期間内に行う | `retention.mailDays` |
+| SQS のデッドレターキュー | 14 日 | SQS のメッセージ保持期間 (SQS の上限) | — |
+| 添付ファイルの以前のバージョン (削除したものと、上書きされたもの) | 30 日 | S3 ライフサイクル (以前のバージョンを削除する) | `retention.noncurrentVersionDays` |
+| 一時ファイル (`tmp/`。一括ダウンロードの zip、読み書きテスト) | 1 日 | S3 ライフサイクル | — |
+| 登録前のアップロード (`tmp/incoming/`) | 1 日 | S3 ライフサイクル | — |
+| CSV インポートのファイル (`imports/`) | 7 日 | S3 ライフサイクル | — |
+| 古いアセット | 90 日 | S3 ライフサイクル (以前のバージョンを削除する) | — |
+| ECR イメージ | 新しいものから 10 個 | ECR のライフサイクル。関数が使っているイメージは削除しない ([lambda.md](lambda.md#image)) | — |
+| RDS の自動バックアップ | 7 日 | DB インスタンスのバックアップ保持期間 ([rds.md](rds.md#settings)) | `retention.backupDays` |
+| WAF のサンプルリクエスト | AWS が決めた期間 (直近の数時間。構築時に確認する) | — | — |
 
-事故のときは、調べ終わるまで、これらの期間で消えないようにします (下の「事故のとき」)。期間を短くしすぎないことも大事です。ログと記録は事故に気づくまでの時間より長く残し、90 日より短くするときは、その時間を見積もってから決めます。ログと記録には、利用者のメールアドレスと IP アドレスが入ります。使う側の決まりで残せる期間に上限があれば、それに合わせて短くします。
+インシデントの発生時は、調査が終わるまで、これらの期間で削除されないようにします (下の「インシデント対応」)。期間を短くしすぎないことも重要です。ログと記録はインシデントに気づくまでの時間より長く保持し、90 日より短くするときは、その時間を見積もってから決めます。ログと記録には、ユーザーのメールアドレスと IP アドレスが含まれます。導入者の規定で保持できる期間に上限があれば、それに合わせて短くします。
 
 <a id="logs"></a>
 
 ## ログ
 
-- **署名付き URL を残さない:** Rails は、リダイレクトの先の URL をログに書きます。添付ファイルのダウンロードの署名付き URL がログに残ると、ログを読める人が、期限のあいだ添付ファイルを読めます。Rails の設定 `config.filter_redirect` にパスの `/files/`、`/thumbnails/`、`/tmp/bulk/` を入れ、ログには `[FILTERED]` と書かせます ([lambda.md](lambda.md#rails-and-redmine-settings))。
-- **パラメーターを伏せる:** Redmine は、`password`、`salt`、`twofa_totp_key`、`key` のパラメーターを、ログで伏せます (`config/application.rb` の `filter_parameters`)。プラグインが足す画面のパラメーターも、秘密のものは同じく伏せます。
-- **IP アドレス:** CloudFront を通るので、Redmine には `X-Forwarded-For` で利用者の IP アドレスが届きます。Rails の `remote_ip` が、CloudFront の IP アドレスではなく利用者の IP アドレスを返すか (信頼するプロキシの設定) は、作るときに確認します。
-- **見る人を絞る:** ログを読める権限は、運用する人だけにします ([iam.md](iam.md#permissions-of-people))。
+- **署名付き URL を記録しない:** Rails は、リダイレクト先の URL をログに書き込みます。添付ファイルのダウンロードの署名付き URL がログに残ると、ログを読める人が、有効期限のあいだ添付ファイルを読めます。Rails の設定 `config.filter_redirect` にパス `/files/`、`/thumbnails/`、`/tmp/bulk/` を指定し、ログには `[FILTERED]` と書き込ませます ([lambda.md](lambda.md#rails-and-redmine-settings))。
+- **パラメーターをマスクする:** Redmine は、`password`、`salt`、`twofa_totp_key`、`key` のパラメーターを、ログでマスクします (`config/application.rb` の `filter_parameters`)。プラグインが追加する画面のパラメーターも、機密性のあるものは同じくマスクします。
+- **IP アドレス:** CloudFront を経由するので、Redmine には `X-Forwarded-For` でユーザーの IP アドレスが渡されます。Rails の `remote_ip` が、CloudFront の IP アドレスではなくユーザーの IP アドレスを返すか (信頼するプロキシの設定) は、構築時に確認します。
+- **閲覧者を限定する:** ログを読む権限は、運用担当者だけに付与します ([iam.md](iam.md#permissions-of-people))。
 
 <a id="supply-chain"></a>
 
-## 供給網
+## サプライチェーン
 
-| 対象 | 守り |
+| 対象 | 対策 |
 | --- | --- |
-| 土台のイメージ、Lambda Web Adapter | タグではなく digest で参照する ([AGENTS.md](../../AGENTS.md)) |
+| ベースイメージ、Lambda Web Adapter | タグではなく digest で参照する ([AGENTS.md](../../AGENTS.md)) |
 | Redmine、Pandoc | ダウンロードしたファイルの SHA256 を確認する |
-| gem | `Gemfile.lock` で固定する。CI で、知られた弱点がないかを調べる (`bundler-audit`) |
-| イメージ | CI で、イメージの中の OS のパッケージと gem の知られた弱点を調べる (Trivy など)。重い弱点があれば、デプロイしない |
+| gem | `Gemfile.lock` で固定する。CI で、既知の脆弱性がないかをスキャンする (`bundler-audit`) |
+| イメージ | CI で、イメージ内の OS パッケージと gem の既知の脆弱性をスキャンする (Trivy など)。重大な脆弱性があれば、デプロイしない |
 | GitHub Actions | 使うアクションを、タグではなくコミットの SHA で固定する |
-| Lambda@Edge の関数 | 依存の npm のパッケージを使わない (`node:crypto` だけ) |
-| 配布するイメージとプラグイン | 使う側は、イメージを digest で参照する。プラグインの gem は、バージョンとチェックサムを `image/Gemfile.lock` で固定する ([architecture.md](architecture.md#distribution)) |
+| Lambda@Edge 関数 | 依存する npm パッケージを使わない (`node:crypto` だけ) |
+| 配布するイメージとプラグイン | 導入者は、イメージを digest で参照する。プラグインの gem は、バージョンとチェックサムを `image/Gemfile.lock` で固定する ([architecture.md](architecture.md#distribution)) |
 
-Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md) の確認を通してから行います。
+Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md) の確認を経てから行います。
 
 <a id="remaining-risks"></a>
 
-## 残るリスク
+## 残存リスク
 
 この設計では防ぎきれず、運用で補うものです。
 
-| リスク | 理由 | 補う方法 |
+| リスク | 理由 | 対処 |
 | --- | --- | --- |
-| Redmine の弱点 | Redmine と Rails の弱点は、バージョンアップするまで残る | Redmine のセキュリティの通知を見て、早めにバージョンアップする。WAF で一部を防ぐ |
-| ログインの総当たり | Redmine に、失敗の回数でアカウントを止める仕組みがない | WAF の回数の制限と、二要素認証 |
-| NAT インスタンスを通る外への通信 | NAT インスタンスの形では、関数がインターネットに出られる | 乗っ取られないことに力を入れる (上の守り)。外への通信を止める必要があれば、VPC のエンドポイントの形にする ([rds.md](rds.md#which-to-choose)) |
-| データベースのパスワード | 一時的な認証情報と違い、パスワードはひとりでには切れない | SSM (SecureString) と RDS にだけ置き、RDS には VPC の中からしか届かない。事故のときは変える (下記) |
-| 添付ファイルのウイルス | Redmine は添付ファイルを検査しない | `tmp/incoming/` と `imports/` に GuardDuty Malware Protection for S3 を使い、`REDMINE_S3_MALWARE_SCAN=true` にする。プラグインは、問題がないとわかったファイルだけを使う ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#malware-scan)、費用も) |
-| CloudFront と WAF のログがない | 定額プラン Free に、ログが含まれない | Lambda のログと、セキュリティのダッシュボードで見る。足りなければ Pro にする |
+| Redmine の脆弱性 | Redmine と Rails の脆弱性は、バージョンアップするまで残る | Redmine のセキュリティ情報を確認して、早めにバージョンアップする。WAF で一部を防ぐ |
+| ログインの総当たり攻撃 | Redmine に、失敗回数でアカウントをロックする仕組みがない | WAF のレート制限と、二要素認証 |
+| NAT インスタンスを経由する外部への通信 | NAT インスタンス構成では、関数がインターネットにアクセスできる | 侵害されないことに注力する (上の対策)。外部への通信を止める必要があれば、VPC エンドポイント構成にする ([rds.md](rds.md#which-to-choose)) |
+| データベースパスワード | 一時的な認証情報と違い、パスワードは自動では失効しない | SSM (SecureString) と RDS にだけ保存し、RDS には VPC 内からしか接続できない。インシデントの発生時は変更する (下記) |
+| 添付ファイルのウイルス | Redmine は添付ファイルをスキャンしない | `tmp/incoming/` と `imports/` に GuardDuty Malware Protection for S3 を使い、`REDMINE_S3_MALWARE_SCAN=true` にする。プラグインは、問題がないと判定されたファイルだけを使う ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#malware-scan)、費用も) |
+| CloudFront と WAF のログがない | 定額料金プランの無料プランに、ログが含まれない | Lambda のログと、セキュリティダッシュボードで確認する。不足する場合はプロプランにする |
 
 <a id="incidents"></a>
 
-## 事故のとき
+## インシデント対応
 
-1. **止める:** `redmine-web` と `redmine-worker` の同時実行数の予約を 0 にし、外からの操作を止めます (CloudFront が保守の画面を返す。[deploy-config.md](deploy-config.md#deployment-commands))。メールの受信を止めるときは、SES の受信のルールを無効にします。
-2. **残す:** CloudTrail、CloudWatch Logs、S3 のバージョン、プラグインの記録を、消さずに残します。調べ終わるまで、上の「保持の期間」で消えないように、ロググループの保持の設定と S3 のライフサイクルを止め、定期の rake の記録の削除も止めます。
-3. **入れ替える:**
-   - `SECRET_KEY_BASE` を作り直します (SSM のパラメーターを新しい値にして、関数を更新する)。セッションの Cookie が無効になり、利用者はログインし直します。
-   - データベースのパスワードを変えます (RDS と SSM のパラメーターに新しい値を設定して、関数を更新する)。
-   - 漏れたおそれのある利用者のパスワードと API キーを、作り直してもらいます。管理者のアカウントを確認します。
-   - AWS の側では、関わったロールのセッションを無効にします (IAM の「セッションを取り消す」)。
-4. **戻す:** データが壊されたときは、RDS の自動バックアップ (ある時点に戻す) と S3 のバージョンから戻します (上の「データの守り」)。
-5. **通知:** 使う側の決まりと法令に従って、利用者や関係する人に通知します。
+1. **停止:** `redmine-web` と `redmine-worker` の予約された同時実行を 0 にし、外部からの操作を止めます (CloudFront がメンテナンス画面を返す。[deploy-config.md](deploy-config.md#deployment-commands))。メール受信を止めるときは、SES の受信ルールを無効にします。
+2. **保全:** CloudTrail、CloudWatch Logs、S3 のバージョン、プラグインの記録を、削除せずに残します。調査が終わるまで、上の「保持期間」で削除されないように、ロググループの保持設定と S3 ライフサイクルを停止し、定期 rake による記録の削除も止めます。
+3. **認証情報の更新:**
+   - `SECRET_KEY_BASE` を再生成します (SSM パラメーターを新しい値にして、関数を更新する)。セッション Cookie が無効になり、ユーザーは再ログインします。
+   - データベースパスワードを変更します (RDS と SSM パラメーターに新しい値を設定して、関数を更新する)。
+   - 漏えいしたおそれのあるユーザーのパスワードと API キーを、再発行してもらいます。管理者アカウントを確認します。
+   - AWS 側では、関係したロールのセッションを無効にします (IAM の「セッションを取り消す」)。
+4. **復旧:** データが破壊されたときは、RDS の自動バックアップ (ポイントインタイムリカバリ) と S3 のバージョンから復元します (上の「データの保護」)。
+5. **通知:** 導入者の規定と法令に従って、ユーザーや関係者に通知します。
 
 <a id="to-verify"></a>
 
 ## 未確認の事項
 
-- `config.filter_redirect` で、CloudFront の署名付き URL へのリダイレクトがログに残らないか
-- プランの機能の表と照らした構成を、CloudFront が定額プラン Free で受け付けるか ([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。AWS 管理のルールグループが WAF のルール 5 つのうち 1 つと数えられるか、AWS 管理のルールグループに範囲の絞り込み (scope-down) を付けられるか
-- WAF の Common Rule Set のうち、Redmine の正しい要求を止めるルール (本文の大きさ、XSS の形など)
-- Rails の `remote_ip` が、CloudFront を通った要求で、利用者の IP アドレスになるか
-- GuardDuty と、S3 のマルウェアの検査の費用
-- `bin/deploy` が、デプロイ用のロールで、すべてのリージョンの Lambda@Edge のロググループに保持の設定を当てられるか (そのロググループへの `logs:PutRetentionPolicy`、`logs:DescribeLogGroups`、`ec2:DescribeRegions`。[iam.md](iam.md#role-for-deploying-infrastructure))
-- WAF のサンプルの要求を見られる期間
+- `config.filter_redirect` で、CloudFront 署名付き URL へのリダイレクトがログに残らないか
+- プランの機能の表と照らした構成を、CloudFront が定額料金プランの無料プランで受け付けるか ([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。AWS マネージドルールグループが WAF のルール 5 つのうち 1 つとして数えられるか、AWS マネージドルールグループにスコープダウンステートメントを設定できるか
+- WAF の Common Rule Set のうち、Redmine の正当なリクエストをブロックするルール (本文のサイズ、XSS のパターンなど)
+- Rails の `remote_ip` が、CloudFront を経由したリクエストで、ユーザーの IP アドレスになるか
+- GuardDuty と、S3 のマルウェアスキャンの費用
+- `bin/deploy` が、デプロイ用ロールで、すべてのリージョンの Lambda@Edge のロググループに保持設定を適用できるか (そのロググループへの `logs:PutRetentionPolicy`、`logs:DescribeLogGroups`、`ec2:DescribeRegions`。[iam.md](iam.md#role-for-deploying-infrastructure))
+- WAF のサンプルリクエストを確認できる期間

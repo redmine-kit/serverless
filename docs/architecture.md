@@ -144,8 +144,6 @@ Extensions for Lambda and AWS are the project's own plugins, built with Redmine'
 
 S3 attachments, mail through SES, jobs on SQS and the SSM settings also work outside Lambda; jobs then run with the gem's poller instead of a Lambda event source. Separate plugins let a Redmine on an ordinary server use one of them without the parts for Lambda. On Lambda, the image installs all five, because Lambda cannot write to the file system and has no mailbox.
 
-A GitHub repository search found no Redmine plugin named `redmine_serverless` (2026-11-08; the only hit was an unrelated Slack bot). The names of the S3, SES, SQS and SSM plugins have not been checked yet.
-
 ### Features
 
 The features of each plugin and their enabling conditions are in the documentation of each plugin (the table above).

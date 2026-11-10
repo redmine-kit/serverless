@@ -36,7 +36,7 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 
 GitHub Actions も同じ `bin/test` の手順を順に呼び出すので、ローカルと CI でテストの方法は変わりません。CI の実行順序 (下記) の途中で失敗したらそこで止まり、テストに通らないものはデプロイしません。
 
-`bin/test` にまとめるまでは、ここまでに作った手順は個別のスクリプトです。`bin/lint` (静的解析)、`bin/test-services` (PostgreSQL、moto、LocalStack を起動し、それぞれが応答するか確認する)、`bin/build-image`、`bin/test-image` (イメージテスト)、`bin/test-core` (Redmine 本体のテスト)、`bin/update-gems` (`image/Gemfile.lock` を書き出す) です。
+`bin/test` にまとめるまでは、ここまでに作った手順は個別のスクリプトです。`bin/lint` (静的解析)、`bin/test-services` (PostgreSQL、moto、LocalStack を起動し、それぞれが応答するか確認する)、`bin/build-image`、`bin/test-image` (イメージテスト)、`bin/build-derived-image` (プラグインとテーマを追加した派生イメージ)、`bin/test-core` (Redmine 本体のテスト)、`bin/update-gems` (`image/Gemfile.lock` を書き出す) です。
 
 <a id="working-on-a-plugin-at-the-same-time"></a>
 
@@ -194,6 +194,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 - **`task`:** ベースイメージにあるランタイムインターフェイスエミュレーター (`aws-lambda-rie`) でハンドラーを呼び出し、`rake db:migrate`、`redmine:load_default_data`、`rake -T`、`rails runner` が動くこと、失敗したタスクが終了コードを返すこと、許可していないコマンドと `env` の名前を拒否することを確認します。メールの取り込みは、プラグインと一緒に追加します。
 - **`worker`:** 同じくエミュレーターで実行します。ジョブをキューに送信して受信し、そのメッセージの受信ハンドルを付けた SQS 形式のイベントで worker に渡します。呼び出しが成功すること、ジョブが実行されること (プロジェクトが削除され、その通知メールが SQS に追加される)、worker がメッセージを削除すること (処理中のメッセージが残らない。`redmine_serverless_sqs` は `REDMINE_JOBS_QUEUE_URL` で削除する。[setup.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/setup.html))、許可していないジョブクラスが実行されないことを確認します。
 - **内容:** ImageMagick の `convert`、Ghostscript、Pandoc (3.8.3 以上) が動くこと、`/var/task` と `/opt` のすべてを非特権ユーザーが読めること、ビルドしたアセットがあることを確認します。タスクハンドラーの単体テストも、イメージ内で実行します。push したマニフェストが arm64 だけで、インデックス形式になっていないかは、イメージを push するときに確認します。
+- **派生イメージ:** `bin/test-image <イメージ> <redmine.json>` は、`image.plugins` と `image.themes` の派生イメージ ([architecture.md](architecture.md#derived-images)) に同じテストを実行し、追加したプラグインが読み込まれてマイグレーション済みであること、追加したテーマが見つかり、そのアセットがコンパイル済みであることも確認します。`bin/deploy` は、派生イメージをプッシュする前にこれを実行します。CI では、Redmine のリリースのイメージのジョブが、ビルドしたばかりのイメージをベースに `test/derived/redmine.json` の派生イメージをビルドしてテストします。GitHub Packages の gem、コミットを指定した Git のプラグイン、ディレクトリのプラグインとテーマ (`test/derived/`)、プラグインの設定を含みます。
 
 <a id="edge-function-tests"></a>
 
@@ -212,9 +213,9 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 
 `bin/test-deploy` が、AWS を使わずに、`bin/deploy` のツールイメージ内で `bin/deploy` をテストします。
 
-- **スキーマ:** [deploy-config.md](deploy-config.md#example) の例と、`test/deploy/valid/` のファイルが検証に通ること。`test/deploy/invalid/` のファイルが、どれも通らないこと (項目がない、`route53` なのにホストゾーンがない、digest のないイメージ、未知の項目など)。
+- **スキーマ:** [deploy-config.md](deploy-config.md#example) の例、`test/deploy/valid/` のファイル、`test/derived/redmine.json` が検証に通ること。`test/deploy/invalid/` のファイルが、どれも通らないこと (項目がない、`route53` なのにホストゾーンがない、digest のないイメージ、未知の項目、取得元が 2 つあるプラグイン、`ref` のない Git の取得元、URL 内の認証情報など)。
 - **スタックパラメーター:** 正しい設定のそれぞれで、`deploy/params.jq` がテンプレートごとに作るパラメーターが、そのテンプレートのパラメーターであり、デフォルト値のないパラメーターがすべて渡されること。デフォルト値と、渡した値も比較します。
-- **手順:** すべての呼び出しを記録するフェイクの `aws`、`crane`、`curl` (`test/deploy/fake/`) に対して、`deploy/deploy.sh` を実行します。初回と 2 回目以降の手順の順序 (web と worker が新しいイメージになる前に、タスクがマイグレーションを実行する)、`--dry-run` (何も実行せず、書き込まず、呼び出さない)、`--code-only`、`--account`、変更のないスタック、デプロイを止めるマイグレーションの失敗、確認の失敗、どの呼び出しよりも前に止まる不正な設定。秘密の値は、形式、SecureString であること、スタックの公開鍵が秘密鍵と一致すること、コマンドラインにも出力にも表示されないことを確認します。
+- **手順:** すべての呼び出しを記録するフェイクの `aws`、`crane`、`curl` (`test/deploy/fake/`) に対して、`deploy/deploy.sh` を実行します。初回と 2 回目以降の手順の順序 (web と worker が新しいイメージになる前に、タスクがマイグレーションを実行する)、`--dry-run` (何も実行せず、書き込まず、呼び出さない)、`--code-only`、`--account`、変更のないスタック、デプロイを止めるマイグレーションの失敗、確認の失敗、どの呼び出しよりも前に止まる不正な設定。`image.plugins` と `image.themes` があれば、レジストリからコピーする代わりに派生イメージの tarball を digest でプッシュすること、tarball がなければ手順を実行しないこと。秘密の値は、形式、SecureString であること、スタックの公開鍵が秘密鍵と一致すること、コマンドラインにも出力にも表示されないことを確認します。
 - **設定のコード:** 設定を適用する Ruby のコードを、Redmine の `Setting` の代替オブジェクトに対して Ruby で実行します (`initial` と `enforce`、プラグインの設定のマージ)。
 
 <a id="lambda-integration-tests"></a>
@@ -296,7 +297,7 @@ flowchart TD
   a --> d["デプロイ<br>(bin/test-deploy)"]
   a --> s["サービス<br>(bin/test-services)"]
   a --> c["Redmine 本体のテスト<br>(bin/test-core)"]
-  a --> i["イメージ: ビルド、イメージテスト、<br>Lambda のテスト<br>(bin/test-image、bin/test-lambda)"]
+  a --> i["イメージ: ビルド、イメージテスト、<br>派生イメージ、Lambda のテスト<br>(bin/test-image、bin/test-lambda)"]
   s --> p["イメージの公開<br>(main だけ)"]
   c --> p
   i --> p

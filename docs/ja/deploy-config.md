@@ -83,8 +83,10 @@ Lambda@Edge 関数のほかに、CloudFront の証明書 (ACM) も us-east-1 に
 | `waf.rateLimit` | | 1000 | WAF の全体のリクエスト数制限 (5 分あたり) |
 | `waf.commonRuleSet` | | `count` | WAF の Common Rule Set を、`count` (カウントのみ) にするか `block` (ブロック) にするか |
 | `waf.commonRuleSetCountOnly` | | `["SizeRestrictions_BODY"]` | `block` の場合も、カウントのみにするルール (1 つ) |
-| `image.repository` | | `ghcr.io/redmine-kit/serverless` | 使用するイメージ。利用者が作成した派生イメージ (テーマやプラグインを追加したもの) は、ここで指定する ([architecture.md](architecture.md#derived-images))。Redmine のバージョンはイメージで決まる。バージョンアップ前の確認方法は [upgrade.md](upgrade.md) |
-| `image.digest` | `image` を指定する場合 | その時点の、Redmine のバージョンタグの digest | イメージの digest (`sha256:…`)。指定しない場合、`bin/deploy` は、このチェックアウトがビルドする Redmine のバージョンタグ (たとえば `7.0.3`。`image/Dockerfile` の `ARG REDMINE_VERSION`) の、その時点の digest を使い、固定できるように表示する |
+| `image.repository` | | `ghcr.io/redmine-kit/serverless` | 使用するイメージ。利用者が自分で作成した派生イメージは、ここで指定する ([architecture.md](architecture.md#derived-images))。Redmine のバージョンはイメージで決まる。バージョンアップ前の確認方法は [upgrade.md](upgrade.md) |
+| `image.digest` | `image.repository` を指定する場合 | その時点の、Redmine のバージョンタグの digest | イメージの digest (`sha256:…`)。指定しない場合、`bin/deploy` は、このチェックアウトがビルドする Redmine のバージョンタグ (たとえば `7.0.3`。`image/Dockerfile` の `ARG REDMINE_VERSION`) の、その時点の digest を使い、固定できるように表示する |
+| `image.plugins` | | なし | イメージに追加するプラグイン。`bin/deploy` は、上のイメージをベースに、これらを追加した派生イメージをビルドする (下の「プラグインとテーマの追加」)。各要素には、`name` (`plugins/` 内のプラグインのディレクトリ名で、プラグインの ID) と、取得元を 1 つ指定する。取得元は、`version` (gem `name` のそのバージョン。RubyGems か、`source` に指定した `https://rubygems.pkg.github.com/<owner>` などから取得)、`git` と `ref` (HTTPS のリポジトリの、タグか完全なコミットハッシュ)、`path` (`redmine.json` からの相対パスのディレクトリ) のどれか |
+| `image.themes` | | なし | 追加するテーマ。`themes/<name>/` に配置する。各要素には、`name` と、`git` と `ref`、または `path` を指定する |
 | `redmine.settings` | | なし | Redmine の管理画面の設定値 (`host_name`、`default_language`、`mail_from` など) |
 | `redmine.settingsMode` | | `initial` | `initial` (まだ保存されていない設定だけ書き込む。その後は画面で変更できる) か `enforce` (デプロイのたびに書き込み直す) |
 | `redmine.pluginSettings` | | なし | プラグインの設定値。プラグイン名 (`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`) ごとに書く。保存されている設定にマージする。たとえば `{"redmine_serverless_ses": {"import_spam": "0", "import_without_dmarc_pass": "0"}}` で、迷惑メールと DMARC に合格しないメールを取り込まない (既定値。[receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#spoofing-and-spam)) |
@@ -129,11 +131,52 @@ Lambda@Edge 関数のほかに、CloudFront の証明書 (ACM) も us-east-1 に
 }
 ```
 
+<a id="adding-plugins-and-themes"></a>
+
+### プラグインとテーマの追加
+
+プラグインとテーマは、インスタンスごとに `image.plugins` と `image.themes` で追加します。どれもバージョンを固定して指定します。gem はバージョンを完全に指定し、Git のリポジトリはタグかコミットを指定し、ディレクトリは `redmine.json` の隣に置きます。ブランチは指定できないので、同じ設定からは毎回同じプラグインがビルドされます。
+
+```json
+{
+  "image": {
+    "plugins": [
+      { "name": "redmine_example", "version": "1.2.0" },
+      { "name": "redmine_example_private", "version": "0.3.1", "source": "https://rubygems.pkg.github.com/example" },
+      { "name": "redmine_example_git", "git": "https://github.com/example/redmine_example_git.git", "ref": "v2.0.1" },
+      { "name": "redmine_example_local", "path": "plugins/redmine_example_local" }
+    ],
+    "themes": [
+      { "name": "example", "git": "https://github.com/example/redmine-theme-example.git", "ref": "3f2c9a1e5b7d4c6a8e0f1b2d3c4e5f6a7b8c9d0e" },
+      { "name": "example-local", "path": "themes/example-local" }
+    ]
+  },
+  "redmine": {
+    "pluginSettings": { "redmine_example": { "enabled": "1" } }
+  }
+}
+```
+
+どちらかのリストが空でなければ、`bin/deploy` は、下の手順の前に、実行しているマシンで派生イメージをビルドします。ベースは `image.repository` と `image.digest` のイメージです (指定がなければ、リストがないときと同じく Redmine のバージョンのタグ)。`bin/build-derived-image` は、プラグインを `plugins/` に、テーマを `themes/` に配置し、プラグインの gem とプラグインの Gemfile にある gem を、ベースイメージのロックに追加します (ロック済みのバージョンは、追加した gem がより新しいバージョンを必要とする場合だけ変わる)。gem のプラグインは、ベースイメージと同じく `plugins/` にリンクし、アセットを再生成します (`assets:precompile`)。そのあと、追加したプラグインとテーマの確認を加えたイメージテストを実行し ([testing.md](testing.md#image-tests))、手順 5 でアカウントの ECR にプッシュします。続く手順で、テーマのアセットを含めて S3 にアップロードし、追加したプラグインのマイグレーション (`redmine:plugins:migrate`) を実行し、関数のイメージを更新します。追加したプラグインの設定も、ほかのプラグインと同じく `redmine.pluginSettings` で指定できます。
+
+Git の取得元は、BuildKit が `refs/tags/<ref>` かそのコミットで取得するので、HTTPS の公開リポジトリだけを指定できます。非公開のプラグインは、`redmine.json` の隣にチェックアウトして `path` で指定するか、gem として公開します。GitHub Packages 用の Bundler の認証情報は、環境変数 `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (`x-access-token:<read:packages を持つトークン>`) か、`gh` がインストールされていれば `gh` のログインから取得します。BuildKit のシークレットとしてビルドに渡すので、レイヤーにも `redmine.json` にも残りません。リストがなければ何もビルドせず、これまでどおりイメージをコピーします。
+
+デプロイせずに派生イメージをビルドしてテストするには、同じスクリプトを実行します。
+
+```sh
+bin/build-derived-image path/to/redmine.json ghcr.io/redmine-kit/serverless@sha256:<digest> redmine-derived:local
+bin/test-image redmine-derived:local path/to/redmine.json
+```
+
+`image.repository` に、このプロジェクトのイメージをベースにした独自のテストを持つイメージを指定する場合は、`DERIVED_IMAGE_TESTS` に、`bin/test-image` の代わりに派生イメージをテストするコマンドを指定します。コマンドには、イメージと `redmine.json` を引数として渡します。
+
+リストで表せないものは、これまでどおり、このプロジェクトのイメージをベースにした Dockerfile を自分で書き、`image.repository` で指定できます ([architecture.md](architecture.md#derived-images))。
+
 <a id="deployment-commands"></a>
 
 ## デプロイコマンド
 
-`bin/deploy` に必要なのは Docker だけです。ツールのイメージ (`deploy/Dockerfile`。AWS CLI、jq、OpenSSL、crane、check-jsonschema を、バージョンを固定してインストールする。Python のパッケージはハッシュで固定する) をビルドし、その中で `deploy/deploy.sh` を実行します。AWS 認証情報は、`AWS_*` 環境変数か、`~/.aws` (読み取り専用) から取得します。
+`bin/deploy` に必要なのは Docker だけです。ツールのイメージ (`deploy/Dockerfile`。AWS CLI、jq、OpenSSL、crane、check-jsonschema を、バージョンを固定してインストールする。Python のパッケージはハッシュで固定する) をビルドし、その中で `deploy/deploy.sh` を実行します。AWS 認証情報は、`AWS_*` 環境変数か、`~/.aws` (読み取り専用) から取得します。`image.plugins` か `image.themes` を指定する場合は、派生イメージのビルドとテストのために、Docker Buildx、jq、curl も必要です。
 
 ```sh
 bin/deploy path/to/redmine.json --account    # アカウントごとに 1 回、管理者が
@@ -148,7 +191,7 @@ bin/deploy path/to/redmine.json --code-only  # イメージだけを更新する
 | 2 | 共有基盤のスタック (`redmine-shared` と、us-east-1 の `redmine-shared-edge`) を作成または更新する。`mail.receive` が有効なら、共有の受信ルールセットをアクティブにする |
 | 3 | シークレットが SSM になければ生成する。あれば変更しない (下の「シークレット」)。RDS は作成時にデータベースパスワードを SSM から読み込むので、インスタンスのスタックより先に行う |
 | 4 | us-east-1 の `<instance>-edge` (証明書と Web ACL) を作成または更新する。Lambda@Edge が各リージョンに作成したロググループに、`logs.retentionDays` を適用する ([security.md](security.md#retention-periods)) |
-| 5 | イメージを、crane で digest のまま、そのアカウントの ECR にコピーする (Lambda は、同じリージョンの ECR イメージしか使えない)。リポジトリのタグはイミュータブルなので、タグは digest から作る (`sha256-<hex>`)。すでにあるイメージはコピーしない |
+| 5 | イメージを、crane で digest のまま、そのアカウントの ECR にコピーする (Lambda は、同じリージョンの ECR イメージしか使えない)。`image.plugins` と `image.themes` の派生イメージは、手順 1 の前にビルドしてテストしたものをプッシュする。リポジトリのタグはイミュータブルなので、タグは digest から作る (`sha256-<hex>`)。すでにあるイメージはコピーしない |
 | 6 | イメージ内のアセットを、メンテナンス画面 (`deploy/maintenance.html`) と一緒に S3 (`/assets/`) に同期する。ブラウザーで開いたままのページのために、古いファイルは残す |
 | 7 | 初回は、インスタンスのスタック `<instance>` を、そのイメージで作成する。2 回目以降は、`redmine-task` が現在使っているイメージのままスタックを更新し、そのあと `redmine-task` を新しいイメージに更新する。それから `redmine-task` で `db:migrate` と `redmine:plugins:migrate` を実行する |
 | 8 | 初回は、`redmine-task` で初期データを投入する (`redmine:load_default_data`。言語は `redmine.settings.default_language`。なければ英語) |
@@ -163,7 +206,7 @@ bin/deploy path/to/redmine.json --code-only  # イメージだけを更新する
 | オプション | 内容 |
 | --- | --- |
 | `--account` | `infra/account.yaml` (スタック `redmine-account`) を、管理者自身の認証情報で適用する。それより前には、デプロイ用ロールも CloudFormation のサービスロールもないため。アカウントごとに 1 回、最初のデプロイの前に実行する |
-| `--dry-run` | 手順 1〜4 とインスタンスのスタックについて、変更セットを作成して表示し、削除する。新規に作成されるはずのスタックも削除する。シークレット、イメージ、アセット、関数の呼び出しなど、ほかは何も変更しない (直接渡すには大きすぎるテンプレートだけは、テンプレートバケットに置く) |
+| `--dry-run` | 手順 1〜4 とインスタンスのスタックについて、変更セットを作成して表示し、削除する。新規に作成されるはずのスタックも削除する。シークレット、イメージ、アセット、関数の呼び出しなど、ほかは何も変更しない (直接渡すには大きすぎるテンプレートだけは、テンプレートバケットに置く)。派生イメージは、ローカルのマシンでビルドしてテストするので、ビルドできないプラグインはここでわかる |
 | `--code-only` | 手順 5〜7、9、11 を、スタックを変更せずに、渡された認証情報で実行する (たとえば、GitHub Actions のコードデプロイ用ロール。[iam.md](iam.md#role-for-deploying-code-github-actions))。関数は直接更新する。デプロイ済みのインスタンスが必要 |
 
 <a id="how-the-steps-behave"></a>
@@ -172,7 +215,7 @@ bin/deploy path/to/redmine.json --code-only  # イメージだけを更新する
 
 Web と worker が新しいイメージになるのは、マイグレーションのあとです。そのため、データベースより新しいコードが動くことはありません。マイグレーションが失敗すると、デプロイはそこで止まり、Web と worker は前のイメージのままです。
 
-どのスタックも、サービスロール `redmine-cfn-exec` を指定した変更セットで適用します。デプロイ用ロールは、自身ではリソースを作成できません ([iam.md](iam.md#role-for-deploying-infrastructure))。同じ設定でもう一度実行しても、何も変わりません。変更のない変更セットは削除してスタックはそのままにし、イメージは再コピーせず、マイグレーションも何もしません。
+どのスタックも、サービスロール `redmine-cfn-exec` を指定した変更セットで適用します。デプロイ用ロールは、自身ではリソースを作成できません ([iam.md](iam.md#role-for-deploying-infrastructure))。同じ設定でもう一度実行しても、何も変わりません。変更のない変更セットは削除してスタックはそのままにし、イメージは再コピーせず、マイグレーションも何もしません。例外は、Docker のビルドキャッシュがない場合 (別のマシンや、キャッシュを削除したあと) の派生イメージです。新しい digest でビルドし直すので、関数のイメージが更新されます。
 
 このプロジェクトの CI が、イメージを GitHub Packages のコンテナレジストリ (`ghcr.io`) に公開します ([architecture.md](architecture.md#distribution))。デプロイコマンドは digest のままコピーするので、ECR のイメージも同じ digest です。
 

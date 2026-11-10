@@ -194,11 +194,15 @@ GitHub Packages の RubyGems レジストリからインストールするには
 
 ### 派生イメージ
 
-このプロジェクトのイメージには、標準テーマと 5 つのプラグインだけを含めます。テーマやプラグインを追加したい利用者は、このプロジェクトのイメージをベースにした派生イメージを作成し、設定ファイルの `image` で指定します ([deploy-config.md](deploy-config.md#fields-of-redminejson))。
+このプロジェクトのイメージには、標準テーマと 5 つのプラグインだけを含めます。テーマやほかのプラグインは、インスタンスごとに、このプロジェクトのイメージをベースにした派生イメージで追加します。
 
-作成するときは、`FROM` でこのプロジェクトのイメージを digest で指定し、テーマを `themes/<テーマ>/` に、プラグインを `plugins/<プラグイン>/` に配置して、アセットを再生成します (`assets:precompile`)。Redmine 7.0 は、テーマを `themes/` か `app/assets/themes/` から読み込み、Propshaft のアセットとして配信します (`lib/redmine/themes.rb`)。`bin/deploy` は派生イメージ内のアセットを S3 に同期するので、テーマのアセットも CloudFront の `/assets/*` から配信されます。
+通常は、設定ファイルの `image.plugins` と `image.themes` に指定します ([deploy-config.md](deploy-config.md#adding-plugins-and-themes))。どれもバージョンを固定し、gem はそのバージョン、Git のリポジトリはタグかコミット、ディレクトリは設定ファイルの隣のものを指定します。すると `bin/deploy` が、実行しているマシンで、設定ファイルが指定するイメージを digest でベースにして、派生イメージをビルドします (`bin/build-derived-image`、`image/derived/Dockerfile`)。ビルドでは、プラグインを `plugins/<プラグイン>/` に、テーマを `themes/<テーマ>/` に配置し、gem をベースイメージのロックに追加して (ロック済みのバージョンは、追加した gem がより新しいバージョンを必要とする場合だけ変わり、その状態でイメージテストを実行する)、アセットを再生成します (`assets:precompile`)。コンパイラーはビルド用のステージにだけインストールするので、イメージには、ビルドした gem は入りますが、コンパイラーは入りません。GitHub Packages 用の Bundler の認証情報は、このプロジェクト自身のビルドと同じく、BuildKit のシークレットとして渡します。
 
-派生イメージでも、このプロジェクトのイメージテスト (読み取り専用、権限の少ないユーザー、3 つの役割) を実行します ([testing.md](testing.md#image-tests))。利用者が追加したプラグインは、このプロジェクトでは確認しません。
+Redmine 7.0 は、テーマを `themes/` か `app/assets/themes/` から読み込み、Propshaft のアセットとして配信します (`lib/redmine/themes.rb`)。`bin/deploy` はイメージ内のアセットを S3 に同期するので、追加したテーマやプラグインのアセットも、CloudFront の `/assets/*` から配信されます。追加したプラグインのマイグレーションは、デプロイの `redmine:plugins:migrate` (手順 7) で実行し、設定は `redmine.pluginSettings` で指定します。
+
+派生イメージも、プッシュする前に、このプロジェクトのイメージテスト (読み取り専用、権限の少ないユーザー、3 つの役割) を実行します。追加したプラグインが読み込まれてマイグレーション済みであること、追加したテーマが見つかり、そのアセットがコンパイル済みであることも確認します ([testing.md](testing.md#image-tests))。追加したプラグインの動作は、このプロジェクトでは確認しません。
+
+リストで表せないものは、これまでどおり Dockerfile を自分で書けます。`FROM` でこのプロジェクトのイメージを digest で指定し、テーマを `themes/<テーマ>/` に、プラグインを `plugins/<プラグイン>/` に配置してアセットを再生成し、レジストリにプッシュして、`image.repository` と `image.digest` で指定します。`bin/deploy` は、このプロジェクトのイメージと同じく、アカウントの ECR にコピーします。
 
 
 <a id="what-is-not-in-the-plugins"></a>

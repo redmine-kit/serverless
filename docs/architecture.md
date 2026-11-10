@@ -170,11 +170,15 @@ Each plugin keeps its version in sync between the gemspec, `version` in `init.rb
 
 ### Derived images
 
-This project's image contains only the default theme and the five plugins. Adopters who want to add themes or plugins build a derived image on top of this project's image and point to it with `image` in the configuration file ([deploy-config.md](deploy-config.md#fields-of-redminejson)).
+This project's image contains only the default theme and the five plugins. Themes and other plugins are added per instance, in a derived image built on top of this project's image.
 
-To build one, point `FROM` to this project's image by digest, put themes in `themes/<theme>/` and plugins in `plugins/<plugin>/`, and rebuild the assets (`assets:precompile`). Redmine 7.0 reads themes from `themes/` or `app/assets/themes/` and serves them as Propshaft assets (`lib/redmine/themes.rb`). `bin/deploy` syncs the assets in the derived image to S3, so theme assets are also served from CloudFront's `/assets/*`.
+The usual way is to list them in the configuration file (`image.plugins` and `image.themes`; [deploy-config.md](deploy-config.md#adding-plugins-and-themes)), each at a fixed version: a gem at its exact version, a Git repository at a tag or a commit, or a directory next to the configuration file. `bin/deploy` then builds the derived image on the machine where it runs (`bin/build-derived-image`, `image/derived/Dockerfile`), on top of the image that the configuration names, by digest. The build puts plugins in `plugins/<plugin>/` and themes in `themes/<theme>/`, adds the gems to the base image's lock (a version already locked changes only when an added gem needs a newer one; the image tests then run on that), and rebuilds the assets (`assets:precompile`). Compilers are installed only in a build stage, so the image gets the built gems but no compiler. Bundler's credential for GitHub Packages is a BuildKit secret, as in this project's own build.
 
-Derived images also go through this project's image tests (read-only, low-privilege user, three roles) ([testing.md](testing.md#image-tests)). Plugins the adopter adds are not checked by this project.
+Redmine 7.0 reads themes from `themes/` or `app/assets/themes/` and serves them as Propshaft assets (`lib/redmine/themes.rb`). `bin/deploy` syncs the assets in the image to S3, so the added themes' and plugins' assets are also served from CloudFront's `/assets/*`. The added plugins' migrations run in the deployment's `redmine:plugins:migrate` (step 7), and `redmine.pluginSettings` sets their settings.
+
+Derived images go through this project's image tests (read-only, low-privilege user, three roles) before they are pushed, with checks that the added plugins are loaded and migrated and that the added themes are found with their assets compiled ([testing.md](testing.md#image-tests)). What the added plugins do is not checked by this project.
+
+For what the lists cannot express, adopters can still write their own Dockerfile: point `FROM` to this project's image by digest, put themes in `themes/<theme>/` and plugins in `plugins/<plugin>/`, rebuild the assets, push the image to a registry, and set it in `image.repository` and `image.digest`. `bin/deploy` copies it into the account's ECR as it copies this project's image.
 
 
 ### What is not in the plugins

@@ -32,7 +32,7 @@ bin/test plugin test/unit/attachment_patch_test.rb   # Run a specific file
 
 GitHub Actions calls the same `bin/test` stages in order, so tests run the same way locally and in CI. If a step in the CI order (below) fails, the run stops there, and nothing that fails the tests is deployed.
 
-Until `bin/test` is put together, the stages built so far are separate scripts: `bin/lint` (static checks), `bin/test-services` (starts PostgreSQL, moto and LocalStack and checks that each answers), `bin/build-image`, `bin/test-image` (image tests), `bin/test-core` (Redmine's own tests) and `bin/update-gems` (writes `image/Gemfile.lock`).
+Until `bin/test` is put together, the stages built so far are separate scripts: `bin/lint` (static checks), `bin/test-services` (starts PostgreSQL, moto and LocalStack and checks that each answers), `bin/build-image`, `bin/test-image` (image tests), `bin/build-derived-image` (a derived image with plugins and themes), `bin/test-core` (Redmine's own tests) and `bin/update-gems` (writes `image/Gemfile.lock`).
 
 ### Working on a plugin at the same time
 
@@ -156,6 +156,7 @@ Every image build is started in Docker under the same conditions as production.
 - **`task`:** Invoke the handler with the Runtime Interface Emulator in the base image (`aws-lambda-rie`), and check that `rake db:migrate`, `redmine:load_default_data`, `rake -T` and `rails runner` work, that a failed task returns its exit code, and that commands and `env` names outside the allowed ones are rejected. Mail import is added with the plugin.
 - **`worker`:** Likewise with the emulator. The job is sent to the queue and received from it, and the worker gets it in an SQS-shaped event with the message's receipt handle. Check that the invocation succeeds, the job runs (a project is deleted, and its notification mail is queued in SQS), the worker deletes the message (nothing left in flight; `redmine_serverless_sqs` deletes at `REDMINE_JOBS_QUEUE_URL`, [setup.md](https://redmine-kit.github.io/redmine_serverless_sqs/setup.html)), and that a job class outside the allowlist is not run.
 - **Contents:** Check that ImageMagick's `convert`, Ghostscript and Pandoc (3.8.3 or later) work, that everything in `/var/task` and `/opt` is readable by the low-privilege user, and that the compiled assets are there. The task handler's unit tests also run in the image. Whether the pushed manifest is arm64 only and not an index is checked when the image is pushed.
+- **Derived images:** `bin/test-image <image> <redmine.json>` runs the same tests on a derived image with `image.plugins` and `image.themes` ([architecture.md](architecture.md#derived-images)), and also checks that the added plugins are loaded and their migrations have run, and that the added themes are found and their assets compiled. `bin/deploy` runs it before pushing a derived image. In CI, the image job of the Redmine release builds the derived image of `test/derived/redmine.json` on the image it has just built and tests it: a gem from GitHub Packages, a plugin from Git at a commit, a plugin and a theme from directories (`test/derived/`), and a plugin setting.
 
 ## Edge function tests
 
@@ -170,9 +171,9 @@ Every image build is started in Docker under the same conditions as production.
 
 `bin/test-deploy` tests `bin/deploy` without AWS, in the tools image of `bin/deploy`.
 
-- **Schema:** The example in [deploy-config.md](deploy-config.md#example) and the files in `test/deploy/valid/` pass; each file in `test/deploy/invalid/` fails (a missing field, a hosted zone missing with `route53`, an image without a digest, unknown fields, and so on).
+- **Schema:** The examples in [deploy-config.md](deploy-config.md#example), the files in `test/deploy/valid/` and `test/derived/redmine.json` pass; each file in `test/deploy/invalid/` fails (a missing field, a hosted zone missing with `route53`, an image without a digest, unknown fields, a plugin with two sources or a Git source without `ref`, credentials in a URL, and so on).
 - **Stack parameters:** For each valid configuration, the parameters that `deploy/params.jq` makes for each template are parameters of that template, and every parameter without a default is given. Defaults and values are compared.
-- **Steps:** `deploy/deploy.sh` runs against fake `aws`, `crane` and `curl` (`test/deploy/fake/`) that record every call: the order of the steps the first time and later (the task migrates before web and worker get the image), `--dry-run` (nothing executed, written or invoked), `--code-only`, `--account`, a stack without changes, a failed migration that stops the deployment, a failed check, and an invalid configuration that stops before any call. The secrets are checked: their format, SecureString, the public key in the stack matching the private key, and that no secret is on a command line or in the output.
+- **Steps:** `deploy/deploy.sh` runs against fake `aws`, `crane` and `curl` (`test/deploy/fake/`) that record every call: the order of the steps the first time and later (the task migrates before web and worker get the image), `--dry-run` (nothing executed, written or invoked), `--code-only`, `--account`, a stack without changes, a failed migration that stops the deployment, a failed check, and an invalid configuration that stops before any call. With `image.plugins` and `image.themes`, the derived image's tarball is pushed by its digest instead of copying from the registry, and the steps refuse to run without it. The secrets are checked: their format, SecureString, the public key in the stack matching the private key, and that no secret is on a command line or in the output.
 - **Settings code:** The Ruby code that applies the settings runs in Ruby against a stand-in for Redmine's `Setting` (`initial` and `enforce`, and plugin settings merged).
 
 ## Lambda integration tests
@@ -243,7 +244,7 @@ flowchart TD
   a --> d["Deployment<br>(bin/test-deploy)"]
   a --> s["Services<br>(bin/test-services)"]
   a --> c["Redmine's own tests<br>(bin/test-core)"]
-  a --> i["Image: build, image tests,<br>Lambda tests<br>(bin/test-image, bin/test-lambda)"]
+  a --> i["Image: build, image tests,<br>derived image, Lambda tests<br>(bin/test-image, bin/test-lambda)"]
   s --> p["Publish the image<br>(main only)"]
   c --> p
   i --> p

@@ -182,6 +182,7 @@ During an incident, make sure nothing is deleted by these periods until the inve
 | GitHub Actions | Pin actions by commit SHA, not by tag |
 | Lambda@Edge function | Use no npm package dependencies (only `node:crypto`) |
 | Distributed image and plugins | Adopters reference the image by digest. The plugin gems are pinned with their versions and checksums in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)) |
+| Plugins and themes added by the adopter | `image.plugins` and `image.themes` take a gem at an exact version, a Git repository at a tag or a full commit hash (no branch), or a directory, and the derived image's lock keeps the base image's versions unless an added gem needs a newer one. The credential for GitHub Packages is a build secret, never in a layer or in `redmine.json`. The added code runs with the functions' permissions, so the adopter reviews it; a commit hash pins a Git source more firmly than a tag, which can be moved ([architecture.md](architecture.md#derived-images)) |
 
 Updates to Redmine, gems and images go through the checks in [upgrade.md](upgrade.md) first.
 

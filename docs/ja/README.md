@@ -17,7 +17,7 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | 管理画面を作る | [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html) |
 | 権限を決める | [iam.md](iam.md) |
 | セキュリティの守り、WAF、ログの保持、事故のときの手順を知る | [security.md](security.md) |
-| AWS の側のセキュリティの設定(GuardDuty、CloudTrail、Access Analyzer など)をする | [aws-security.md](aws-security.md) |
+| AWS の側のセキュリティの設定 (GuardDuty、CloudTrail、Access Analyzer など) をする | [aws-security.md](aws-security.md) |
 | 設定を書いてデプロイする、いくつも立てる | [deploy-config.md](deploy-config.md) |
 | AI の機能をつなぐ | [ai.md](ai.md) |
 | キャッシュを決め、調整する | [cache.md](cache.md) |
@@ -37,22 +37,22 @@ Serverless の設計の資料です。最新の Redmine を AWS Lambda で動か
 | [architecture.md](architecture.md) | 全体の構成、決めたことと理由、自前のプラグイン、まだ決めていないこと |
 | [lambda.md](lambda.md) | Event Functions、コンテナイメージ、Lambda Web Adapter、読み取り専用のファイルシステム、SSM Parameter Store、Rails の設定、SQS でのジョブ、CloudFront とアセット |
 | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) | S3 のプラグインを参考にした設計、バケットの構成、CloudFront と署名付き URL を通したアップロードとダウンロード、sandbox の CSP、`/tmp` のキャッシュ |
-| [rds.md](rds.md) | データベース(RDS for PostgreSQL)と VPC。設定、VPC の外への道(VPC のエンドポイントか NAT インスタンス)、Systems Manager での接続、費用 |
+| [rds.md](rds.md) | データベース (RDS for PostgreSQL) と VPC。設定、VPC の外への道 (VPC のエンドポイントか NAT インスタンス)、Systems Manager での接続、費用 |
 | [tasks.md](tasks.md) | 同じイメージで 3 つの役割を切り替える仕組み。タスク用の関数での migration、任意の rake、`rails runner`、メールの取り込み |
 | [mail.md](mail.md) | Rails の ActionMailer から SES の API で送るメールと、SES で受けて取り込むメール |
-| [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html) | プラグインが足す管理画面。共有の「Serverless」のメニューの項目の下のタブ(`redmine_serverless` の状態と接続、`redmine_serverless_sqs` のジョブ、`redmine_serverless_ses` のメールの送信と受信、`redmine_serverless_s3` の添付ファイルの S3) |
+| [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html) | プラグインが足す管理画面。共有の「Serverless」のメニューの項目の下のタブ (`redmine_serverless` の状態と接続、`redmine_serverless_sqs` のジョブ、`redmine_serverless_ses` のメールの送信と受信、`redmine_serverless_s3` の添付ファイルの S3) |
 | [iam.md](iam.md) | 実行ロール、リソースベースのポリシー、デプロイ用のロール、人の権限 |
 | [security.md](security.md) | 守るもの、起きうることと守り、入口と AWS WAF、Redmine の設定、データの守り、保持の期間、ログ、供給網、残るリスク、事故のとき |
-| [aws-security.md](aws-security.md) | AWS の側のセキュリティの設定。それぞれが守るもの、用意するもの、費用、既定(GuardDuty とアップロードのマルウェアのスキャン、CloudTrail、IAM Access Analyzer、Security Hub、Config、パブリックアクセスのブロック、EBS の暗号化、ルートユーザー、予算) |
-| [deploy-config.md](deploy-config.md) | 1 つの Redmine ごとの設定のファイル(`redmine.json`)、名前の決まり、共有の土台、デプロイのコマンド |
-| [ai.md](ai.md) | 別のプロジェクトの AI の機能との連携(Redmine の標準の REST API、OAuth、webhook)と安全の決まり |
-| [cache.md](cache.md) | Redmine がキャッシュするもの、環境ごとのキャッシュ、調整できるところ、共有のキャッシュ(ElastiCache for Valkey)の費用 |
+| [aws-security.md](aws-security.md) | AWS の側のセキュリティの設定。それぞれが守るもの、用意するもの、費用、既定 (GuardDuty とアップロードのマルウェアのスキャン、CloudTrail、IAM Access Analyzer、Security Hub、Config、パブリックアクセスのブロック、EBS の暗号化、ルートユーザー、予算) |
+| [deploy-config.md](deploy-config.md) | 1 つの Redmine ごとの設定のファイル (`redmine.json`)、名前の決まり、共有の土台、デプロイのコマンド |
+| [ai.md](ai.md) | 別のプロジェクトの AI の機能との連携 (Redmine の標準の REST API、OAuth、webhook) と安全の決まり |
+| [cache.md](cache.md) | Redmine がキャッシュするもの、環境ごとのキャッシュ、調整できるところ、共有のキャッシュ (ElastiCache for Valkey) の費用 |
 | [session.md](session.md) | 暗号化した Cookie に入れ、データベースのトークンで確認するセッション、セッションの設定、`Secure` の属性 |
 | [cost.md](cost.md) | ap-northeast-1 での月の費用の見込み |
-| [comparison.md](comparison.md) | ふつうのサーバー(EC2、Lightsail、ECS Fargate)との、料金、セキュリティ、運用の比較 |
+| [comparison.md](comparison.md) | ふつうのサーバー (EC2、Lightsail、ECS Fargate) との、料金、セキュリティ、運用の比較 |
 | [testing.md](testing.md) | テストの種類、プラグインと本体のテスト、イメージのテスト、デプロイしたあとの確認、CI の順番 |
-| [upgrade.md](upgrade.md) | Redmine のバージョンアップの確認の方法(増えた migration の読み分け、試験用のデータベースでの実行、記録) |
-| [migration.md](migration.md) | 古い Redmine(ほかの環境で動いているもの)からの移行。MySQL からの移し方 |
+| [upgrade.md](upgrade.md) | Redmine のバージョンアップの確認の方法 (増えた migration の読み分け、試験用のデータベースでの実行、記録) |
+| [migration.md](migration.md) | 古い Redmine (ほかの環境で動いているもの) からの移行。MySQL からの移し方 |
 | [sources.md](sources.md) | 参照した情報と確認日 |
 
 <a id="sponsors"></a>

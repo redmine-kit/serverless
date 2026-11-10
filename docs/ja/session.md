@@ -11,16 +11,16 @@ Redmine は、セッションを暗号化した Cookie に入れ、データベ�
 | 項目 | しくみ |
 | --- | --- |
 | セッション | Rails の `cookie_store`。Redmine の `config/application.rb` で設定する。Cookie は `_redmine_session` で、`SameSite=Lax`、`HttpOnly`。`SECRET_KEY_BASE` から作る鍵で暗号化し、署名する。サーバーの側には何も置かない |
-| セッションのトークン | ログインのときに、Redmine はデータベースの `tokens` の表にトークンを作り(action は `session`)、その値をセッションに入れる。要求のたびに、トークンがあるかを確認する(`User.verify_session_token`)。ログアウトで消す |
-| 1 人あたりのトークン | 1 人 10 件まで(ブラウザーや端末ごとに 1 件)。それを超えてログインすると、最後に使ってから長いものを消す |
-| 自動ログイン(「ログインを維持」) | 別の Cookie(`autologin`)と、別のトークン(action は `autologin`)。有効な日数は「自動ログイン」の設定。既定は無効 |
+| セッションのトークン | ログインのときに、Redmine はデータベースの `tokens` の表にトークンを作り (action は `session`)、その値をセッションに入れる。要求のたびに、トークンがあるかを確認する (`User.verify_session_token`)。ログアウトで消す |
+| 1 人あたりのトークン | 1 人 10 件まで (ブラウザーや端末ごとに 1 件)。それを超えてログインすると、最後に使ってから長いものを消す |
+| 自動ログイン (「ログインを維持」) | 別の Cookie (`autologin`) と、別のトークン (action は `autologin`)。有効な日数は「自動ログイン」の設定。既定は無効 |
 | API | REST API の要求は、セッションではなく API キーを使う |
 
 <a id="on-lambda"></a>
 
 ## Lambda では
 
-どの環境でも、ほかの環境で始まったセッションを続けられます。どの環境も、起動のときに `SECRET_KEY_BASE` を SSM Parameter Store から読むので([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store))、ほかの環境が書いた Cookie を読め、トークンもすべての環境が使う RDS で確認します。
+どの環境でも、ほかの環境で始まったセッションを続けられます。どの環境も、起動のときに `SECRET_KEY_BASE` を SSM Parameter Store から読むので ([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store))、ほかの環境が書いた Cookie を読め、トークンもすべての環境が使う RDS で確認します。
 
 「無操作タイムアウト」を設定すると、トークンの確認のときに、1 つのセッションにつき最大で 1 分に 1 回トークンの時刻を更新します。データベースへの小さな書き込みが 1 回です。`SECRET_KEY_BASE` を変えると、すべてのセッションの Cookie が読めなくなり、全員がログインし直します。これは事故のあとの手順として [security.md](security.md) にもあります。
 
@@ -41,18 +41,18 @@ Redmine は、セッションを暗号化した Cookie に入れ、データベ�
 
 ## セッションの Cookie の `Secure` の属性
 
-Redmine のセッションの Cookie には、HTTPS でも `Secure` の属性が付きません(2026-11-09 にイメージで確認。`X-Forwarded-Proto: https` を付けた要求で、`_redmine_session` には `path`、`httponly`、`samesite=lax` だけが付いた)。Redmine の `session_store` は `secure` を指定せず、Redmine の `production.rb` では `config.force_ssl` がコメントになっています。
+Redmine のセッションの Cookie には、HTTPS でも `Secure` の属性が付きません (2026-11-09 にイメージで確認。`X-Forwarded-Proto: https` を付けた要求で、`_redmine_session` には `path`、`httponly`、`samesite=lax` だけが付いた)。Redmine の `session_store` は `secure` を指定せず、Redmine の `production.rb` では `config.force_ssl` がコメントになっています。
 
-イメージで付けています。`image/config/additional_environment.rb` で、Redmine と同じ `session_store` に `secure: true` だけを足して設定します。Redmine の設定のあとに評価されるので、置き換わります。設定するのは、イメージが動く本番の環境(production)だけです。Redmine 本体のテストは暗号化なしの HTTP で要求を送るので、セッションの Cookie が書き込まれなくなるためです。イメージのテストで、`_redmine_session` に `Secure` が付くことを確認します([testing.md](testing.md#image-tests))。
+イメージで付けています。`image/config/additional_environment.rb` で、Redmine と同じ `session_store` に `secure: true` だけを足して設定します。Redmine の設定のあとに評価されるので、置き換わります。設定するのは、イメージが動く本番の環境 (production) だけです。Redmine 本体のテストは暗号化なしの HTTP で要求を送るので、セッションの Cookie が書き込まれなくなるためです。イメージのテストで、`_redmine_session` に `Secure` が付くことを確認します ([testing.md](testing.md#image-tests))。
 
 ```ruby
 config.session_store :cookie_store, key: '_redmine_session', path: config.relative_url_root || '/',
                                     same_site: :lax, secure: true
 ```
 
-CloudFront は HTTP を HTTPS に送り直し、`Strict-Transport-Security` を付けるので([security.md](security.md))、初めて訪れたあとは、ブラウザーが暗号化なしの HTTP で Cookie を送ることはありません。`Secure` は、初めての訪問と、その経路の外に向けた、ふつうの守りです。`config.force_ssl` は使いません。`ssl_options` で `hsts: false` にすると、Rails は `Strict-Transport-Security: max-age=0` を送り、CloudFront が付けるヘッダーを打ち消してしまうためです。
+CloudFront は HTTP を HTTPS に送り直し、`Strict-Transport-Security` を付けるので ([security.md](security.md))、初めて訪れたあとは、ブラウザーが暗号化なしの HTTP で Cookie を送ることはありません。`Secure` は、初めての訪問と、その経路の外に向けた、ふつうの守りです。`config.force_ssl` は使いません。`ssl_options` で `hsts: false` にすると、Rails は `Strict-Transport-Security: max-age=0` を送り、CloudFront が付けるヘッダーを打ち消してしまうためです。
 
-そのため手元では、`http://` でイメージにログインできません。Rails は `Secure` の Cookie を HTTPS の要求にだけ書き込み(CloudFront と関数 URL の後ろでは、要求は HTTPS として届きます)、ブラウザーも暗号化なしの HTTP では送らないためです。イメージのテストは `X-Forwarded-Proto: https` を付けて確認します。
+そのため手元では、`http://` でイメージにログインできません。Rails は `Secure` の Cookie を HTTPS の要求にだけ書き込み (CloudFront と関数 URL の後ろでは、要求は HTTPS として届きます)、ブラウザーも暗号化なしの HTTP では送らないためです。イメージのテストは `X-Forwarded-Proto: https` を付けて確認します。
 
 <a id="to-verify"></a>
 

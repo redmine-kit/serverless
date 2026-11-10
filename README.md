@@ -9,7 +9,7 @@ A design for running the latest Redmine (7.0.3) on AWS Lambda (Event Functions),
 
 [日本語](README.ja.md)
 
-> **Status:** early development. The image and its tests are built; the rest is in the design stage.
+> **Status:** early development. The image, the infrastructure templates and the deploy commands are built and tested on LocalStack; it has not run on AWS yet.
 
 ## Documentation
 

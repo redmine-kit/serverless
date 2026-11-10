@@ -87,13 +87,13 @@ SES の API の呼び出しに失敗したメールは、自動でやり直し�
 | SES の受信 | 1 通あたり 0.0001 ドル、受信のチャンクあたり 0.00009 ドル | 1,000 通(1 通 1 チャンク)で約 0.19 ドル |
 | S3、Lambda(取り込み) | — | 数セント |
 
-SES の単価は、価格表(AmazonSES、2026-11-04 公開)の東京の値です。受信のチャンクの大きさは、価格表に書かれていないので、作るときに料金のページで確認します。
+SES の単価は、価格表(AmazonSES、2026-11-04 公開)の ap-northeast-1 の値です。受信のチャンクの大きさは、価格表に書かれていないので、作るときに料金のページで確認します。
 
 <a id="receiving"></a>
 
 ## 受信
 
-メールでチケットを作る機能と、通知のメールへの返信でチケットに注記を足す機能に使います。プロジェクトごとに、受けるアドレスを持たせます。SES でメールを受け、S3 に置き、タスク用の関数(`redmine-task`)が Redmine に取り込みます。東京の SES は、メールの受信に対応しています(受信の宛先は `inbound-smtp.ap-northeast-1.amazonaws.com`)。
+メールでチケットを作る機能と、通知のメールへの返信でチケットに注記を足す機能に使います。プロジェクトごとに、受けるアドレスを持たせます。SES でメールを受け、S3 に置き、タスク用の関数(`redmine-task`)が Redmine に取り込みます。ap-northeast-1 の SES は、メールの受信に対応しています(受信の宛先は `inbound-smtp.ap-northeast-1.amazonaws.com`)。
 
 ```mermaid
 sequenceDiagram
@@ -152,7 +152,7 @@ SES の受信のルールは、ルールのセットにまとめ、リージョ�
 | 2 つ目の動作 | `redmine-task` を非同期で呼ぶ |
 
 - **S3 のバケット:** バケットポリシーで、このアカウントの受信のルールからの SES にだけ、`inbound/` への書き込みを許します。S3 に置けるメールは、ヘッダーを含めて 40 MB までです。
-- **Lambda の権限:** `redmine-task` のリソースベースのポリシーで、受信のルールからの SES の呼び出しを許します。SES のルールから呼ぶ Lambda は、SES と同じリージョンに置く必要があります(同じ東京)。
+- **Lambda の権限:** `redmine-task` のリソースベースのポリシーで、受信のルールからの SES の呼び出しを許します。SES のルールから呼ぶ Lambda は、SES と同じリージョンに置く必要があります(同じ ap-northeast-1)。
 - **実行ロール:** `redmine-task` の実行ロールに、メールのバケットの読み書きを付けます。
 - **権限の詳しい内容:** [iam.md](iam.md) にあります。
 - **残す期間:** `processed/` に移したメールも、`inbound/` に残ったメール(捨てたもの、失敗したもの)も、ライフサイクルで 30 日後に消します([security.md](security.md#retention-periods))。取り込み直しは、この期間のうちに行います。取り込み直しは、管理画面の「メールの受信」から行うか(ジョブとして `redmine-worker` で動く。[admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#receiving-email))、手元から次のコマンドで行います(`redmine-task` で動く)。

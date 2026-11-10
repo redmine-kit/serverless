@@ -86,13 +86,13 @@ flowchart LR
 | バックグラウンドのジョブ | ActiveJob を AWS の公式の gem `aws-activejob-sqs` で SQS に積み、`redmine-worker` で実行する | 自前のコードが要らない。やり直しとデッドレターキューがある。画面の要求がジョブを待たない | [lambda.md](lambda.md#background-jobs) |
 | メールの送信 | Rails の ActionMailer の送信方法(`aws-actionmailer-ses` の `:ses_v2`)で、SES の API から送る。送るのは `redmine-worker` | Rails の標準の仕組みで、自前のコードが要らない | [mail.md](mail.md#sending) |
 | ドメインと DNS | Web とメールを同じホスト名(Redmine のサブドメイン)にする。Web は CloudFront を向く別名の種類のレコード、同じ名前に MX を置く。親のドメインの DNS で置けなければ、サブドメインを Route 53 に委任する | URL とメールのアドレスがそろう。CNAME と MX は同じ名前に置けない | [mail.md](mail.md#receiving-domain) |
-| メールの受信 | SES で受けて S3 に置き、`redmine-task` が Redmine の `MailHandler` で取り込む。アドレスはプロジェクトごと(`<識別子>@<サブドメイン>`)と全体用。DMARC が通らないメールは捨てる | 東京の SES で受信できる。差出人を偽ったメールを取り込まない | [mail.md](mail.md#receiving) |
+| メールの受信 | SES で受けて S3 に置き、`redmine-task` が Redmine の `MailHandler` で取り込む。アドレスはプロジェクトごと(`<識別子>@<サブドメイン>`)と全体用。DMARC が通らないメールは捨てる | ap-northeast-1 の SES で受信できる。差出人を偽ったメールを取り込まない | [mail.md](mail.md#receiving) |
 | migration と rake | `redmine-task` で、手元のコマンドから任意の rake と `rails runner` を実行する | 本番と同じイメージと設定で動く。`rake db:migrate` と `redmine:plugins:migrate` を、RDS の上でそのまま実行する | [tasks.md](tasks.md) |
 | Redmine の更新 | 新しいバージョンが出たら、増えた migration を読み分け、試験用のデータベース(PostgreSQL)で実行し、プラグインの差し替えへの影響を確認してからバージョンアップする。結果はバージョンごとに記録する | バージョンアップしてから壊れたことに気づくのを防ぐ | [upgrade.md](upgrade.md) |
 | テスト | 差し替えた処理ごとにテストを付け、Redmine 本体のテストも通す。AWS は手元で moto と LocalStack に、データベースは PostgreSQL のコンテナに代える。デプロイのたびに本物の AWS で確認する | 差し替えた処理が Redmine の更新で壊れたことに気づける | [testing.md](testing.md) |
 | ネットワーク | VPC を 1 つ作り、2 つの AZ にプライベートのサブネットを置く。Lambda と RDS はプライベートのサブネットに置く。AWS のサービスには、VPC のエンドポイントか NAT インスタンスで届く。どちらにするかは、設定のファイルの `network.mode` で選ぶ | RDS には VPC の中からしか届かない。エンドポイントは運用が要らず、インターネットへの出口がない。NAT インスタンスは費用が安く、webhook も送れる | [rds.md](rds.md#routes-out-of-the-vpc) |
 | AI の機能 | 別のプロジェクトに分ける。AI の側は、Redmine の標準の REST API、OAuth、webhook でつなぐ | AI のサービスや費用の判断を、Redmine の基盤から切り離す | [ai.md](ai.md) |
-| リージョン | 東京(ap-northeast-1)。ほかのリージョンでも、エンドポイントの名前と単価を読み替えれば同じ | 日本の利用者に近い。単価もこのリージョンで見積もる | — |
+| リージョン | ap-northeast-1。ほかのリージョンでも、エンドポイントの名前と単価を読み替えれば同じ | 日本の利用者に近い。単価もこのリージョンで見積もる | — |
 
 <a id="why-not-web-functions"></a>
 

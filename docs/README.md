@@ -44,7 +44,7 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | [ai.md](ai.md) | Integration with AI features from a separate project (Redmine's standard REST API, OAuth, webhooks) and safety rules |
 | [cache.md](cache.md) | What Redmine caches, the cache in each environment, what can be tuned, the cost of a shared cache (ElastiCache for Valkey) |
 | [session.md](session.md) | Sessions in encrypted cookies checked against tokens in the database, the session settings, the `Secure` attribute |
-| [cost.md](cost.md) | Monthly cost estimate in the Tokyo Region |
+| [cost.md](cost.md) | Monthly cost estimate in ap-northeast-1 |
 | [comparison.md](comparison.md) | Comparison with ordinary servers (EC2, Lightsail, ECS Fargate) on price, security and operations |
 | [testing.md](testing.md) | Kinds of tests, plugin and Redmine tests, image tests, checks after deployment, the CI order |
 | [upgrade.md](upgrade.md) | How to check a Redmine upgrade (sorting the new migrations, running them on a test database, keeping records) |

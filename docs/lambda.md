@@ -10,7 +10,7 @@ The specifications on this page were checked against official information as of 
 | --- | --- | --- |
 | Functions | `redmine-web` (web pages and API), `redmine-worker` (ActiveJob jobs; see "Background jobs" below), `redmine-task` (rake and mail import; [tasks.md](tasks.md)). All three use the same image | The web function runs up to 60 seconds; jobs and tasks run up to 15 minutes |
 | Package | Container image (ECR) | A zip is limited to 250 MB unpacked. Redmine, the gems and ImageMagick are not expected to fit. An image can be up to 10 GB |
-| Architecture | arm64 | Lower unit price for run time than x86 (in Tokyo, $0.0000133334 versus $0.0000166667 per GB-second) |
+| Architecture | arm64 | Lower unit price for run time than x86 (in ap-northeast-1, $0.0000133334 versus $0.0000166667 per GB-second) |
 | Memory | 2,048 MB | CPU is allocated in proportion to memory. Speeds up Rails start-up and thumbnail generation. To be revised after measurement |
 | Timeout | 60 seconds (`redmine-web`), 900 seconds (`redmine-worker`, `redmine-task`) | Matches the CloudFront origin response timeout (below) |
 | `/tmp` | 512 MB (the default, no extra charge) | The attachment cache, up to 256 MB ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache)), PDF output. Lambda reads no whole file at registration (S3 checks the SHA256) and downloads do not pass through Lambda, so the default is enough |
@@ -133,7 +133,7 @@ One environment handles one request at a time, so when a page makes many request
 
 ### Keeping environments warm
 
-The usual remedies do not fit. SnapStart supports only Java, Python and .NET, not Ruby. Provisioned Concurrency for one 2 GB environment costs about $23 per month on arm in Tokyo (2 GB × $0.0000043068 per GB-second × 2,628,000 seconds (730 hours)), which does not fit the budget.
+The usual remedies do not fit. SnapStart supports only Java, Python and .NET, not Ruby. Provisioned Concurrency for one 2 GB environment costs about $23 per month on arm in ap-northeast-1 (2 GB × $0.0000043068 per GB-second × 2,628,000 seconds (730 hours)), which does not fit the budget.
 
 If needed, EventBridge Scheduler invokes `redmine-web` every 5 minutes during business hours instead. Lambda Web Adapter passes such non-HTTP events as a POST to `/events`, and the plugin's Rack middleware answers them with 204 without touching the database. How long an environment stays alive is not documented officially, so the effect will be measured before deciding.
 
@@ -316,7 +316,7 @@ flowchart LR
 | Function | `redmine-body-hash`, attached to the origin request of the default behavior, with the body included (`IncludeBody`), and of `/tmp/*`, without the body | Only Lambda@Edge can read the body. At the origin request it can read up to 1 MB of the body (up to 40 KB at the viewer request). On `/tmp/*` it gives S3 the checksum of uploads |
 | Runtime | Node.js 24 (`nodejs24.x`, the latest Lambda@Edge supports), x86_64, 128 MB, 5 seconds. Written with `node:crypto` only, without npm package dependencies. The code is inline in `infra/shared-edge.yaml` and is tested by `bin/test-edge` ([testing.md](testing.md#edge-function-tests)) | Lambda@Edge supports only Node.js and Python, and does not support container images or arm64 |
 | Architecture, memory, timeout | x86_64, 128 MB, 5 seconds | It only computes a hash |
-| Region | us-east-1 (N. Virginia) | Lambda@Edge functions must be created in us-east-1 |
+| Region | us-east-1 | Lambda@Edge functions must be created in us-east-1 |
 | Location | `edge/body-hash/` in this repository | It runs outside Redmine, so it is not part of the plugin |
 
 The processing is as follows.
@@ -328,7 +328,7 @@ The processing is as follows.
 
 Because of this function, request bodies that reach Redmine through CloudFront are limited to 1 MB. Attachments from pages go directly to S3, so they are not affected; what is affected is listed under ["The 6 MB limit"](#the-6-mb-limit) below.
 
-The function runs on the origin request, so it runs for every uncached page request, and for every request to `/tmp/*` (thumbnails, zips and uploads; nothing there is cached). In Tokyo it costs $0.60 per million requests and $0.00005001 per GB-second (price list), which comes to less than $0.1 at 50,000 requests a month. It also works with the CloudFront flat-rate plans and is charged separately from the plan (AWS blog, 2026-03-24). Its logs go to CloudWatch Logs in the region near the edge where it ran (`/aws/lambda/us-east-1.redmine-body-hash`).
+The function runs on the origin request, so it runs for every uncached page request, and for every request to `/tmp/*` (thumbnails, zips and uploads; nothing there is cached). In ap-northeast-1 it costs $0.60 per million requests and $0.00005001 per GB-second (price list), which comes to less than $0.1 at 50,000 requests a month. It also works with the CloudFront flat-rate plans and is charged separately from the plan (AWS blog, 2026-03-24). Its logs go to CloudWatch Logs in the region near the edge where it ran (`/aws/lambda/us-east-1.redmine-body-hash`).
 
 Adding the body hash with Lambda@Edge and then signing with OAC is not described in the official documentation. A practical report says it works (a Classmethod article, 2024-07-29; not official information); it is the first thing to try.
 

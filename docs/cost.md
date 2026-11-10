@@ -1,6 +1,6 @@
 # Cost estimate
 
-Monthly cost estimate in the Tokyo Region. Unit prices come from the Tokyo files of the AWS price list (Price List API). Usage figures are assumptions for about 10 people working during business hours and have not been measured yet. The database is RDS for PostgreSQL in a VPC ([rds.md](rds.md)).
+Monthly cost estimate in ap-northeast-1. Unit prices come from the ap-northeast-1 files of the AWS price list (Price List API). Usage figures are assumptions for about 10 people working during business hours and have not been measured yet. The database is RDS for PostgreSQL in a VPC ([rds.md](rds.md)).
 
 ## Monthly estimate
 

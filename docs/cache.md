@@ -42,7 +42,7 @@ How often an entry is found has not been measured yet. Rails reports cache reads
 
 A shared cache keeps the formatted text and the search results for all environments. It is worth considering when the formatted-text cache is turned on for long wiki pages, or when many people page through search results.
 
-| Option | What it is | Monthly cost (Tokyo, 730 hours) |
+| Option | What it is | Monthly cost (ap-northeast-1, 730 hours) |
 | --- | --- | --- |
 | Memory in each environment (this design) | `:memory_store` | USD 0 |
 | ElastiCache Serverless for Valkey | Managed, sized automatically. Billed for the data stored (at least 100 MB per cache) and for ElastiCache Processing Units (ECPUs; a simple read or write is 1 ECPU per KB) | Data: 0.1 GB × USD 0.101 per GB-hour = USD 7.37. ECPUs: USD 0.0027 per million, for example USD 0.03 for 10 million. About USD 7.4 |

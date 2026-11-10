@@ -2,7 +2,7 @@
 
 This page lists the security settings on the AWS side: what each protects, whether this project's templates create it or the adopter turns it on once per account, what it costs, and whether it is on by default. The threats and the protections inside Redmine are in [security.md](security.md); the roles and permissions are in [iam.md](iam.md).
 
-Prices are for the Tokyo Region (ap-northeast-1), from the AWS price list (the date of each list is given). Estimates that depend on the account's activity are marked "estimate"; items not checked in the price list are marked "unchecked".
+Prices are for ap-northeast-1, from the AWS price list (the date of each list is given). Estimates that depend on the account's activity are marked "estimate"; items not checked in the price list are marked "unchecked".
 
 ## Overview
 

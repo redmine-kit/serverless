@@ -2,7 +2,7 @@
 
 データベースは、VPC の中の Amazon RDS for PostgreSQL です。Lambda の関数は、同じ VPC のプライベートのサブネットで動き、VPC のエンドポイントか NAT インスタンスで AWS のサービスに届きます(下の「VPC から外への経路」)。
 
-この資料の単価は、AWS の価格表(Price List API)の東京のファイルから取りました(AmazonRDS は 2026-10-29 公開)。月額は 730 時間で計算しています。出典は [sources.md](sources.md) にあります。
+この資料の単価は、AWS の価格表(Price List API)の ap-northeast-1 のファイルから取りました(AmazonRDS は 2026-10-29 公開)。月額は 730 時間で計算しています。出典は [sources.md](sources.md) にあります。
 
 <a id="diagram"></a>
 

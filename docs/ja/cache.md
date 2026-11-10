@@ -50,13 +50,13 @@ Rails 8.1 の既定は `tmp/cache/` のファイルですが、Lambda では `/t
 
 共有のキャッシュなら、整形済みのテキストと検索の結果を、すべての環境で使い回せます。長い wiki のページで書式のキャッシュを有効にするときや、多くの人が検索の結果のページを送るときに、検討する価値があります。
 
-| 選択肢 | 内容 | 月の費用(東京、730 時間) |
+| 選択肢 | 内容 | 月の費用(ap-northeast-1、730 時間) |
 | --- | --- | --- |
 | 環境別のメモリ(この設計) | `:memory_store` | 0 ドル |
 | ElastiCache Serverless for Valkey | マネージドで、大きさは自動。置いたデータの量(1 つのキャッシュで最低 100 MB)と、ElastiCache Processing Unit(ECPU。単純な読み書きは 1 KB ごとに 1 ECPU)で課金 | データ: 0.1 GB × 1 GB 時間あたり 0.101 ドル = 7.37 ドル。ECPU: 100 万あたり 0.0027 ドルで、たとえば 1,000 万なら 0.03 ドル。合わせて約 7.4 ドル |
 | ElastiCache for Valkey の `cache.t4g.micro` のノード 1 台 | レプリカなしのノード(0.5 GiB) | 1 時間 0.02 ドル = 14.60 ドル |
 
-価格は、東京(ap-northeast-1)の ElastiCache の AWS の価格表(2026-10-28 公開)と、ElastiCache の料金のページにある Valkey の最低 100 MB によります(2026-11-09 に確認)。同じノードでも Valkey は Redis OSS より安く(`cache.t4g.micro` は Redis OSS で 1 時間 0.025 ドル)、Serverless の最低の量も小さくなります(Redis OSS と Memcached は 1 GB)。
+価格は、ap-northeast-1 の ElastiCache の AWS の価格表(2026-10-28 公開)と、ElastiCache の料金のページにある Valkey の最低 100 MB によります(2026-11-09 に確認)。同じノードでも Valkey は Redis OSS より安く(`cache.t4g.micro` は Redis OSS で 1 時間 0.025 ドル)、Serverless の最低の量も小さくなります(Redis OSS と Memcached は 1 GB)。
 
 関数はもう VPC の中にあるので、VPC エンドポイントも NAT インスタンスも使わずに、プライベートサブネットの ElastiCache に直接接続できます。セキュリティグループでは、関数のセキュリティグループからの接続を許します。Rails では、キャッシュのエンドポイントを指定して `config.cache_store = :redis_cache_store` にし(Valkey は Redis のプロトコルで話します。ElastiCache Serverless は TLS が必須です)、`config.redmine_search_cache_store` も同じにして、イメージに `redis` の gem を足します。
 

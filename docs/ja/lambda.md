@@ -12,7 +12,7 @@ Redmine(Rails と Puma)を、Lambda Event Functions で動かすための設計�
 | --- | --- | --- |
 | 関数 | `redmine-web`(画面と API)、`redmine-worker`(ActiveJob のジョブ。下の「バックグラウンドのジョブ」)、`redmine-task`(rake とメールの取り込み。[tasks.md](tasks.md))。3 つとも同じイメージ | 画面は 60 秒、ジョブとタスクは 15 分まで動かす |
 | パッケージ | コンテナイメージ(ECR) | zip は展開後 250 MB まで。Redmine と gem と ImageMagick は収まらない見込み。イメージは 10 GB まで |
-| アーキテクチャ | arm64 | x86 より実行時間の単価が安い(東京で 1 GB 秒あたり 0.0000133334 ドルと 0.0000166667 ドル) |
+| アーキテクチャ | arm64 | x86 より実行時間の単価が安い(ap-northeast-1 で 1 GB 秒あたり 0.0000133334 ドルと 0.0000166667 ドル) |
 | メモリ | 2,048 MB | CPU はメモリに比例して割り当てられる。Rails の起動とサムネイルの生成を速くする。実測で見直す |
 | タイムアウト | 60 秒(`redmine-web`)、900 秒(`redmine-worker`、`redmine-task`) | CloudFront のオリジンの応答の待ち時間に合わせる(下記) |
 | `/tmp` | 512 MB(既定。追加の料金なし) | 256 MB までの添付ファイルのキャッシュ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache))、PDF の出力。登録のときに Lambda がファイル全体を読まず(SHA256 は S3 が確認する)、ダウンロードも Lambda を通らないので、既定で足りる |
@@ -153,7 +153,7 @@ Lambda Web Adapter は、AWS が公開している拡張機能です。Lambda �
 
 ### 環境を温めておく
 
-よく使われる方法は、この設計には合いません。SnapStart は Java、Python、.NET だけで、Ruby に対応していません。Provisioned Concurrency で 2 GB の環境を 1 つ確保し続けると、東京の arm で月約 23 ドルかかり(2 GB × 1 GB 秒あたり 0.0000043068 ドル × 2,628,000 秒(730 時間))、予算に合いません。
+よく使われる方法は、この設計には合いません。SnapStart は Java、Python、.NET だけで、Ruby に対応していません。Provisioned Concurrency で 2 GB の環境を 1 つ確保し続けると、ap-northeast-1 の arm で月約 23 ドルかかり(2 GB × 1 GB 秒あたり 0.0000043068 ドル × 2,628,000 秒(730 時間))、予算に合いません。
 
 代わりに、必要なら EventBridge Scheduler から、業務時間のあいだ 5 分ごとに `redmine-web` を呼びます。HTTP ではないこのイベントは、Lambda Web Adapter が `/events` への POST として渡し、プラグインの Rack のミドルウェアが、データベースに触れずに 204 を返します。環境が残る時間は公式に書かれていないので、効き目を測ってから決めます。
 
@@ -364,7 +364,7 @@ flowchart LR
 | 関数 | `redmine-body-hash`。既定のビヘイビアの、オリジンへの要求(origin request)に、本文を含めて(`IncludeBody`)付ける。`/tmp/*` にも、本文を含めずに付ける | 本文を読めるのは Lambda@Edge だけ。オリジンへの要求のところなら、本文を 1 MB まで読める(ビューアーからの要求のところでは 40 KB まで)。`/tmp/*` では、アップロードのチェックサムを S3 に渡す |
 | ランタイム | Node.js 24(`nodejs24.x`。Lambda@Edge が対応する最新のもの)、x86_64、128 MB、5 秒。依存の npm のパッケージは使わず、`node:crypto` だけで書く。コードは `infra/shared-edge.yaml` に埋め込み、`bin/test-edge` でテストする([testing.md](testing.md#edge-function-tests)) | Lambda@Edge は Node.js と Python だけで、コンテナイメージと arm64 には対応しない |
 | アーキテクチャ、メモリ、タイムアウト | x86_64、128 MB、5 秒 | ハッシュの計算だけ |
-| リージョン | us-east-1(バージニア北部) | Lambda@Edge の関数は us-east-1 に作る決まり |
+| リージョン | us-east-1 | Lambda@Edge の関数は us-east-1 に作る決まり |
 | 置き場所 | このリポジトリの `edge/body-hash/` | Redmine の外で動くので、プラグインにしない |
 
 処理は次のとおりです。
@@ -376,7 +376,7 @@ flowchart LR
 
 この関数があるので、CloudFront を通って Redmine に届く要求の本文は 1 MB までになります。画面からの添付ファイルは S3 に直接送るので当たりません。当たるものは、下の[「6 MB の制限」](#the-6-mb-limit)にまとめました。
 
-この関数はオリジンへの要求のところで動くので、キャッシュしない画面の要求ごとと、`/tmp/*`(サムネイル、zip、アップロード。どれもキャッシュしない)の要求ごとに動きます。東京では 100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルで(価格表)、月 5 万件なら 0.1 ドルに届きません。CloudFront の定額プランでも使え、料金はプランとは別にかかります(AWS のブログ、2026-03-24)。ログは、関数が動いたエッジに近いリージョンの CloudWatch Logs に出ます(`/aws/lambda/us-east-1.redmine-body-hash`)。
+この関数はオリジンへの要求のところで動くので、キャッシュしない画面の要求ごとと、`/tmp/*`(サムネイル、zip、アップロード。どれもキャッシュしない)の要求ごとに動きます。ap-northeast-1 では 100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルで(価格表)、月 5 万件なら 0.1 ドルに届きません。CloudFront の定額プランでも使え、料金はプランとは別にかかります(AWS のブログ、2026-03-24)。ログは、関数が動いたエッジに近いリージョンの CloudWatch Logs に出ます(`/aws/lambda/us-east-1.redmine-body-hash`)。
 
 Lambda@Edge で本文のハッシュを入れてから OAC が署名する形は、公式の資料には書かれていません。動いたという実践の記録はあります(クラスメソッドの記事、2024-07-29。公式の情報ではありません)。最初に試して確認します。
 

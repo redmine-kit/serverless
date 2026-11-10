@@ -2,7 +2,7 @@
 
 The database is Amazon RDS for PostgreSQL in a VPC. The Lambda functions run in private subnets of the same VPC, and they reach AWS services through VPC endpoints or a NAT instance ("Routes out of the VPC" below).
 
-The unit prices on this page come from the Tokyo file of the AWS Price List API (AmazonRDS, published on 2026-10-29). Monthly amounts are calculated with 730 hours. Sources are in [sources.md](sources.md).
+The unit prices on this page come from the ap-northeast-1 file of the AWS Price List API (AmazonRDS, published on 2026-10-29). Monthly amounts are calculated with 730 hours. Sources are in [sources.md](sources.md).
 
 ## Diagram
 

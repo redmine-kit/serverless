@@ -76,7 +76,7 @@
 | ページ | 確認したこと |
 | --- | --- |
 | [S3 Files の同期](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-files-synchronization.html) | 検討して使わなかった理由の一つ。書き込みが 60 秒止まってから S3 に書き出す |
-| [S3 の料金](https://aws.amazon.com/s3/pricing/) | S3 Files の料金の考え方。東京の単価は価格表(AmazonS3)で、載っているデータ 1 GB あたり月 0.36 ドル |
+| [S3 の料金](https://aws.amazon.com/s3/pricing/) | S3 Files の料金の考え方。ap-northeast-1 の単価は価格表(AmazonS3)で、載っているデータ 1 GB あたり月 0.36 ドル |
 | [GetObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html) | (署名付きの)GET で上書きできるのは `response-content-type`、`-language`、`-expires`、`-cache-control`、`-disposition`、`-encoding` だけなので、CSP は付けられない。添付ファイルを CloudFront に通す理由 |
 | [Implementing secure file uploads to Amazon S3 at the edge: Choosing the right pattern](https://aws.amazon.com/blogs/networking-and-content-delivery/implementing-secure-file-uploads-to-amazon-s3-at-the-edge-choosing-the-right-pattern/) | AWS のブログ、2026-02-24。オリジンアクセスコントロールは POST のポリシーに署名しないので、CloudFront を通したアップロードは PUT にする |
 | [Checking object integrity for data uploads](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html) | アップロードの `x-amz-checksum-sha256` と、`ChecksumMode` を付けた `HeadObject` がチェックサムを返すこと([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
@@ -85,10 +85,10 @@
 | [Lambda@Edge の制限](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-at-edge-function-restrictions.html) | 本文は base64 で渡る。オリジンへの要求では 1 MB、ビューアーからの要求では 40 KB で切り詰める。us-east-1、Node.js と Python、コンテナイメージと arm64 は使えない。実行ロールは `edgelambda.amazonaws.com` にも引き受けを許す(2026-11-09 に確認) |
 | [CloudFront の定額プランの新しい機能(AWS のブログ)](https://aws.amazon.com/blogs/networking-and-content-delivery/amazon-cloudfront-flat-rate-pricing-plans-new-features-and-expanded-capabilities/) | 2026-03-24。Lambda@Edge が、すべての定額プランで使えるようになった。呼び出しは、プランとは別に従量で払う |
 | [CloudFront + Lambda 関数 URL 構成で POST/PUT リクエストを行うため Lambda@Edge でコンテンツハッシュを計算する(クラスメソッド)](https://dev.classmethod.jp/articles/cloudfront-lambda-url-with-post-put-request) | 公式でない実践の記録(2024-07-29)。Lambda@Edge で `x-amz-content-sha256` を入れ、OAC の署名で関数 URL が POST を受けた。本文を文字列にしてから計算しているので、この設計ではバイト列のまま計算する |
-| 価格表(AWSLambda、東京、2026-10-30 公開) | Lambda@Edge は 100 万件あたり 0.60 ドル、1 GB 秒あたり 0.00005001 ドル |
+| 価格表(AWSLambda、ap-northeast-1、2026-10-30 公開) | Lambda@Edge は 100 万件あたり 0.60 ドル、1 GB 秒あたり 0.00005001 ドル |
 | [Route 53 の価格表](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/current/index.json) | ホストゾーン 1 つで月 0.50 ドル(25 個まで)、別名のレコードへの AWS の中の問い合わせは無料、ほかの問い合わせは 100 万件あたり 0.40 ドル(2026-11-04 公開) |
 | [Cloudflare の CNAME の平坦化の設定](https://developers.cloudflare.com/dns/cname-flattening/set-up-cname-flattening/) | 頂点とプロキシを通すレコードは、どのプランでも平坦化される。有料のプランでは、すべての CNAME か、レコードごとに平坦化できる。同じ名前の MX については書かれていない |
-| 価格表(東京。AmazonEC2 2026-11-07、AmazonECS 2026-10-19、AWSELB 2026-11-05、AmazonLightsail 2026-09-15 公開) | EC2 t4g.small 1 時間 0.0216 ドル、gp3 1 GB あたり月 0.096 ドル、Fargate の Arm の vCPU 1 時間 0.04045 ドルとメモリ 1 GB 1 時間 0.00442 ドル、ALB 1 時間 0.0243 ドルと LCU 1 時間 0.008 ドル、Lightsail 2 GB 1 時間 0.01612 ドル(パブリック IPv4 を含む)。[comparison.md](comparison.md) |
+| 価格表(ap-northeast-1。AmazonEC2 2026-11-07、AmazonECS 2026-10-19、AWSELB 2026-11-05、AmazonLightsail 2026-09-15 公開) | EC2 t4g.small 1 時間 0.0216 ドル、gp3 1 GB あたり月 0.096 ドル、Fargate の Arm の vCPU 1 時間 0.04045 ドルとメモリ 1 GB 1 時間 0.00442 ドル、ALB 1 時間 0.0243 ドルと LCU 1 時間 0.008 ドル、Lightsail 2 GB 1 時間 0.01612 ドル(パブリック IPv4 を含む)。[comparison.md](comparison.md) |
 | [Redmine の DB を MySQL から PostgreSQL へ移行(Qiita)](https://qiita.com/SKYS/items/2004c60000ddfeaa20b3) | 公式でない実践の記録(@SKYS 氏、2026-08-09)。Redmine 6.1、MySQL 8.0 から PostgreSQL 18。スキーマは Redmine の migration で作り、Embulk でデータだけをコピーする。`schema_migrations` を除く、シーケンスを直す、`wiki_content_versions.data` を base64 でコピーする。pgloader 3.6.9 では上手くいかなかった。[migration.md](migration.md#migrating-from-mysql) |
 | [dimitri/pgloader](https://github.com/dimitri/pgloader) | 最後のリリースは v3.6.9(2022-10-24)。リポジトリは更新が続いている(2026-09-14) |
 | [CloudFront の料金](https://aws.amazon.com/cloudfront/pricing/) | 定額プランの Free は月 0 ドル、月 100 万リクエストと 100 GB、WAF のルール 5 つまで。ログ、独自のキャッシュのルール、VPC の中のオリジンは含まれない |
@@ -98,7 +98,7 @@
 | [IAM のデータベース認証](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.html) | 300〜1,000 MiB の追加のメモリ |
 | [SQLite をネットワークの上で使う](https://www.sqlite.org/useovernet.html) | ロックの問題で壊れた例がある |
 | [SES の VPC エンドポイント](https://docs.aws.amazon.com/ses/latest/dg/send-email-set-up-vpc-endpoints.html) | API 用(`email`)と SMTP 用のインターフェイスエンドポイント。API は 443 番 |
-| [SES のエンドポイントとクォータ](https://docs.aws.amazon.com/general/latest/gr/ses.html) | 東京の受信の宛先 `inbound-smtp.ap-northeast-1.amazonaws.com` |
+| [SES のエンドポイントとクォータ](https://docs.aws.amazon.com/general/latest/gr/ses.html) | ap-northeast-1 の受信の宛先 `inbound-smtp.ap-northeast-1.amazonaws.com` |
 | [SES の受信の考え方](https://docs.aws.amazon.com/ses/latest/dg/receiving-email-concepts.html) | 確認済みの ID 宛てだけを受ける、S3 に置けるのは 40 MB まで、`X-SES-Spam-Verdict`、`X-SES-Virus-Verdict`、`Authentication-Results` のヘッダー |
 | [SES と リージョン](https://docs.aws.amazon.com/ses/latest/dg/regions.html) | 受信に使う Lambda は SES と同じリージョン。有効なルールのセットはリージョンごとに 1 つ |
 

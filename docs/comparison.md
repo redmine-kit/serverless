@@ -2,7 +2,7 @@
 
 This page compares this design (Lambda and managed services) with running Redmine on ordinary servers, on price, security and operations.
 
-Unit prices on this page come from the Tokyo files of the AWS price list (Price List API) (published on 2026-11-07 for EC2, 2026-10-19 for ECS, 2026-11-05 for ELB and 2026-09-15 for Lightsail). Monthly amounts are calculated for 730 hours. Usage is assumed to be about 10 people. Sources are in [sources.md](sources.md).
+Unit prices on this page come from the ap-northeast-1 files of the AWS price list (Price List API) (published on 2026-11-07 for EC2, 2026-10-19 for ECS, 2026-11-05 for ELB and 2026-09-15 for Lightsail). Monthly amounts are calculated for 730 hours. Usage is assumed to be about 10 people. Sources are in [sources.md](sources.md).
 
 ## Setups compared
 

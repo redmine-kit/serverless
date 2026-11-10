@@ -73,11 +73,11 @@ Email for which the SES API call fails is retried automatically, and email that 
 | SES receiving | $0.0001 per message, $0.00009 per incoming chunk | About $0.19 for 1,000 messages (1 chunk each) |
 | S3, Lambda (import) | — | A few cents |
 
-The SES unit prices are the Tokyo values from the price list (AmazonSES, published 2026-11-04). The size of an incoming chunk is not given in the price list, so it is checked on the pricing page when building.
+The SES unit prices are the ap-northeast-1 values from the price list (AmazonSES, published 2026-11-04). The size of an incoming chunk is not given in the price list, so it is checked on the pricing page when building.
 
 ## Receiving
 
-Receiving is used for creating issues by email and for adding notes to issues by replying to notification email. Each project has its own receiving address. SES receives the email and stores it in S3, and the task function (`redmine-task`) imports it into Redmine. SES in Tokyo supports receiving email (the receiving endpoint is `inbound-smtp.ap-northeast-1.amazonaws.com`).
+Receiving is used for creating issues by email and for adding notes to issues by replying to notification email. Each project has its own receiving address. SES receives the email and stores it in S3, and the task function (`redmine-task`) imports it into Redmine. SES in ap-northeast-1 supports receiving email (the receiving endpoint is `inbound-smtp.ap-northeast-1.amazonaws.com`).
 
 ```mermaid
 sequenceDiagram
@@ -130,7 +130,7 @@ SES receipt rules are grouped in rule sets, and only one rule set can be active 
 | Second action | Invoke `redmine-task` asynchronously |
 
 - **S3 bucket:** The bucket policy allows writes to `inbound/` only from SES for the receipt rules of this account. A message stored in S3 can be up to 40 MB, including headers.
-- **Lambda permission:** The resource-based policy of `redmine-task` allows invocation by SES from the receipt rule. A Lambda function invoked from an SES rule must be in the same Region as SES (both Tokyo).
+- **Lambda permission:** The resource-based policy of `redmine-task` allows invocation by SES from the receipt rule. A Lambda function invoked from an SES rule must be in the same Region as SES (both ap-northeast-1).
 - **Execution role:** Give the execution role of `redmine-task` read and write access to the mail bucket.
 - **Permission details:** In [iam.md](iam.md).
 - **Retention period:** Email moved to `processed/` and email left in `inbound/` (discarded or failed) are both deleted after 30 days by a lifecycle rule ([security.md](security.md#retention-periods)). Re-imports must be done within this period. A re-import is run from "Receiving email" in the administration screen, where it runs in `redmine-worker` as a job ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#receiving-email)), or locally with this command, which runs in `redmine-task`:

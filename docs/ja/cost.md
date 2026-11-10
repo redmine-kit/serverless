@@ -1,6 +1,6 @@
 # 費用の見込み
 
-東京リージョンでの月の費用の見込みです。単価は AWS の価格表(Price List API)の東京のファイルから取りました。使用量は、10 人ほどが業務時間に使う前提で置いた数字で、まだ測っていません。データベースは、VPC の中の RDS for PostgreSQL です([rds.md](rds.md))。
+ap-northeast-1 での月の費用の見込みです。単価は AWS の価格表(Price List API)の ap-northeast-1 のファイルから取りました。使用量は、10 人ほどが業務時間に使う前提で置いた数字で、まだ測っていません。データベースは、VPC の中の RDS for PostgreSQL です([rds.md](rds.md))。
 
 <a id="monthly-estimate"></a>
 

@@ -12,14 +12,14 @@
 # jq programs are in single quotes on purpose.
 # shellcheck disable=SC2016
 set -euo pipefail
-cd "$(dirname "$0")/.."
 
 if [[ $# -lt 2 || ! -f "$1" ]]; then
   echo "usage: bin/build-derived-image <redmine.json> <base image> [tag]" >&2
   exit 64
 fi
-config="$1" base="$2" tag="${3:-serverless-derived:local}"
-config_dir=$(cd "$(dirname "$config")" && pwd)
+config_dir=$(cd "$(dirname "$1")" && pwd)
+config="$config_dir/$(basename "$1")" base="$2" tag="${3:-serverless-derived:local}"
+cd "$(dirname "$0")/.."
 
 # Each name once, among the plugins and among the themes.
 for kind in plugins themes; do

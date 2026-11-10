@@ -190,7 +190,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 イメージをビルドするたびに、本番と同じ条件の Docker で起動します。
 
 - **条件:** arm64、読み取り専用のファイルシステム (`--read-only`)、書き込めるのは `/tmp` だけ (`--tmpfs /tmp`)、非特権ユーザー (`--user` で、root 以外の任意の番号)。データベースは、RDS と同じメジャーバージョンの PostgreSQL コンテナです。AWS (SSM と SQS) は、CI のように `LOCALSTACK_AUTH_TOKEN` があれば LocalStack、なければ moto です (フォークからのプルリクエストや、トークンのないローカル環境)。トークンがあるのに LocalStack が起動しなければ、テストは失敗します。モックは使いません。テストが使う API は、LocalStack にも moto にもすべてあります。コンテナは、PostgreSQL と AWS の代替にしか接続できない Docker の内部ネットワークで動かすので、テストから AWS には接続できません。
-- **`web`:** Puma が起動し、ログイン画面が 200 を返し、セッション Cookie に `Secure` が付くこと ([session.md](session.md#the-secure-attribute-of-the-session-cookie))、アセットの `.manifest.json` があること、起動後に `/tmp` 以外に書き込んでいないことを確認します。Puma は `127.0.0.1` だけで待ち受けるので、画面はコンテナ内から開きます。エミュレーターはリクエストを Lambda Web Adapter に通さないので、その経路は Lambda 結合テストで確認します。
+- **`web`:** Puma が起動し、ログイン画面が 200 を返し、セッション Cookie に `Secure` が付くこと ([session.md](session.md#the-secure-attribute-of-the-session-cookie))、アセットの `.manifest.json` があること、起動後に `/tmp` 以外に書き込んでいないことを確認します。Redmine 7.1 (master) では、設定したファビコンを `Cache-Control: max-age=31556952, public, immutable` で返すことも確認します。CloudFront のキャッシュビヘイビア `/favicons/*` がキャッシュするレスポンスです ([lambda.md](lambda.md#the-favicon))。Puma は `127.0.0.1` だけで待ち受けるので、画面はコンテナ内から開きます。エミュレーターはリクエストを Lambda Web Adapter に通さないので、その経路は Lambda 結合テストで確認します。
 - **`task`:** ベースイメージにあるランタイムインターフェイスエミュレーター (`aws-lambda-rie`) でハンドラーを呼び出し、`rake db:migrate`、`redmine:load_default_data`、`rake -T`、`rails runner` が動くこと、Redmine が Subversion と Git のクライアントを見つけ、`/tmp` に作成した Subversion と Git のリポジトリを読めること ([lambda.md](lambda.md#repositories))、失敗したタスクが終了コードを返すこと、許可していないコマンドと `env` の名前を拒否することを確認します。メールの取り込みは、プラグインと一緒に追加します。
 - **`worker`:** 同じくエミュレーターで実行します。ジョブをキューに送信して受信し、そのメッセージの受信ハンドルを付けた SQS 形式のイベントで worker に渡します。呼び出しが成功すること、ジョブが実行されること (プロジェクトが削除され、その通知メールが SQS に追加される)、worker がメッセージを削除すること (処理中のメッセージが残らない。`redmine_serverless_sqs` は `REDMINE_JOBS_QUEUE_URL` で削除する。[setup.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/setup.html))、許可していないジョブクラスが実行されないことを確認します。
 - **内容:** ImageMagick の `convert`、Ghostscript、Pandoc (3.8.3 以上)、Subversion と Git のクライアント (`svn`、`git`) が動くこと、`/var/task` と `/opt` のすべてを非特権ユーザーが読めること、ビルドしたアセットがあることを確認します。タスクハンドラーの単体テストも、イメージ内で実行します。push したマニフェストが arm64 だけで、インデックス形式になっていないかは、イメージを push するときに確認します。
@@ -202,7 +202,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 
 `bin/test-edge` が、Node.js のイメージ内で、`node:test` で `edge/` のテストを実行します。npm パッケージは使いません。
 
-- **`redmine-body-hash` (Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ (フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文 (1 MB を超えるもの) に 413 を返すこと、リクエストのほかの項目を変更しないこと。
+- **`redmine-body-hash` (Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ (フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文 (1 MB を超えるもの) に 413 を返すこと、リクエストのほかの項目を変更しないこと、32 KB のファビコン (Redmine 7.1) を含む設定のフォームがハッシュを付けて通ること。
 - **`<instance>-incoming-size` (CloudFront Function):** CloudFront と同じく、上限を埋め込んだ通常のスクリプトとして実行します。`/tmp/incoming/` への上限以内の PUT は通過し、超えると 413、正しい `Content-Length` がないと 411、ほかのメソッドとパス (サムネイルと zip の署名付き GET) は通過すること。
 - **`<instance>-attachment-headers` (CloudFront Function):** 通常のスクリプトとして実行します。すべての応答に sandbox の CSP が付くこと、成功の応答では、デコードした `response-content-disposition` と `response-content-type` が `Content-Disposition` と `Content-Type` になること、それがなければ S3 のヘッダーのままであること、不正な値、印字可能な ASCII 以外の値 (改行など)、エラー応答では上書きしないこと。
 - **テンプレート:** コードはテンプレート (`infra/shared-edge.yaml`、`infra/instance.yaml`) に埋め込むので、テンプレートがファイルと同じ行を持つことも確認します。
@@ -215,6 +215,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 
 - **スキーマ:** [deploy-config.md](deploy-config.md#example) の例、`test/deploy/valid/` のファイル、`test/derived/redmine.json` が検証に通ること。`test/deploy/invalid/` のファイルが、どれも通らないこと (項目がない、`route53` なのにホストゾーンがない、digest のないイメージ、未知の項目、取得元が 2 つあるプラグイン、`ref` のない Git の取得元、URL 内の認証情報など)。
 - **スタックパラメーター:** 正しい設定のそれぞれで、`deploy/params.jq` がテンプレートごとに作るパラメーターが、そのテンプレートのパラメーターであり、デフォルト値のないパラメーターがすべて渡されること。デフォルト値と、渡した値も比較します。
+- **CloudFront のキャッシュビヘイビア:** `test/deploy/behaviors.py` が `infra/instance.yaml` を読み、キャッシュビヘイビアがデフォルトのものを含めて 5 つ以下 (無料プラン) であること、`/favicons/*` が Redmine に転送され、GET と HEAD だけで、`CachingOptimized` と `SecurityHeadersPolicy` を使い、オリジンリクエストポリシー (Cookie の転送)、関数、署名付き URL がないことを確認します ([lambda.md](lambda.md#the-favicon))。
 - **手順:** すべての呼び出しを記録するフェイクの `aws`、`crane`、`curl` (`test/deploy/fake/`) に対して、`deploy/deploy.sh` を実行します。初回と 2 回目以降の手順の順序 (web と worker が新しいイメージになる前に、タスクがマイグレーションを実行する)、`--dry-run` (何も実行せず、書き込まず、呼び出さない)、`--code-only`、`--account`、変更のないスタック、デプロイを止めるマイグレーションの失敗、確認の失敗、どの呼び出しよりも前に止まる不正な設定。`image.plugins` と `image.themes` があれば、レジストリからコピーする代わりに派生イメージの tarball を digest でプッシュすること、tarball がなければ手順を実行しないこと。秘密の値は、形式、SecureString であること、スタックの公開鍵が秘密鍵と一致すること、コマンドラインにも出力にも表示されないことを確認します。
 - **設定のコード:** 設定を適用する Ruby のコードを、Redmine の `Setting` の代替オブジェクトに対して Ruby で実行します (`initial` と `enforce`、プラグインの設定のマージ)。
 

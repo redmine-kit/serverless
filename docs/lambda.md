@@ -308,7 +308,7 @@ flowchart LR
 - **Body hash:** Function URLs do not accept unsigned bodies (`UNSIGNED-PAYLOAD`), so PUT and POST must send the body's SHA256 in `x-amz-content-sha256` (CloudFront documentation). Forms in Redmine pages in the browser do not add it. So the Lambda@Edge function `redmine-body-hash`, which runs at the origin request, computes the hash from the body and adds it. OAC then signs the request.
 - **Not possible with CloudFront Functions:** The request data in CloudFront Functions has no body (only the method, URI, query string, headers and cookies). Only Lambda@Edge can read the body.
 - **`Host`:** The viewer's `Host` is not forwarded to the function URL (the origin request policy is `AllViewerExceptHostHeader`). OAC signs with the function URL's host name. The Redmine domain is passed in the origin custom header `X-Forwarded-Host`. Rails builds URLs from `X-Forwarded-Host`.
-- **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below). Attachments use the behaviors `/files/*` and `/tmp/*` (thumbnails, zips and uploads), which go to the attachments bucket through OAC and require signed URLs ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)). They are not cached either (`CachingDisabled`), because no AWS-managed cache policy keeps the file name and type of the signed URL in the cache key (below).
+- **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below). Attachments use the behaviors `/files/*` and `/tmp/*` (thumbnails, zips and uploads), which go to the attachments bucket through OAC and require signed URLs ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)). They are not cached either (`CachingDisabled`), because no AWS-managed cache policy keeps the file name and type of the signed URL in the cache key (below). `/favicons/*`, the favicon of Redmine 7.1, goes to the function URL and is cached (see "The favicon" below).
 - **Origin response timeout:** The CloudFront default is 30 seconds, configurable from 1 to 120 seconds. It is set to 60 seconds to match the function timeout.
 
 ### Function that adds the body hash (Lambda@Edge)
@@ -361,6 +361,20 @@ Files loaded on every page then never go through Lambda, which cuts start-up wai
 
 By default in Rails 8.1, Rails also serves `public/` (`public_file_server.enabled`). CloudFront sends `/assets/*` to S3, so those requests never reach Rails, and the setting can stay as it is.
 
+### The favicon
+
+Redmine 7.1 lets administrators set the favicon ("Custom favicon" in Administration › Settings › Display, PNG or ICO up to 32 KB; 7.1 is not released, checked on the master branch, 7519645, on 2026-11-10). Redmine keeps the image in the settings table, Base64 encoded, not as an attachment, and serves it from `FaviconsController#show` at `/favicons/<the first 8 hexadecimal digits of its SHA256>`, also to visitors who are not logged in, with `Cache-Control: max-age=31556952, public, immutable`. The URL changes when the favicon is replaced. Every page links it, so without a cache every page view would also invoke Lambda for it.
+
+| Item | Setting | Reason |
+| --- | --- | --- |
+| Behavior | `/favicons/*`, to the function URL, GET and HEAD | Redmine has no other route under `/favicons` (`config/routes.rb` of master) |
+| Cache policy | `CachingOptimized` | The URL alone is the cache key, without query strings, cookies or headers; CloudFront keeps the response as long as Redmine's `Cache-Control` says, up to the policy's maximum of a year |
+| Origin request policy | None | No cookie reaches Redmine, so the response does not depend on who asked. Without cookies forwarded, CloudFront removes `Set-Cookie` from the response ("Cache content based on cookies" in the CloudFront documentation, checked on 2026-11-10), so a cached response never carries a viewer's session. The function URL gets its own host name as `Host`, as on the default behavior |
+| Body hash | Not attached | GET has no body; OAC needs the body hash for PUT and POST only (above) |
+| Response headers policy | `SecurityHeadersPolicy` | As on every behavior |
+
+On Redmine 7.0 the path does not exist, and Redmine answers `404`. Uploading the favicon goes through the settings form on the default behavior: up to 32 KB of image, within the 1 MB the body-hash function reads. The WAF rule `SizeRestrictions_BODY` matches a form over 8 KB, and it only counts ([security.md](security.md#rules)). The image tests check, on Redmine master, that Redmine serves a favicon set in the settings with this `Cache-Control`, and the deployment tests check the behavior in the template ([testing.md](testing.md)).
+
 ### Flat-rate Free plan and WAF
 
 CloudFront uses the flat-rate Free plan ($0 per month). The templates use only what Free includes, so the configuration is the same on every plan. Free includes 1 million requests and 100 GB of transfer per month, which is expected to be enough at this scale. It also includes WAF rules (up to 5). The plan differences, what is not included (such as logs) and the WAF rules are in [security.md](security.md#aws-waf).
@@ -369,9 +383,9 @@ The features the templates use, against the table of features per plan in the Cl
 
 | Feature | Free | How this design uses it |
 | --- | --- | --- |
-| Cache behaviors | Up to 5 | 4 (below) |
-| Cache policies | AWS-managed only ("custom caching rules" from Business) | `CachingDisabled` on Redmine, `/files/*` and `/tmp/*`; `CachingOptimized` on `/assets/*` |
-| Origin request policies | AWS-managed only ("custom origin request rules" from Business) | `AllViewerExceptHostHeader` on Redmine; none on S3 |
+| Cache behaviors | Up to 5 | 5 (below) |
+| Cache policies | AWS-managed only ("custom caching rules" from Business) | `CachingDisabled` on Redmine, `/files/*` and `/tmp/*`; `CachingOptimized` on `/assets/*` and `/favicons/*` |
+| Origin request policies | AWS-managed only ("custom origin request rules" from Business) | `AllViewerExceptHostHeader` on Redmine; none on S3 and `/favicons/*` |
 | Response headers policies | AWS-managed only ("custom response header rules" from Business) | `SecurityHeadersPolicy` on every behavior; it also gives the attachments `nosniff`. Their sandbox CSP and file name come from a CloudFront Function |
 | CloudFront Functions | Included. A function used by another distribution cannot be attached | `<instance>-incoming-size` (viewer request) and `<instance>-attachment-headers` (viewer response), per instance |
 | Lambda@Edge | Can be used, charged per invocation outside the plan | `redmine-body-hash` (origin request of Redmine's behavior), shared by the instances |
@@ -385,7 +399,7 @@ The features the templates use, against the table of features per plan in the Cl
 
 The custom error pages (`CustomErrorResponses`), HTTP/3, IPv6 and the ACM certificate are not plan features in the table. The AWS account must not be on the AWS Free Tier. Not confirmed by the table: whether each AWS managed rule group counts as one of the 5 rules, and whether a scope-down statement on a managed rule group is allowed ([security.md](security.md#to-verify)).
 
-The distribution has 4 cache behaviors: the default one and `/files/*`, `/tmp/*` and `/assets/*`. Free allows 5 (checked 2026-11-10), so it fits whether or not the default behavior counts. Thumbnails, zips and uploads share `/tmp/*` for this reason; their S3 keys follow Redmine's own `tmp/` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#bucket-layout)).
+The distribution has 5 cache behaviors: the default one and `/files/*`, `/tmp/*`, `/assets/*` and `/favicons/*`. Free allows 5 (checked 2026-11-10), so it fits whether or not the default behavior counts; if the default one counts, there is no room for another, and the deployment tests check that there are no more than 5. Thumbnails, zips and uploads share `/tmp/*` for this reason; their S3 keys follow Redmine's own `tmp/` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#bucket-layout)).
 
 ## Repositories
 
@@ -436,3 +450,4 @@ Synchronous invocations of Event Functions are limited to 6 MB each for the requ
 - Whether redirects and URLs in mail use the correct domain with `X-Forwarded-Host`
 - Whether, after Lambda@Edge adds `x-amz-content-sha256` and OAC signs the request, the function URL accepts POST, PUT, PATCH and DELETE. Whether POST without a body and multipart forms also pass
 - Whether returning 413 on Lambda@Edge `inputTruncated` gives a response that browsers and API clients can understand
+- Whether CloudFront caches `/favicons/*` from the function URL as Redmine's `Cache-Control` says, with the function URL's own `Host`, and returns no `Set-Cookie`

@@ -57,6 +57,7 @@ Serverless のセキュリティ設計です。保護対象、脅威、層ごと
 | レスポンスヘッダー | すべてのビヘイビアに、CloudFront の AWS マネージドのレスポンスヘッダーポリシー `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`) を設定する。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので (`config/environments/production.rb`)、HSTS は CloudFront で付ける |
 | 添付ファイル | ビヘイビア `/files/*` (添付ファイルの GET) と `/tmp/*` (サムネイルと zip の GET、`/tmp/incoming/` へのアップロードの PUT) は、OAC で添付ファイル用バケットに転送し、CloudFront 署名付き URL を必須にする。どちらにも、`SecurityHeadersPolicy` が `nosniff` を付け、ビューワーレスポンスの CloudFront Functions (`<instance>-attachment-headers`) が、sandbox の CSP と、署名付き URL のファイル名と種類を付ける ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
 | 関数 URL | OAC の署名がないリクエストは、関数が呼び出される前に拒否される ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
+| キャッシュするレスポンス | CloudFront がキャッシュするのは、`/assets/*` (S3 のコンパイル済みのアセット) と `/favicons/*` (Redmine 7.1 のファビコン。Redmine が誰にでも public、immutable で返すもの) だけ。`/favicons/*` は Cookie を Redmine に転送せず、CloudFront がレスポンスから `Set-Cookie` を削除するので、キャッシュしたレスポンスにセッションは入らない。Redmine の画面、アバター (Redmine 7.1)、添付ファイルは CloudFront でキャッシュしない ([lambda.md](lambda.md#the-favicon)) |
 | リクエスト本文 | Redmine のビヘイビアでは 1 MB まで。超えると Lambda@Edge が 413 を返す。`/tmp/incoming/` へのアップロードは、Lambda ではなく S3 に到達し、アップロードの上限を超える本文は CloudFront Functions が拒否する ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
 
 ディストリビューションは、どのプランでも AWS マネージドのポリシー (キャッシュ、オリジンリクエスト、レスポンスヘッダー) だけを使い、添付ファイルのヘッダーは CloudFront Functions で付けます ([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。無料プランとプロプランで使えるのは、マネージドポリシーだけです。Content Security Policy などを独自に定義するポリシーはビジネスプランからで、この設計では使いません。
@@ -79,7 +80,7 @@ CloudFront に AWS WAF のウェブ ACL を関連付け、Redmine に到達す�
 | 定額料金プランのプロプラン | 月額 15 ドル (CloudFront と WAF を含む) | 使用量が無料プランの月 100 万リクエスト、100 GB を超える見込みの場合。構成は同じ |
 | 従量課金 | ウェブ ACL 1 つで月額 5 ドル、ルールかマネージドルールグループ 1 つで月額 1 ドル、リクエスト 100 万件で 0.60 ドル。下の 5 つのルールなら月額 10 ドル程度 | アカウントに無料プランの枠が残っていない場合 (1 つのアカウントで 3 つまで。下記)。構成は同じ |
 
-定額料金プランには、いくつかの制約があります。ウェブ ACL は関連付けを解除できず (解除するには従量課金に戻す)、独自のルールグループは使えないので、ルールを 1 つずつ設定します。無料プランは 1 つのアカウントで 3 つまでで、この上限は引き上げられません。ほかのディストリビューションが使っているウェブ ACL や CloudFront Functions は、プランのディストリビューションに関連付けられないので、独自に用意するウェブ ACL (`cloudfront.webAclArn`) は、このディストリビューション専用にします。キャッシュビヘイビアは、無料プランで 5 つまでです (この設計は 4 つ)。
+定額料金プランには、いくつかの制約があります。ウェブ ACL は関連付けを解除できず (解除するには従量課金に戻す)、独自のルールグループは使えないので、ルールを 1 つずつ設定します。無料プランは 1 つのアカウントで 3 つまでで、この上限は引き上げられません。ほかのディストリビューションが使っているウェブ ACL や CloudFront Functions は、プランのディストリビューションに関連付けられないので、独自に用意するウェブ ACL (`cloudfront.webAclArn`) は、このディストリビューション専用にします。キャッシュビヘイビアは、無料プランで 5 つまでです (この設計は 5 つ。最後の 1 つは Redmine 7.1 のファビコン用。[lambda.md](lambda.md#the-favicon))。
 
 無料プランでは、CAPTCHA、JavaScript のチャレンジ、ヘッダーや正規表現で絞り込むルール、ブロック時のレスポンスのカスタマイズ、Bot Control は使えません。そのため、ログインのレート制限は、正規表現ではなく、文字列の一致 (前方一致) でパスを指定します。無料プランとプロプランでは、WAF が検査する本文は最初の 16 KB までです。
 
@@ -104,6 +105,8 @@ Redmine には、ログインの失敗回数でアカウントをロックする
 レートベースのルールは、1、2、5、10 分のいずれかの期間でカウントし、しきい値の下限は 10 です。WAF は設定した回数の近くでブロックしますが、正確な回数は保証していません (WAF の資料)。CloudFront を経由するので、カウントする IP アドレスはユーザーのものです。全体の 1,000 回は初期値です。Redmine の 1 画面は、アセットを除いて数件のリクエストで、アセットも CloudFront を経由するので回数に含まれます。利用状況を計測して決め、社内からのリクエストが 1 つの IP アドレスにまとまる (NAT など) 場合は引き上げます。
 
 Common Rule Set を最初はカウントだけにするのは、Redmine の正当なリクエストをブロックするルールがあるためです。`SizeRestrictions_BODY` (本文が 8 KB を超えるとブロック) は、wiki やチケットの長い本文をブロックし、`CrossSiteScripting_BODY` などは、wiki に書いたコード例をブロックすることがあります。最初の 2 週間ほどはルールグループ全体をカウントだけにし、ブロックされるはずだったリクエストをダッシュボードで確認して、該当したルールだけをカウントのまま残し、ほかはブロックにします。
+
+Redmine 7.1 のファビコン (PNG または ICO で 32 KB まで) は、設定のフォームで Lambda に送ります。`SizeRestrictions_BODY` は 8 KB を超えるフォームに一致しますが、カウントするだけです。最初のカウントの期間も、ブロックに変えたあとも、`waf.commonRuleSetCountOnly` のルール (デフォルトは `SizeRestrictions_BODY`。[deploy-config.md](deploy-config.md)) としてカウントのままです。Common Rule Set のほかの本文のルールが画像のバイト列に一致するかは確認していません。ブロックされるはずだったリクエストに、設定のフォームがないかを確認します。Redmine 7.1 のアバターは `/tmp/incoming/` に送るので、このルールグループの検査の対象外です ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#avatars))。
 
 国によるブロックは無料プランでも使えますが、出張先などから使うユーザーがいるので、デフォルトでは使いません。使う場合は、ルールが 5 つを超えないように全体のレート制限と入れ替えます。無料プランで WAF がリクエストをブロックすると、WAF のデフォルトの 403 を返します。
 
@@ -255,6 +258,7 @@ Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md
 - `config.filter_redirect` で、CloudFront 署名付き URL へのリダイレクトがログに残らないか
 - プランの機能の表と照らした構成を、CloudFront が定額料金プランの無料プランで受け付けるか ([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。AWS マネージドルールグループが WAF のルール 5 つのうち 1 つとして数えられるか、AWS マネージドルールグループにスコープダウンステートメントを設定できるか
 - WAF の Common Rule Set のうち、Redmine の正当なリクエストをブロックするルール (本文のサイズ、XSS のパターンなど)
+- Common Rule Set の `SizeRestrictions_BODY` 以外の本文のルールが、Redmine 7.1 のファビコンを含む設定のフォーム (PNG や ICO の画像のバイト列) に一致するか
 - Rails の `remote_ip` が、CloudFront を経由したリクエストで、ユーザーの IP アドレスになるか
 - GuardDuty と、S3 のマルウェアスキャンの費用
 - `bin/deploy` が、デプロイ用ロールで、すべてのリージョンの Lambda@Edge のロググループに保持設定を適用できるか (そのロググループへの `logs:PutRetentionPolicy`、`logs:DescribeLogGroups`、`ec2:DescribeRegions`。[iam.md](iam.md#role-for-deploying-infrastructure))

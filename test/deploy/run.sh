@@ -3,6 +3,7 @@
 # the tools image (deploy/Dockerfile) with the repository at /work:
 #   - the JSON Schema against valid and invalid configurations
 #   - the stack parameters of deploy/params.jq against the templates
+#   - the cache behaviors of the distribution (behaviors.py)
 #   - deploy.sh against fake aws, crane and curl (test/deploy/fake), which
 #     record every call: the order of the steps, --dry-run, --code-only,
 #     failures, and that no secret reaches a command line or the output
@@ -85,6 +86,11 @@ check "values: the web ACL settings" test \
 check "tags: redmine:instance first, then the configuration's" test \
   "$(params stack_tags test/deploy/valid/full.json)" == \
   '[{"Key":"redmine:instance","Value":"team-a"},{"Key":"team","Value":"a"},{"Key":"cost-center","Value":"1234"}]'
+
+echo "== CloudFront behaviors"
+behaviors_problems=$(python3.13 test/deploy/behaviors.py infra/instance.yaml 2>&1)
+check "the behaviors fit the Free plan and /favicons/* is cached without cookies" test -z "$behaviors_problems"
+[[ -z "$behaviors_problems" ]] || echo "$behaviors_problems"
 
 echo "== Settings code"
 # shellcheck source=deploy/lib.sh

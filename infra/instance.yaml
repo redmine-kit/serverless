@@ -1170,6 +1170,22 @@ Resources:
             Compress: true
             CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
             ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
+          # The favicon set in Redmine (Redmine 7.1, Administration › Settings ›
+          # Display), from Redmine and cached (CachingOptimized). Its URL has
+          # the digest of the image, and Redmine answers it public and immutable
+          # for a year, so the URL is the whole cache key. No origin request
+          # policy: no cookie reaches Redmine and CloudFront removes Set-Cookie,
+          # so a cached response never carries a viewer's session. The function
+          # URL gets its own Host, as on the default behavior. GET only, so no
+          # body hash.
+          - PathPattern: /favicons/*
+            TargetOriginId: redmine
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+            ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
         # The maintenance page when Lambda cannot answer. CloudFront cannot
         # replace a 429, which the function URL answers while redmine-web's
         # reserved concurrency is 0 (docs/deploy-config.md#deployment-commands).

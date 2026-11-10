@@ -354,7 +354,7 @@ flowchart LR
 - **本文のハッシュ:** 関数 URL は、署名のない本文 (`UNSIGNED-PAYLOAD`) を受け付けないので、PUT と POST では、本文の SHA256 を `x-amz-content-sha256` に入れて送る必要があります (CloudFront のドキュメント)。ブラウザーで表示する Redmine の画面のフォームは、このヘッダーを付けません。そこで、オリジンリクエストで実行される Lambda@Edge 関数 `redmine-body-hash` が、本文からハッシュを計算して追加します。そのあとで、OAC がリクエストに署名します。
 - **CloudFront Functions では実装できない:** CloudFront Functions のリクエストのデータには、本文が含まれません (メソッド、URI、クエリ文字列、ヘッダー、Cookie だけ)。本文を読めるのは Lambda@Edge だけです。
 - **`Host`:** 関数 URL には、ビューワーの `Host` を転送しません (オリジンリクエストポリシーは `AllViewerExceptHostHeader`)。OAC は関数 URL のホスト名で署名します。Redmine のドメインは、オリジンのカスタムヘッダー `X-Forwarded-Host` で渡します。Rails は `X-Forwarded-Host` から URL を生成します。
-- **キャッシュ:** デフォルトのキャッシュビヘイビア (関数 URL) はキャッシュしません (`CachingDisabled`)。`/assets/*` は S3 から配信し、キャッシュします (下の「アセットの配信」)。添付ファイルは、`/files/*` と `/tmp/*` (サムネイル、zip、アップロード) のビヘイビアを使い、OAC で添付ファイル用のバケットに転送し、署名付き URL を必須にします ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download))。これらもキャッシュしません (`CachingDisabled`)。署名付き URL のファイル名と種類をキャッシュキーに含める、マネージドキャッシュポリシーがないためです (下記)。
+- **キャッシュ:** デフォルトのキャッシュビヘイビア (関数 URL) はキャッシュしません (`CachingDisabled`)。`/assets/*` は S3 から配信し、キャッシュします (下の「アセットの配信」)。添付ファイルは、`/files/*` と `/tmp/*` (サムネイル、zip、アップロード) のビヘイビアを使い、OAC で添付ファイル用のバケットに転送し、署名付き URL を必須にします ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download))。これらもキャッシュしません (`CachingDisabled`)。署名付き URL のファイル名と種類をキャッシュキーに含める、マネージドキャッシュポリシーがないためです (下記)。Redmine 7.1 のファビコンの `/favicons/*` は、関数 URL に転送し、キャッシュします (下の「ファビコン」)。
 - **オリジンの応答タイムアウト:** CloudFront のデフォルトは 30 秒で、1〜120 秒に設定できます。60 秒にして、関数のタイムアウトと合わせます。
 
 <a id="function-that-adds-the-body-hash-lambdaedge"></a>
@@ -413,6 +413,22 @@ flowchart LR
 
 Rails 8.1 のデフォルトでは、Rails も `public/` のファイルを配信します (`public_file_server.enabled`)。CloudFront が `/assets/*` を S3 に転送するので、そのリクエストは Rails に到達しません。設定はそのままで問題ありません。
 
+<a id="the-favicon"></a>
+
+### ファビコン
+
+Redmine 7.1 では、管理者がファビコンを設定できます (管理 › 設定 › 表示 の「カスタムファビコン」、PNG または ICO で 32 KB まで。7.1 はリリース前で、master ブランチ 7519645 で 2026-11-10 に確認)。Redmine は画像を添付ファイルではなく設定のテーブルに Base64 で保存し、`FaviconsController#show` が `/favicons/<SHA256 の先頭 16 進 8 桁>` で返します。ログインしていない訪問者にも返し、`Cache-Control: max-age=31556952, public, immutable` を付けます。ファビコンを置き換えると URL が変わります。どの画面もこの URL を参照するので、キャッシュしなければ、画面を開くたびにファビコンのためにも Lambda を呼び出すことになります。
+
+| 項目 | 設定 | 理由 |
+| --- | --- | --- |
+| キャッシュビヘイビア | `/favicons/*`。関数 URL に転送する。GET と HEAD | Redmine には `/favicons` の下のルートがほかにない (master の `config/routes.rb`) |
+| キャッシュポリシー | `CachingOptimized` | クエリ文字列、Cookie、ヘッダーを含めず、URL だけをキャッシュキーにする。Redmine の `Cache-Control` のとおり、ポリシーの上限の 1 年までキャッシュする |
+| オリジンリクエストポリシー | なし | Cookie を Redmine に転送しないので、レスポンスは誰のリクエストかに左右されない。Cookie を転送しないとき、CloudFront はレスポンスから `Set-Cookie` を削除する (CloudFront のドキュメント「Cache content based on cookies」、2026-11-10 に確認) ので、キャッシュしたレスポンスにビューワーのセッションが入ることはない。関数 URL には、デフォルトのキャッシュビヘイビアと同じく、関数 URL 自身のホスト名を `Host` で渡す |
+| 本文のハッシュ | 関連付けない | GET には本文がない。OAC で本文のハッシュが必要なのは PUT と POST だけ (上記) |
+| レスポンスヘッダーポリシー | `SecurityHeadersPolicy` | すべてのキャッシュビヘイビアと同じ |
+
+Redmine 7.0 にはこのパスがなく、Redmine が `404` を返します。ファビコンのアップロードは、デフォルトのキャッシュビヘイビアで設定のフォームから送ります。画像は 32 KB までで、本文のハッシュを追加する関数が読める 1 MB に収まります。WAF のルール `SizeRestrictions_BODY` は 8 KB を超えるフォームに一致しますが、カウントするだけです ([security.md](security.md#rules))。イメージのテストで、Redmine master で設定したファビコンをこの `Cache-Control` で返すことを、デプロイのテストで、テンプレートのキャッシュビヘイビアを確認します ([testing.md](testing.md))。
+
 <a id="flat-rate-free-plan-and-waf"></a>
 
 ### 定額料金の無料プランと WAF
@@ -423,9 +439,9 @@ CloudFront は、定額料金プランの無料プラン (月 0 ドル) を使�
 
 | 機能 | 無料プラン | この設計での使用 |
 | --- | --- | --- |
-| キャッシュビヘイビア | 5 つまで | 4 つ (下記) |
-| キャッシュポリシー | マネージドポリシーだけ (カスタムのキャッシュルールはビジネスプランから) | Redmine、`/files/*`、`/tmp/*` は `CachingDisabled`、`/assets/*` は `CachingOptimized` |
-| オリジンリクエストポリシー | マネージドポリシーだけ (カスタムポリシーはビジネスプランから) | Redmine は `AllViewerExceptHostHeader`、S3 はなし |
+| キャッシュビヘイビア | 5 つまで | 5 つ (下記) |
+| キャッシュポリシー | マネージドポリシーだけ (カスタムのキャッシュルールはビジネスプランから) | Redmine、`/files/*`、`/tmp/*` は `CachingDisabled`、`/assets/*` と `/favicons/*` は `CachingOptimized` |
+| オリジンリクエストポリシー | マネージドポリシーだけ (カスタムポリシーはビジネスプランから) | Redmine は `AllViewerExceptHostHeader`、S3 と `/favicons/*` はなし |
 | レスポンスヘッダーポリシー | マネージドポリシーだけ (カスタムポリシーはビジネスプランから) | すべてのビヘイビアに `SecurityHeadersPolicy`。添付ファイルの `nosniff` もこのポリシーで付く。sandbox の CSP とファイル名は CloudFront Functions で追加する |
 | CloudFront Functions | 含まれる。ほかのディストリビューションが使う関数は関連付けられない | `<instance>-incoming-size` (ビューワーリクエスト) と `<instance>-attachment-headers` (ビューワーレスポンス)。インスタンスごと |
 | Lambda@Edge | 使える。呼び出し料金はプランとは別 | `redmine-body-hash` (Redmine のビヘイビアのオリジンリクエスト)。インスタンス間で共有 |
@@ -439,7 +455,7 @@ CloudFront は、定額料金プランの無料プラン (月 0 ドル) を使�
 
 エラーページ (`CustomErrorResponses`)、HTTP/3、IPv6、ACM 証明書は、表のプランの機能にはありません。AWS アカウントが AWS 無料利用枠 (Free Tier) を使っていないことも条件です。表では確認できない事項: AWS マネージドルールグループ 1 つがルール 1 つと数えられるか、AWS マネージドルールグループにスコープダウンステートメント (scope-down) を設定できるか ([security.md](security.md#to-verify))。
 
-ディストリビューションのキャッシュビヘイビアは、デフォルトのものと `/files/*`、`/tmp/*`、`/assets/*` の 4 つです。無料プランは 5 つまで (2026-11-10 に確認) なので、デフォルトのキャッシュビヘイビアを数に含めても含めなくても収まります。サムネイル、zip、アップロードが `/tmp/*` を共有するのは、このためです。S3 のキーは Redmine 自身の `tmp/` に合わせています ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#bucket-layout))。
+ディストリビューションのキャッシュビヘイビアは、デフォルトのものと `/files/*`、`/tmp/*`、`/assets/*`、`/favicons/*` の 5 つです。無料プランは 5 つまで (2026-11-10 に確認) なので、デフォルトのキャッシュビヘイビアを数に含めても含めなくても収まります。デフォルトのものを数に含めるなら、もう追加する余地はありません。5 つを超えていないことは、デプロイのテストで確認します。サムネイル、zip、アップロードが `/tmp/*` を共有するのは、このためです。S3 のキーは Redmine 自身の `tmp/` に合わせています ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#bucket-layout))。
 
 <a id="repositories"></a>
 
@@ -498,3 +514,4 @@ Event Functions の同期呼び出しは、リクエストとレスポンスが�
 - `X-Forwarded-Host` で、リダイレクトとメールの URL が正しいドメインになるか
 - Lambda@Edge で `x-amz-content-sha256` を追加したあと、OAC の署名で、関数 URL が POST、PUT、PATCH、DELETE を受け付けるか。本文のない POST と、マルチパートのフォームでも成功するか
 - Lambda@Edge の `inputTruncated` で 413 を返したときに、ブラウザーと API クライアントが理解できる応答になるか
+- CloudFront が、関数 URL 自身の `Host` で `/favicons/*` を取得し、Redmine の `Cache-Control` のとおりにキャッシュし、`Set-Cookie` を返さないか

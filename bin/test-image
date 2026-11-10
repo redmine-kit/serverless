@@ -269,6 +269,23 @@ secure_cookie() {
   grep -i '^set-cookie: _redmine_session=' <<<"$headers" | grep -qi '; secure'
 }
 check "the session cookie is Secure" secure_cookie
+# The favicon set in Redmine 7.1 (Administration › Settings › Display; here a
+# PNG of one pixel), which CloudFront's /favicons/* behavior caches by its
+# URL: Redmine answers it public and immutable for a year (Rails' 1.year,
+# docs/lambda.md#the-favicon). Not on Redmine 7.0.
+favicon=$(task '{"command":"runner","args":["if defined?(FaviconsController) then Setting.favicon = Setting.favicon_from_params(StringIO.new(Base64.decode64(%q(iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)))); puts Setting.favicon[%q(digest)] else puts %q(none) end"]}' | tail -n 1)
+if [[ "$favicon" == none ]]; then
+  echo "skipped: the favicon of Redmine 7.1"
+else
+  favicon_served() {
+    local headers
+    headers=$(docker exec "$prefix-web" curl -fsS -D - -o /dev/null -H 'X-Forwarded-Proto: https' \
+      "http://127.0.0.1:3000/favicons/$favicon") || return 1
+    grep -qi '^cache-control: max-age=31556952, public, immutable' <<<"$headers" &&
+      grep -qi '^content-type: image/' <<<"$headers"
+  }
+  check "the favicon is served public and immutable" favicon_served
+fi
 
 echo "== worker"
 run worker

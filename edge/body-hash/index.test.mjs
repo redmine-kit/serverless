@@ -45,6 +45,22 @@ test('a multipart form is hashed over its bytes', () => {
   assert.equal(bodyHash({ encoding: 'base64', data: bytes.toString('base64') }), sha256(bytes));
 });
 
+// Redmine 7.1's favicon (Administration › Settings › Display) is sent in the
+// settings form, through Lambda: up to 32 KB of image (Setting::FAVICON_MAX_SIZE),
+// far within the 1 MB the function reads.
+test('the settings form with a favicon of 32 KB is hashed and passes', async () => {
+  const boundary = '----favicon';
+  const bytes = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="settings[favicon]"; filename="favicon.png"\r\n` +
+      'Content-Type: image/png\r\n\r\n'),
+    randomBytes(32 * 1024),
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  const request = await handler(event({ inputTruncated: false, encoding: 'base64', data: bytes.toString('base64') }));
+  assert.equal(request.status, undefined);
+  assert.equal(request.headers['x-amz-content-sha256'][0].value, sha256(bytes));
+});
+
 test('a text body is hashed as UTF-8', () => {
   assert.equal(bodyHash({ encoding: 'text', data: '日本語' }), sha256(Buffer.from('日本語', 'utf8')));
 });

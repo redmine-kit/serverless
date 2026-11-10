@@ -1,6 +1,6 @@
 # Security
 
-Serverless is in the design stage. The security design is in [docs/security.md](docs/security.md).
+Serverless is in early development. The security design is in [docs/security.md](docs/security.md).
 
 ## Reporting a vulnerability
 

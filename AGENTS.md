@@ -4,7 +4,7 @@ Guidelines for people and coding agents working in this repository. See [README.
 
 ## What this project does
 
-It runs the latest Redmine on AWS Lambda (Event Functions), with RDS for PostgreSQL as the database and S3 for attachments. It is in early development: the image and its tests are built, and the rest is in the design stage.
+It runs the latest Redmine on AWS Lambda (Event Functions), with RDS for PostgreSQL as the database and S3 for attachments. It is in early development: the image, the infrastructure templates and the deploy commands are built and tested on LocalStack; it has not run on AWS yet.
 
 ## Rules
 

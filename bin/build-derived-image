@@ -5,8 +5,9 @@
 # bin/deploy runs it when the lists are not empty.
 #   bin/build-derived-image <redmine.json> <base image> [tag]   # default tag: serverless-derived:local
 # Git sources are fetched by BuildKit at a tag (refs/tags/<ref>) or a full
-# commit hash, so a branch is refused. Directories are relative to
-# redmine.json. Bundler's credential for GitHub Packages comes from
+# commit hash of a public HTTPS repository, so a branch or a repository that
+# needs credentials is refused. Directories are relative to redmine.json.
+# Bundler's credential for GitHub Packages comes from
 # BUNDLE_RUBYGEMS__PKG__GITHUB__COM, or from the gh login when gh is there,
 # and goes to the build as a secret.
 # jq programs are in single quotes on purpose.
@@ -37,11 +38,20 @@ mkdir -p "$context/plugins" "$context/themes"
 : >"$context/gems"
 
 # A Git repository at a tag or commit, exported into a directory without .git.
-fetch_git() { # <url> <ref> <directory>
-  local ref="$2"
+# No credentials are passed: a repository that needs them is not fetched.
+fetch_git() { # <kind> <name> <url> <ref> <directory>
+  local ref="$4"
   [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || ref="refs/tags/$ref"
-  printf 'FROM scratch\nCOPY --from=source / /\n' |
-    docker buildx build --quiet --build-context "source=$1#$ref" --output "type=local,dest=$3" -f - "$empty" >/dev/null
+  if ! printf 'FROM scratch\nCOPY --from=source / /\n' |
+    docker buildx build --quiet --build-context "source=$3#$ref" --output "type=local,dest=$5" -f - "$empty" \
+      >/dev/null 2>"$context/git.err"; then
+    sed 's/^/  /' "$context/git.err" | tail -n 5 >&2
+    echo "image.$1 $2: $3 could not be fetched at the tag or commit $4." >&2
+    echo "A Git entry must be a public HTTPS repository, and ref a tag or a full commit hash." >&2
+    echo "For a private repository, check it out next to redmine.json and give it as path." >&2
+    exit 67
+  fi
+  rm -f "$context/git.err"
 }
 # A directory next to redmine.json, without .git.
 copy_dir() { # <path> <directory>
@@ -69,7 +79,7 @@ while IFS=$'\x1f' read -r kind name version source git ref path; do
     echo "$name" >>"$context/gems"
   elif [[ -n "$git" ]]; then
     echo "$kind/$name: $git at $ref"
-    fetch_git "$git" "$ref" "$dest"
+    fetch_git "$kind" "$name" "$git" "$ref" "$dest"
   else
     echo "$kind/$name: $path"
     copy_dir "$path" "$dest"

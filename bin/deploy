@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploys one Redmine instance from its redmine.json (docs/deploy-config.md).
+# Deploys one Redmine server from its redmine.json (docs/deploy-config.md).
 # The steps run in the tools image (deploy/Dockerfile), so only Docker is
 # needed. Credentials come from the AWS_* environment variables or from
 # ~/.aws (read-only); bin/deploy assumes deployRoleArn with them.

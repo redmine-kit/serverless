@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/redmine-kit/serverless/schema/redmine.schema.json",
   "title": "redmine.json",
-  "description": "The configuration of one Redmine instance for bin/deploy (docs/deploy-config.md#fields-of-redminejson).",
+  "description": "The configuration of one Redmine server for bin/deploy (docs/deploy-config.md#fields-of-redminejson).",
   "type": "object",
   "additionalProperties": false,
   "required": ["region", "deployRoleArn", "domain", "database"],

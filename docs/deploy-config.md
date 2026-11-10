@@ -1,6 +1,6 @@
 # Deployment configuration
 
-This design uses one configuration file for each Redmine you set up, and the same deployment command to set it up. One AWS account can hold any number of Redmine instances. The configuration is the same whether you set up a single one for yourself or manage many together.
+This design uses one configuration file for each Redmine you set up, and the same deployment command to set it up. One AWS account can hold any number of Redmine servers. The configuration is the same whether you set up a single one for yourself or manage many together.
 
 ## Approach
 

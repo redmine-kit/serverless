@@ -63,7 +63,7 @@ Email for which the SES API call fails is retried automatically, and email that 
 
 - **Retries in the queue:** Account errors and temporary errors that outlast the retries inside the job are raised; SQS redelivers the message and moves it to the dead-letter queue after 3 receives ([lambda.md](lambda.md#background-jobs)), where `redmine_serverless_sqs` records it.
 - **Get notified:** A CloudWatch alarm notifies when the dead-letter queue or the failure records have 1 or more items. Sending errors are also logged, and a metric filter counts them.
-- **Send again:** "Sending email" (SES) and "Jobs" (SQS) in the administration screen.
+- **Send again:** "Email sending" (SES) and "Jobs" (SQS) in the administration screen.
 
 ## Cost
 
@@ -115,7 +115,7 @@ The subdomain itself is verified as an SES identity, with the Easy DKIM CNAMEs u
 
 ### Addresses per project
 
-Each project can have its own address on Redmine's subdomain (`<identifier>@redmine.example.com`, or an alias), which receives email for the project and can send its notifications; email that does not belong to a project uses the address for the whole Redmine (`redmine@redmine.example.com`). `mail.perProjectAddresses` in the configuration file turns this on; without it, email is received as standard Redmine does (one address, projects chosen by subaddress). How the addresses, aliases and senders work is in the plugin's [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/receiving.html#addresses-per-project) and [sending.md](https://redmine-kit.github.io/redmine_serverless_ses/sending.html#senders-per-project).
+Each project can have its own address on Redmine's subdomain (`<identifier>@redmine.example.com`), which receives email for the project and can send its notifications; email that does not belong to a project uses the default address (`noreply@redmine.example.com` unless changed). `mail.perProjectAddresses` in the configuration file turns this on; without it, email is received as standard Redmine does (one address, projects chosen by subaddress). How the addresses and senders work is in the plugin's [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/receiving.html#addresses-per-project) and [sending.md](https://redmine-kit.github.io/redmine_serverless_ses/sending.html#senders-per-project).
 
 ### Receipt rules
 
@@ -151,7 +151,7 @@ Redmine decides which user an email comes from by the sender address, so the imp
 
 ### Settings for receiving replies
 
-Set "Emission email address" to the address for the whole Redmine, and "Truncate emails after one of these lines" to a line before the quoted text, in Redmine's administration settings ([receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/receiving.html#settings-for-receiving-replies)).
+Set "Emission email address" to the default address, and "Truncate emails after one of these lines" to a line before the quoted text, in Redmine's administration settings ([receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/receiving.html#settings-for-receiving-replies)).
 
 ## To verify
 

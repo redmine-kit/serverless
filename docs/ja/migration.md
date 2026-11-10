@@ -33,7 +33,7 @@ flowchart TD
 2. **migration:** 一時的な PostgreSQL 上で、Redmine 7.0.3 の `db:migrate` と `redmine:plugins:migrate` を実行します。古いバージョンから 7.0 まで、まとめて進めることになります。途中のバージョンを経由する必要があるかは、Redmine の更新手順 (RedmineUpgrade の wiki) で確認します。一時的な PostgreSQL は Lambda の外にあるので、`redmine-task` の 15 分の制限には当たりません。
 3. **RDS への復元:** migration を適用したデータベースをエクスポートし (`pg_dump`)、空の RDS のデータベースに復元します (`pg_restore`)。RDS には VPC 内からしか接続できないので、Session Manager のポートフォワーディングを通して行います ([rds.md](rds.md#managing-it-with-systems-manager))。
 4. **添付ファイル:** 移行元のファイル (ディスクの `files/` か、S3 プラグインのバケット) を、新しいバケットの `files/` の下に、Redmine の `disk_directory` と `disk_filename` に合う形式でコピーします。新しい設計のキーは `files/<disk_directory>/<disk_filename>` の形式で、`disk_directory` が空の古い添付ファイルは `files/<disk_filename>` になります ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#bucket-layout))。
-5. **突き合わせ:** 管理画面の「添付ファイルの S3」で、データベースと S3 を突き合わせ、漏れがないかを確認します ([admin.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/admin.html#attachments-in-s3))。サムネイルは、画面で開いたときに生成されるので、移行時に生成しなくてもかまいません。
+5. **整合性チェック:** 管理画面の「S3」のタブで、データベースと S3 の整合性チェックを実行し、漏れがないかを確認します ([admin.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/admin.html#attachments-in-s3))。サムネイルは、画面で開いたときに生成されるので、移行時に生成しなくてもかまいません。
 6. **digest:** 古い Redmine の添付ファイルの digest は MD5 の場合があります。Redmine には、SHA256 で再作成する rake タスク (`redmine:attachments:update_digests`) があります。実行するかは、件数を見て決めます。
 
 <a id="migrating-from-mysql"></a>

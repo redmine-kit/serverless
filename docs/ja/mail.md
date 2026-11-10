@@ -75,7 +75,7 @@ SES の API の呼び出しに失敗したメールは、自動で再試行し�
 
 - **キューでの再試行:** アカウントのエラーと、ジョブ内の再試行を使い切った一時的なエラーは、例外を発生させます。SQS がメッセージを再配信し、3 回受信したあとにデッドレターキューに移動し ([lambda.md](lambda.md#background-jobs))、`redmine_serverless_sqs` が記録します。
 - **通知:** デッドレターキューか失敗の記録が 1 件以上になると、CloudWatch アラームが通知します。送信エラーはログにも出力し、メトリクスフィルターでカウントします。
-- **再送信:** 管理画面の「メールの送信」(SES) と「ジョブ」(SQS) で行います。
+- **再送信:** 管理画面の「メール送信」(SES) と「ジョブ」(SQS) で行います。
 
 <a id="cost"></a>
 
@@ -135,7 +135,7 @@ SES は検証済み ID 宛てのメールだけを受信するので、サブド
 
 ### プロジェクト別のアドレス
 
-プロジェクトごとに、Redmine のサブドメインのアドレス (`<識別子>@redmine.example.com` か別名) を持たせ、そのプロジェクトのメールを受信し、通知を送信できます。プロジェクトに属さないメールは、Redmine 全体のアドレス (`redmine@redmine.example.com`) を使います。設定ファイルの `mail.perProjectAddresses` で有効にします。無効なら、Redmine の標準と同じに受信します (アドレスは 1 つで、プロジェクトはサブアドレスで決める)。アドレス、別名、送信元の仕組みは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#addresses-per-project) と [sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#senders-per-project) にあります。
+プロジェクトごとに、Redmine のサブドメインのアドレス (`<識別子>@redmine.example.com`) を持たせ、そのプロジェクトのメールを受信し、通知を送信できます。プロジェクトに属さないメールは、デフォルトアドレス (変更しなければ `noreply@redmine.example.com`) を使います。設定ファイルの `mail.perProjectAddresses` で有効にします。無効なら、Redmine の標準と同じに受信します (アドレスは 1 つで、プロジェクトはサブアドレスで決める)。アドレスと送信元の仕組みは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#addresses-per-project) と [sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#senders-per-project) にあります。
 
 <a id="receipt-rules"></a>
 
@@ -179,7 +179,7 @@ Redmine は送信者のアドレスでユーザーを特定するので、取り
 
 ### 返信を受信するための設定
 
-Redmine の管理画面で、「送信元メールアドレス」を Redmine 全体のアドレスに、「この行以降を切り捨てる」を引用の前の行にします ([receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#settings-for-receiving-replies))。
+Redmine の管理画面で、「送信元メールアドレス」をデフォルトアドレスに、「この行以降を切り捨てる」を引用の前の行にします ([receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#settings-for-receiving-replies))。
 
 <a id="to-verify"></a>
 

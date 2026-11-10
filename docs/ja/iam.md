@@ -76,7 +76,7 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 | `sqs:GetQueueAttributes` | ジョブキューとデッドレターキュー | 管理画面の「ジョブ」 |
 | `sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | ジョブのデッドレターキュー | 管理画面の「ジョブ」から、デッドレターキューのメッセージをジョブキューに戻す。ジョブキューへの `sqs:SendMessage` (3 つの関数に共通) も使う。戻すのに必要な最小限の権限は、SQS プラグインの [iam.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/iam.html#permissions) にある |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元ドメインの SES ID | Redmine 標準のテストメール (画面へのリクエストの処理中に送信する) |
-| `ses:GetEmailIdentity` | 送信元ドメインの SES ID | 管理画面の「メールの送信」 |
+| `ses:GetEmailIdentity` | 送信元ドメインの SES ID | 管理画面の「メール送信」 |
 | `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*` (対象を絞り込めない) | 同上 ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/admin.html#sending-email)) |
 
 メールは、SES v2 の `SendEmail` に raw 形式で全文を渡して送信します。SES のドキュメントの例は、送信の権限として `ses:SendEmail` と `ses:SendRawEmail` の両方を許可しているので、この設計もそれに合わせます。v2 の raw 形式の送信に `ses:SendRawEmail` が必須かは、まだ確認していません。

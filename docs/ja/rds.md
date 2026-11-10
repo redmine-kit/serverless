@@ -65,7 +65,7 @@ flowchart LR
 | 項目 | 決定事項 |
 | --- | --- |
 | アダプター | ActiveRecord 標準の PostgreSQL アダプター (gem `pg`)。`config/database.yml` は `adapter: postgresql` |
-| 設定 | 環境変数 `REDMINE_DB_HOST`、`REDMINE_DB_NAME` (既定は `redmine`)、`REDMINE_DB_USERNAME` (既定は `redmine`)、`REDMINE_DB_PASSWORD`、`REDMINE_DB_PORT` (既定は `5432`)、`REDMINE_DB_SSLMODE` (既定は `verify-full`) |
+| 設定 | 環境変数 `REDMINE_DB_HOST`、`REDMINE_DB_NAME` (デフォルトは `redmine`)、`REDMINE_DB_USERNAME` (デフォルトは `redmine`)、`REDMINE_DB_PASSWORD`、`REDMINE_DB_PORT` (デフォルトは `5432`)、`REDMINE_DB_SSLMODE` (デフォルトは `verify-full`) |
 | パスワード | SSM Parameter Store の `/<instance>/env/REDMINE_DB_PASSWORD` (SecureString) に保存し、起動時にほかの設定と一緒に読み込む ([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store))。ホストなど、シークレットでない値は、同じパスの下の String パラメーターにする |
 | TLS | `verify-full`。RDS のグローバル CA バンドル (`https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`。イメージのビルド時に取得し、固定した SHA256 で確認する) を `/var/task/rds-global-bundle.pem` としてイメージに含め、`config/database.yml` が `sslrootcert` に渡す。`disable` を使うのはローカルのテストだけ |
 | 接続数 | 実行環境ごとに 1 つ (`pool: 1`) |

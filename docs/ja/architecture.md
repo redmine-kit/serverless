@@ -85,7 +85,7 @@ flowchart LR
 | 設定とシークレット | SSM Parameter Store (`/<instance>/env/`) に保存し、起動時に読み込む | Lambda の環境変数にシークレットを置かない。パラメーターを追加するだけで設定を増やせる | [lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store) |
 | 管理画面 | メールの送信と受信、ジョブ、添付ファイルの S3、AWS への接続状態を、すべてのプラグインが共有する Redmine の管理メニューの「Serverless」で確認し、操作できるようにする | 状態の確認と再送などの操作を、AWS コンソールを開かずに行える | [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#the-serverless-menu) |
 | IAM | 関数ごとに実行ロールを分け、対象を ARN で絞り込む。アクセスキーを作成しない | Web 用の関数が rake やメール受信の権限を持たない | [iam.md](iam.md) |
-| セキュリティ | 外部からアクセスできるのは CloudFront だけ。AWS WAF (定額料金プランの無料プランの 5 つのルール)、二要素認証、安全な既定の設定、ログと記録の保持期間 | 保護対象、脅威、残存リスク、インシデント対応の手順を 1 か所にまとめる | [security.md](security.md) |
+| セキュリティ | 外部からアクセスできるのは CloudFront だけ。AWS WAF (定額料金プランの無料プランの 5 つのルール)、二要素認証、安全なデフォルト設定、ログと記録の保持期間 | 保護対象、脅威、残存リスク、インシデント対応の手順を 1 か所にまとめる | [security.md](security.md) |
 | 添付ファイル | S3 の API で読み書きする。Redmine の S3 プラグインの方式を参考にする | S3 を唯一の保存先にできる。Lambda の実行環境間でファイルを共有できる | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) |
 | アップロード | ブラウザー → CloudFront → S3 への PUT。CloudFront 署名付き URL と、S3 が検証する SHA256 を使う | Lambda のリクエストは 6 MB まで。CloudFront 経由で Lambda に送られるリクエスト本文は 1 MB まで | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
 | ダウンロード | すべて Redmine のドメインの CloudFront 署名付き URL にリダイレクトする。CloudFront が S3 から読み込み、sandbox の CSP を付ける | Lambda のレスポンスは 6 MB まで。S3 では sandbox の CSP を付けられない | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
@@ -178,7 +178,7 @@ GitHub リポジトリの検索では、`redmine_serverless` という名前の 
 
 | 対象 | 保存先 | 使い方 |
 | --- | --- | --- |
-| Redmine の Lambda 用イメージ | `ghcr.io/redmine-kit/serverless` (arm64 の単一アーキテクチャで、イメージインデックスにしない)。main へのコミットで、リリースバージョンのテストに合格したものを、CI が push する (`.github/workflows/ci.yml` の `publish` ジョブ。バージョンは `bin/redmine-version` で取得する)。タグは、Redmine のバージョン (`7.0.3`)、Redmine のマイナーバージョン (`7.0`)、`main`。基本は Redmine のバージョンタグを使う。このタグはそのバージョンの新しいビルド (gem とプラグインの更新) に付け替わり、`bin/deploy` も既定でこれを使う。`7.0` は Redmine のパッチリリースにも追従する。古いビルドはタグなしで残り、digest で取得できる。コミットは `org.opencontainers.image.revision` ラベルにある | `bin/deploy` が digest で取得し、デプロイ先アカウントの ECR にコピーする ([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR イメージしか使えない |
+| Redmine の Lambda 用イメージ | `ghcr.io/redmine-kit/serverless` (arm64 の単一アーキテクチャで、イメージインデックスにしない)。main へのコミットで、リリースバージョンのテストに合格したものを、CI が push する (`.github/workflows/ci.yml` の `publish` ジョブ。バージョンは `bin/redmine-version` で取得する)。タグは、Redmine のバージョン (`7.0.3`)、Redmine のマイナーバージョン (`7.0`)、`main`。基本は Redmine のバージョンタグを使う。このタグはそのバージョンの新しいビルド (gem とプラグインの更新) に付け替わり、`bin/deploy` もデフォルトでこれを使う。`7.0` は Redmine のパッチリリースにも追従する。古いビルドはタグなしで残り、digest で取得できる。コミットは `org.opencontainers.image.revision` ラベルにある | `bin/deploy` が digest で取得し、デプロイ先アカウントの ECR にコピーする ([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR イメージしか使えない |
 | プラグイン | GitHub Packages の gem `redmine_serverless_x`。プラグインごとに 1 つで、各リポジトリのワークフローが、バージョンタグごとに公開する。プラグインの実行に必要なファイルを含む | `Gemfile.local` で GitHub Packages の source から追加し、`bundle install` を実行して、インストールした gem を `plugins/` にリンクする (各プラグインの導入ページ) |
 | プラグイン (gem を使わない場合) | リポジトリのチェックアウト | `plugins/` に clone する |
 
@@ -274,4 +274,4 @@ serverless/
 | ドメイン | Redmine のサブドメイン名 (たとえば `redmine.example.com`)。親ドメインの DNS のままにするか、Route 53 に委任するか | [mail.md](mail.md#receiving-domain) |
 | CloudFront の料金プラン | 定額料金プランの無料プラン (WAF を含む) / 従量課金 | 無料プランの枠がアカウントに残っているか。[lambda.md](lambda.md#flat-rate-free-plan-and-waf) |
 | 添付ファイルのサイズ上限 | Redmine の `attachment_max_size`。アップロード (`/tmp/incoming/`) は、`/tmp/*` の CloudFront Functions で制限する。登録時に Redmine はファイルを読まないので、制約になるのは 1 回の PUT で CloudFront が受け付けるサイズと、ブラウザーでのハッシュ計算の時間 | 計測結果。[attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
-| メール受信の既定のプロジェクト | サブアドレスがない場合のプロジェクト | [mail.md](mail.md#importing) |
+| メール受信のデフォルトのプロジェクト | サブアドレスがない場合のプロジェクト | [mail.md](mail.md#importing) |

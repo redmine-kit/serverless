@@ -43,7 +43,7 @@ Serverless の設計資料です。最新の Redmine を AWS Lambda で動かし
 | [admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html) | プラグインが追加する管理画面。共有の「Serverless」メニュー項目の下のタブ (`redmine_serverless` の状態と接続、`redmine_serverless_sqs` のジョブ、`redmine_serverless_ses` のメールの送信と受信、`redmine_serverless_s3` の添付ファイルの S3) |
 | [iam.md](iam.md) | 実行ロール、リソースベースのポリシー、デプロイ用ロール、ユーザーの権限 |
 | [security.md](security.md) | 保護対象、脅威と対策、エントリーポイントと AWS WAF、Redmine の設定、データ保護、保持期間、ログ、サプライチェーン、残存リスク、インシデント対応 |
-| [aws-security.md](aws-security.md) | AWS 側のセキュリティ設定。それぞれの保護対象、設定の担当者、費用、既定 (GuardDuty とアップロードのマルウェアスキャン、CloudTrail、IAM Access Analyzer、Security Hub、Config、パブリックアクセスブロック、EBS の暗号化、ルートユーザー、予算) |
+| [aws-security.md](aws-security.md) | AWS 側のセキュリティ設定。それぞれの保護対象、設定の担当者、費用、デフォルト (GuardDuty とアップロードのマルウェアスキャン、CloudTrail、IAM Access Analyzer、Security Hub、Config、パブリックアクセスブロック、EBS の暗号化、ルートユーザー、予算) |
 | [deploy-config.md](deploy-config.md) | Redmine ごとの設定ファイル (`redmine.json`)、命名規則、共有基盤、デプロイコマンド |
 | [ai.md](ai.md) | 別プロジェクトの AI 機能との連携 (Redmine 標準の REST API、OAuth、webhook) と安全上の規則 |
 | [cache.md](cache.md) | Redmine がキャッシュするもの、実行環境別のキャッシュ、調整できる箇所、共有キャッシュ (ElastiCache for Valkey) の費用 |

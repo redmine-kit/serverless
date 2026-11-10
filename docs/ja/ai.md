@@ -65,7 +65,7 @@ Redmine で発生したイベントは、Redmine 7.0 標準の webhook で、AI 
 
 AI 用の webhook はボットユーザー (上の「REST API と認可」) で作成するので、ペイロードはボットユーザーが閲覧できる範囲に限られます。AI のプロジェクトは、署名を検証して webhook を受信するエンドポイント (Lambda の関数 URL など) を用意します。
 
-webhook は、`redmine-worker` から AI 側の URL に送ります。`redmine-worker` は VPC のプライベートサブネットで動くので、インターネットに接続できるのは NAT インスタンスを経由する場合 (`network.mode: nat`) だけです。VPC エンドポイントだけの構成 (`network.mode: endpoints`。既定) では webhook を送れないので、AI 側が REST API で更新を定期的に取得する構成にします ([rds.md](rds.md#routes-out-of-the-vpc))。
+webhook は、`redmine-worker` から AI 側の URL に送ります。`redmine-worker` は VPC のプライベートサブネットで動くので、インターネットに接続できるのは NAT インスタンスを経由する場合 (`network.mode: nat`) だけです。VPC エンドポイントだけの構成 (`network.mode: endpoints`。デフォルト) では webhook を送れないので、AI 側が REST API で更新を定期的に取得する構成にします ([rds.md](rds.md#routes-out-of-the-vpc))。
 
 `webhook_blocklist` には、プライベート、ループバック、リンクローカルのアドレスを設定します (値は [lambda.md](lambda.md#rails-and-redmine-settings) の表にあります)。webhook で内部のアドレスにリクエストを送らせないためです。RDS 構成の NAT インスタンスでも同じ値にします。
 

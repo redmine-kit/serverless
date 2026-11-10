@@ -36,11 +36,11 @@
 
 | ページ | 確認したこと |
 | --- | --- |
-| [railties の configuration.rb (v8.1.4)](https://github.com/rails/rails/blob/v8.1.4/railties/lib/rails/application/configuration.rb) | キャッシュの既定 (ファイル)、`SECRET_KEY_BASE` の読み込み |
-| [activejob の railtie (v8.1.4)](https://github.com/rails/rails/blob/v8.1.4/activejob/lib/active_job/railtie.rb) | ジョブアダプターの既定は `:async` |
+| [railties の configuration.rb (v8.1.4)](https://github.com/rails/rails/blob/v8.1.4/railties/lib/rails/application/configuration.rb) | キャッシュのデフォルト (ファイル)、`SECRET_KEY_BASE` の読み込み |
+| [activejob の railtie (v8.1.4)](https://github.com/rails/rails/blob/v8.1.4/activejob/lib/active_job/railtie.rb) | ジョブアダプターのデフォルトは `:async` |
 | [mail_delivery_job.rb (v8.1.4)](https://github.com/rails/rails/blob/v8.1.4/actionmailer/lib/action_mailer/mail_delivery_job.rb) | メール送信ジョブは、例外をメーラーの `handle_exception` に渡す (処理がなければ例外のまま) |
 | [Propshaft の railtie (v1.3.1)](https://github.com/rails/propshaft/blob/v1.3.1/lib/propshaft/railtie.rb) | アセットの出力先 `public/assets` |
-| [active_record.rb (v8.1.4)](https://github.com/rails/rails/blob/v8.1.4/activerecord/lib/active_record.rb) | `dump_schema_after_migration` の既定は `true` |
+| [active_record.rb (v8.1.4)](https://github.com/rails/rails/blob/v8.1.4/activerecord/lib/active_record.rb) | `dump_schema_after_migration` のデフォルトは `true` |
 | [databases.rake (v8.1.4)](https://github.com/rails/rails/blob/v8.1.4/activerecord/lib/active_record/railties/databases.rake) | `db:migrate` のあとにスキーマを書き出す |
 | [bootstrap.rb (v8.1.4)](https://github.com/rails/rails/blob/v8.1.4/railties/lib/rails/application/bootstrap.rb) | キャッシュは `initialize_cache` で、アプリの initializer より前に作る |
 
@@ -64,7 +64,7 @@
 | [AWS Lambda Web Adapter](https://github.com/aws/aws-lambda-web-adapter) | 1.1.0 (2026-09-18)、準備完了チェック (`tcp`)、`AWS_LWA_ASYNC_INIT`、HTTP ではないイベントの扱い |
 | [Lambda Web Adapter 1.1.0 のソース](https://github.com/aws/aws-lambda-web-adapter/tree/v1.1.0/src) | 読み込む環境変数の一覧 (無効にする設定はない)。拡張機能として `{"events": []}` で登録し、Runtime API とのやり取りも自分で行う (`src/main.rs`、`src/lib.rs` の `register_extension_internal`) |
 | [Using the Lambda Extensions API](https://docs.aws.amazon.com/lambda/latest/dg/runtimes-extensions-api.html) | `Lambda-Extension-Name` はファイル名と同じ。`events` は必須でない。拡張機能が失敗すると実行環境を作り直す |
-| [Create a Lambda Event Function using a container image](https://docs.aws.amazon.com/lambda/latest/dg/images-create.html) | 読み取り専用のファイルシステム、既定のユーザーがすべてのファイルを読める必要があること、単一アーキテクチャのイメージだけ、数週間呼び出されないと `Inactive`、ECR イメージが削除されると `Failed` |
+| [Create a Lambda Event Function using a container image](https://docs.aws.amazon.com/lambda/latest/dg/images-create.html) | 読み取り専用のファイルシステム、デフォルトのユーザーがすべてのファイルを読める必要があること、単一アーキテクチャのイメージだけ、数週間呼び出されないと `Inactive`、ECR イメージが削除されると `Failed` |
 | [Control access to Lambda function URLs](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html) | 2025 年 10 月から、関数 URL には `lambda:InvokeFunctionUrl` と `lambda:InvokeFunction` の両方が必要。この設計では、OAC のために CloudFront に、ディストリビューションの `AWS:SourceArn` を条件に両方を許可する ([iam.md](iam.md#resource-based-policies)) |
 | [Lambda の Ruby ベースイメージ](https://gallery.ecr.aws/lambda/ruby) | `/lambda-entrypoint.sh` と `curl` がある。`ruby:4.0` は Ruby 4.0.9、Amazon Linux 2023。ローカルの Docker で実行して確認した (arm64)。ImageMagick 6.9.12、ghostscript 9.56.1、libpq 15.0、ipa-gothic-fonts、gcc、make が標準リポジトリにある (`microdnf repoquery`)。Pandoc はない |
 | [Lambda S3 Files の発表](https://aws.amazon.com/about-aws/whats-new/2026/04/aws-lambda-amazon-s3/) | 2026 年 4 月。Lambda としての追加料金はない |
@@ -123,7 +123,7 @@
 | [getmoto/moto](https://github.com/getmoto/moto) | Apache-2.0、更新が続いている (2026-11-06)。テストで AWS の代わりに使う |
 | [CloudFront 定額料金プラン](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html) | 無料プラン: WAF ルール 5 つ、IP アドレスごとのレート制限と国別のブロックはあり、CAPTCHA、ヘッダーと正規表現で絞るルール、ブロック時のレスポンスの変更、Bot Control はない。本文の検査は 16 KB まで。AWS マネージドのキャッシュポリシー、オリジンリクエストポリシー、レスポンスヘッダーポリシーは使え、カスタムポリシーはビジネスプランから。CloudFront Functions は含まれ、Lambda@Edge は使えて呼び出しごとに課金、KeyValueStore はプロプランから。アクセスログと WAF ログはプロプランから。無料プランは 1 つのアカウントで 3 つまで (引き上げ不可)。キャッシュビヘイビアは無料プランで 5 つ。Web ACL は関連付けを解除できない。ルールグループは使えない。ほかのディストリビューションが使う Web ACL と CloudFront Functions は関連付けられない。AWS 無料利用枠のアカウントはプランを使えない (2026-11-10 に確認)。[lambda.md](lambda.md#flat-rate-free-plan-and-waf)、[security.md](security.md#aws-waf) |
 | [CloudFront の料金](https://aws.amazon.com/cloudfront/pricing/) | 無料プランは 0 ドル (月 100 万リクエスト、100 GB)、プロプランは月 15 ドル (1,000 万リクエスト、50 TB)。WAF がブロックしたリクエストは使用量に含めない (2026-11-09 に確認) |
-| [AWS WAF の料金](https://aws.amazon.com/waf/pricing/) | 従量課金: Web ACL 1 つで月 5 ドル、ルールかマネージドルールグループ 1 つで月 1 ドル、100 万リクエストで 0.60 ドル。既定より大きな本文を検査すると、16 KB ごとに 100 万リクエストあたり 0.30 ドル (2026-11-09 に確認) |
+| [AWS WAF の料金](https://aws.amazon.com/waf/pricing/) | 従量課金: Web ACL 1 つで月 5 ドル、ルールかマネージドルールグループ 1 つで月 1 ドル、100 万リクエストで 0.60 ドル。デフォルトより大きな本文を検査すると、16 KB ごとに 100 万リクエストあたり 0.30 ドル (2026-11-09 に確認) |
 | [WAF のレートベースのルールの設定](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-rate-based-high-level-settings.html) | 評価期間は 60、120、300、600 秒。レート制限の下限は 10。設定した回数ちょうどでブロックすることは保証しない (2026-11-09 に確認) |
 | [マネージドレスポンスヘッダーポリシー](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-response-headers-policies.html) | `SecurityHeadersPolicy` (`67f7725c-6f97-4210-82d7-5512b31e9d03`) の中身 (2026-11-09 に確認) |
 | [GitHub Packages の権限](https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages)、[RubyGems レジストリ](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-rubygems-registry) | パブリックパッケージを認証なしで取得できるのは、コンテナレジストリだけ。RubyGems レジストリは、パブリックの gem でも、インストールにトークンが必要 (2026-11-09 に確認)。[architecture.md](architecture.md#distribution) |
@@ -141,5 +141,5 @@
 | --- | --- |
 | [SES v2 の SendEmail](https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_SendEmail.html) | エラーの一覧 (`TooManyRequestsException` は 429、ほかは 400 か 404) と意味。メールを再送するかどうかの判定に使う |
 | [EventBridge の料金](https://aws.amazon.com/eventbridge/pricing/) | 検討して採用しなかった構成のため。カスタムイベントは 100 万件あたり 1.00 ドル。S3 イベントの料金は記載がない |
-| [EventBridge の再試行](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-retry-policy.html) | 既定で 24 時間、最大 185 回。配信できなかったイベントはデッドレターキューで受け取る |
+| [EventBridge の再試行](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-retry-policy.html) | デフォルトで 24 時間、最大 185 回。配信できなかったイベントはデッドレターキューで受け取る |
 

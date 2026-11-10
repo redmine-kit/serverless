@@ -4,7 +4,7 @@ Serverless で使う IAM ロール、ポリシー、リソースベースのポ�
 
 この資料の仕様は、2026-11-09 時点の公式情報で確認したものです。出典は [sources.md](sources.md) にあります。
 
-ロール、関数、SSM パスの名前は、インスタンス名 (`redmine.json` の `instance`) から決まります ([deploy-config.md](deploy-config.md#names-derived-from-the-instance-name))。この資料の名前は、インスタンス名が既定の `redmine` のときのものです。
+ロール、関数、SSM パスの名前は、インスタンス名 (`redmine.json` の `instance`) から決まります ([deploy-config.md](deploy-config.md#names-derived-from-the-instance-name))。この資料の名前は、インスタンス名がデフォルトの `redmine` のときのものです。
 
 <a id="approach"></a>
 
@@ -204,8 +204,8 @@ bin/deploy --account
 | --- | --- |
 | `redmine-boundary` (カスタマー管理ポリシー) | スタックが作成するすべてのロールのアクセス許可の境界。このページのロールの操作だけを許可する。ログの書き込み、SSM パラメーターの読み取り、`kms:Decrypt`、VPC 内の Lambda のネットワークインターフェイスと NAT インスタンスの操作、S3 のオブジェクト、SQS、SES、`lambda:InvokeFunction`、GuardDuty Malware Protection の EventBridge ルールとバケットの通知、`AmazonSSMManagedInstanceCore` の操作。IAM の操作は何も許可しない |
 | `redmine-cfn-exec` | CloudFormation (`cloudformation.amazonaws.com`。`aws:SourceAccount` はこのアカウント)。スタックの各サービスの操作と、パス `/redmine/` の下だけの IAM の操作。ロールの作成と、インラインポリシーの追加やポリシーのアタッチは、アクセス許可の境界を設定する場合だけ (`iam:PermissionsBoundary`)。`/redmine/` の下のロール、インスタンスプロファイル、ポリシーの管理。`/redmine/` の下のロールを Lambda、Lambda@Edge、EventBridge Scheduler、EC2、GuardDuty Malware Protection に渡す `iam:PassRole`。`iam:CreateServiceLinkedRole` と `lambda:EnableReplication*`。`iam:DeleteRolePermissionsBoundary` は拒否する。アカウント単位のロールとアクセス許可の境界は `/redmine/` の外にあるので、変更できない |
-| `redmine-infra-deploy` | IAM Identity Center の許可セット (`account.ssoPermissionSet`。既定は `AdministratorAccess`。その `AWSReservedSSO_…` ロールの `aws:PrincipalArn` で絞り込む) のユーザーと、`account.githubRepository` があれば、Environment `account.githubInfraEnvironment` (既定は `infrastructure`) の GitHub Actions。権限は上の「インフラデプロイ用ロール」のとおり。セッションは最大 2 時間 |
-| `redmine-github-deploy` | `account.githubRepository` があるときだけ。Environment `account.githubCodeEnvironment` (既定は `production`) の GitHub Actions。audience は `sts.amazonaws.com`。カスタマー管理ポリシー `redmine-code-deploy` |
+| `redmine-infra-deploy` | IAM Identity Center の許可セット (`account.ssoPermissionSet`。デフォルトは `AdministratorAccess`。その `AWSReservedSSO_…` ロールの `aws:PrincipalArn` で絞り込む) のユーザーと、`account.githubRepository` があれば、Environment `account.githubInfraEnvironment` (デフォルトは `infrastructure`) の GitHub Actions。権限は上の「インフラデプロイ用ロール」のとおり。セッションは最大 2 時間 |
+| `redmine-github-deploy` | `account.githubRepository` があるときだけ。Environment `account.githubCodeEnvironment` (デフォルトは `production`) の GitHub Actions。audience は `sts.amazonaws.com`。カスタマー管理ポリシー `redmine-code-deploy` |
 | CloudTrail と IAM Access Analyzer | 証跡 `redmine-trail` とアナライザー。アカウントに既にあれば作成しない ([aws-security.md](aws-security.md)) |
 | GitHub の OIDC プロバイダー | `account.githubRepository` があるときに作成する。アカウントに既にあるときは、`account.githubOidcProviderArn` でそれを指定する (1 つのアカウントに、URL ごとに 1 つ) |
 

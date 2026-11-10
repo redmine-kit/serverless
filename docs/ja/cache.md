@@ -10,7 +10,7 @@ Redmine 7.0.3 がキャッシュを使うのは、次の数か所だけです (2
 
 | データ | Redmine のコード | 保存先 | 使用する条件 |
 | --- | --- | --- | --- |
-| 整形済みのテキスト (wiki ページ、チケットの説明と注記を HTML に変換したもの) | `Redmine::WikiFormatting.to_html` | `config.cache_store` | 「テキスト書式の変換結果をキャッシュ」が有効 (管理 › 設定 › 全般。`cache_formatted_text`。既定は無効) で、2 KB を超えるテキストの場合だけ |
+| 整形済みのテキスト (wiki ページ、チケットの説明と注記を HTML に変換したもの) | `Redmine::WikiFormatting.to_html` | `config.cache_store` | 「テキスト書式の変換結果をキャッシュ」が有効 (管理 › 設定 › 全般。`cache_formatted_text`。デフォルトは無効) で、2 KB を超えるテキストの場合だけ |
 | 検索結果 (ページ送りのための、結果の ID の一覧) | `Redmine::Search` | Redmine 専用の `config.redmine_search_cache_store` (メモリ、32 MB まで) | 検索のたび |
 | 言語の選択肢の一覧 | `Redmine::I18n` | `config.cache_store` | 初回の表示 |
 | リポジトリ画面 | `RepositoriesController` | `config.cache_store` | 使用しない。Lambda ではリポジトリを無効にする ([lambda.md](lambda.md#features-that-cannot-be-used)) |
@@ -22,10 +22,10 @@ Redmine 7.0.3 がキャッシュを使うのは、次の数か所だけです (2
 | 項目 | 値 |
 | --- | --- |
 | `config.cache_store` | `:memory_store`。環境ごとに 64 MB まで (`image/config/additional_environment.rb`) |
-| `config.redmine_search_cache_store` | Redmine の既定の `:memory_store` (32 MB) |
+| `config.redmine_search_cache_store` | Redmine のデフォルトの `:memory_store` (32 MB) |
 | 費用 | なし |
 
-Rails 8.1 の既定は `tmp/cache/` のファイルですが、Lambda では `/tmp` に置くことになり、際限なく増えます ([lambda.md](lambda.md#read-only-file-system))。
+Rails 8.1 のデフォルトは `tmp/cache/` のファイルですが、Lambda では `/tmp` に置くことになり、際限なく増えます ([lambda.md](lambda.md#read-only-file-system))。
 
 メモリに置くと、キャッシュは環境ごとに分かれ、新しい環境は空の状態から始まります。別の環境が返すページでは整形済みのテキストを作り直し、検索結果のページ送りのリクエストが別の環境に振り分けられると検索をやり直します。結果は同じで、かかる時間だけが違います。少人数のチームなら、この差は小さく済みます。整形済みのテキストをキャッシュするのは設定が有効で長いテキストの場合だけで、検索をやり直すのは次のページのリクエストが別の環境に振り分けられた場合だけだからです。
 
@@ -35,7 +35,7 @@ Rails 8.1 の既定は `tmp/cache/` のファイルですが、Lambda では `/t
 
 | 項目 | 設定場所 | 効果 |
 | --- | --- | --- |
-| 整形済みのテキストのキャッシュ | 管理 › 設定 › 全般 ›「テキスト書式の変換結果をキャッシュ」 | 有効: 長いテキスト (2 KB を超えるもの) を、環境ごとに 1 回だけ HTML に変換する。長い wiki ページがあるなら有効にする価値がある。無効 (既定): 表示のたびに HTML に変換する |
+| 整形済みのテキストのキャッシュ | 管理 › 設定 › 全般 ›「テキスト書式の変換結果をキャッシュ」 | 有効: 長いテキスト (2 KB を超えるもの) を、環境ごとに 1 回だけ HTML に変換する。長い wiki ページがあるなら有効にする価値がある。無効 (デフォルト): 表示のたびに HTML に変換する |
 | キャッシュサイズ | `image/config/additional_environment.rb` の `config.cache_store = :memory_store, { size: … }` | メモリキャッシュは、いっぱいになると、最も長く使われていない項目から破棄する。関数のメモリは 2,048 MB で ([lambda.md](lambda.md#function-settings))、キャッシュはその一部。長い wiki ページをキャッシュしていて、環境のメモリに余裕があれば大きくする (呼び出しごとの最大メモリ使用量は CloudWatch で確認できる) |
 | 項目の有効期間 | 同じ行の `expires_in:` | 指定なし: 環境が続くあいだ保持する。整形済みのテキストは、テキストのダイジェストからキーを作るので、テキストを変更すると古い項目は使われない |
 | 検索キャッシュのサイズ | `additional_environment.rb` の `config.redmine_search_cache_store = :memory_store, { size: … }` | Redmine は `additional_environment.rb` より前に `config/application.rb` でこれを設定するので、ここで書いた値が Redmine の値を置き換える。`nil` にすると、検索をキャッシュしない |

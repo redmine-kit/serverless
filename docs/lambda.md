@@ -28,7 +28,7 @@ Redmine runs as a container image, not a zip. A zip is limited to 250 MB unpacke
 | Base | Strengths | Weaknesses | Decision |
 | --- | --- | --- | --- |
 | Lambda Ruby base image (`public.ecr.aws/lambda/ruby:4.0`) | Built for Lambda, with the same OS as Lambda (Amazon Linux 2023) and Ruby. Includes the runtime interface client, so the task function can be built directly. Designed to run on a read-only file system as a low-privilege user | Redmine and its dependencies must be installed by hand, and Redmine updates must be followed by hand | Use |
-| Official Redmine image (`redmine:7.0.3`, Debian 13) | Updated with each Redmine release (7.0.3 on 2026-11-06), with dependencies in place | Built to run under Docker. Its entry point writes the configuration file, runs migrations and installs gems on every start, and must be removed. `HOME` is in an unwritable location. No runtime interface client. No Pandoc. Also includes unused Git, Subversion and so on | Do not use |
+| Official Redmine image (`redmine:7.0.3`, Debian 13) | Updated with each Redmine release (7.0.3 on 2026-11-06), with dependencies in place | Built to run under Docker. Its entry point writes the configuration file, runs migrations and installs gems on every start, and must be removed. `HOME` is in an unwritable location. No runtime interface client. No Pandoc. Also includes the Mercurial and Bazaar clients, which are not used (`7.0/trixie/Dockerfile` of docker-library/redmine, checked on 2026-11-10) | Do not use |
 
 With either base, Lambda does not update the OS of a container image function automatically. When the base image is updated, the image is rebuilt and deployed.
 
@@ -51,6 +51,7 @@ The following packages were confirmed to be installable from the standard Amazon
 | PDF thumbnails | `ghostscript`<br>`urw-base35-fonts` | 9.56.1 |
 | PostgreSQL connections | `libpq` (runtime), `libpq-devel` (building the `pg` gem) | 15.0 |
 | Japanese text in Gantt PNG | `ipa-gothic-fonts` | 003.03. Set with Redmine's `minimagick_font_path` |
+| Repositories ([below](#repositories)) | `subversion`<br>`git-core` (only the commands are copied into the image) | 1.14.5<br>2.50.1 (2026-11-10) |
 | Building gems | `gcc`<br>`make`<br>`libyaml-devel` | — |
 | Unpacking files | `tar`<br>`gzip` | — |
 
@@ -67,6 +68,7 @@ FROM public.ecr.aws/lambda/ruby:4.0@sha256:<digest> AS build
 
 FROM public.ecr.aws/lambda/ruby:4.0@sha256:<digest>
 # Install ImageMagick, ghostscript, urw-base35-fonts, libpq, ipa-gothic-fonts
+# Copy svn, svnadmin and git, and the libraries they need, from a stage with subversion and git-core
 # Install the Pandoc executable
 # Download the RDS CA bundle (global-bundle.pem), check its SHA256 and place it at /var/task/rds-global-bundle.pem
 # Copy /var/task/redmine from the build stage (build tools such as gcc are not included)
@@ -385,12 +387,33 @@ The custom error pages (`CustomErrorResponses`), HTTP/3, IPv6 and the ACM certif
 
 The distribution has 4 cache behaviors: the default one and `/files/*`, `/tmp/*` and `/assets/*`. Free allows 5 (checked 2026-11-10), so it fits whether or not the default behavior counts. Thumbnails, zips and uploads share `/tmp/*` for this reason; their S3 keys follow Redmine's own `tmp/` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#bucket-layout)).
 
+## Repositories
+
+The image has the Subversion client (`svn`) and the Git client (`git`). On Lambda, the plugin `redmine_serverless` lets only these two types be enabled in Administration › Settings › Repositories ("Enabled SCM"); the other types stay disabled, because their clients are not in the image ([admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html#redmine-settings-that-cannot-work-on-lambda)). This comes with the next version of `redmine_serverless`; version 0.1.0, in the image now, still fixes the setting to none, so repositories stay disabled on Lambda until the image has the new version.
+
+The commands come from the Amazon Linux packages `subversion` and `git-core`, installed in a build stage. Only the commands (`svn`, `git`, and `svnadmin`, which the image tests use to create a repository) and the shared libraries they link to that the image lacks (Subversion's libraries, APR, serf and a few others; `git` needs none) are copied into the image. Installing the packages themselves would add about 176 MB, because `git-core` requires `openssh-clients`, which brings in systemd, PAM and more. Redmine runs only the commands, and only git's built-in commands (`branch`, `tag`, `ls-tree`, `log`, `diff`, `show` and `blame` in Redmine 7.0.3), so git's helpers in `/usr/libexec/git-core` (for example for HTTPS remotes) are not copied; Redmine never fetches from a remote Git repository.
+
+| Type | How Redmine reads it | On Lambda |
+| --- | --- | --- |
+| Subversion | With `svn`, at the repository's URL, without keeping a copy. A remote repository (`https://`, `svn://`) can be used | Usable. The functions reach a server on the internet only in the NAT instance setup; with VPC endpoints they have no route to the internet ([rds.md](rds.md#routes-out-of-the-vpc)). The image tests check that Redmine reads a Subversion repository as Lambda's user ([testing.md](testing.md#image-tests)); reading a remote server from Lambda has not been checked yet |
+| Git | With `git`, from a bare repository on the local disk. Redmine does not clone or pull by itself | Waits for storage that has not been decided. On Lambda only `/tmp` is writable; it belongs to one execution environment, and a repository under `/tmp` is lost when the environment stops. Redmine accepts a Git repository in a project, but there is no place to keep it yet |
+
+Redmine reads files and diffs from the repository each time, and keeps the commits (changesets) in the database, from where the revision list and the links between issues and commits come. Commits are added only when Redmine fetches them:
+
+| Way to fetch commits | On Lambda |
+| --- | --- |
+| "Fetch commits automatically" (`autofetch_changesets`): while showing the repository page | Fixed to disabled by the plugin. The page would wait for the client, and a first fetch of a large repository may not finish within the web function's timeout (60 seconds) |
+| "Enable WS for repository management" (`sys_api_enabled`): hooks of the repository server and `reposman.rb` | Fixed to disabled by the plugin. `reposman.rb` creates repositories on the server's disk, which Lambda does not have |
+| `rake redmine:fetch_changesets` on `redmine-task` | Works for Subversion now: `bin/rake redmine:fetch_changesets` ([tasks.md](tasks.md)). It runs within the task's timeout (900 seconds; a large repository has not been measured); a longer first fetch is a task longer than 15 minutes ([tasks.md](tasks.md#tasks-longer-than-15-minutes)). No schedule runs it yet; adding it to the scheduled runs ([tasks.md](tasks.md#scheduled-runs)) has not been decided. For Git, it waits for the storage |
+
+Image size, measured on 2026-11-10 with `docker image inspect` (uncompressed): 1,353 MB without the clients, 1,365 MB with the commands copied as above, and 1,529 MB with the packages installed. The layer of the copied files is 11.7 MB, and 4.3 MB compressed with gzip.
+
 ## Features that cannot be used
 
 | Feature | Reason |
 | --- | --- |
-| Repository browsing | There is nowhere to keep Git or other repositories (Lambda's `/tmp` is per environment and disappears). The plugin `redmine_serverless` fixes the setting to disabled ([admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html#redmine-settings-that-cannot-work-on-lambda)). Integration with GitHub and similar services is not handled in this project; it will be considered separately, as another plugin that replaces local repositories |
-| Web service for incoming mail | Mail is received by SES. The plugin fixes the setting to disabled (same as above) |
+| Git repositories | Redmine reads them from the local disk, and Lambda's `/tmp` is lost when the execution environment stops. Where to keep them has not been decided ([Repositories](#repositories)). Subversion repositories can be used. Integration with GitHub and similar services is not handled in this project; it will be considered separately, as another plugin that replaces local repositories |
+| Web service for incoming mail | Mail is received by SES. The plugin `redmine_serverless` fixes the setting to disabled ([admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html#redmine-settings-that-cannot-work-on-lambda)) |
 | Responses over 6 MB, request bodies over 1 MB | Below |
 
 ### The 6 MB limit

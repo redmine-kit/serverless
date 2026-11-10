@@ -102,8 +102,28 @@ RUN curl -fsSLo /tmp/pandoc.tar.gz "https://github.com/jgm/pandoc/releases/downl
   && tar -xzf /tmp/pandoc.tar.gz -C /tmp \
   && install -m 0755 "/tmp/pandoc-${PANDOC_VERSION}/bin/pandoc" /usr/local/bin/pandoc
 
-FROM base
+# The packages of the final image.
+FROM base AS runtime
 RUN dnf install -y ImageMagick ghostscript urw-base35-fonts libpq ipa-gothic-fonts && dnf clean all
+
+# The Subversion and Git clients, for the repository types that
+# redmine_serverless allows on Lambda (docs/lambda.md#repositories), without
+# the rest of their packages: git-core requires openssh-clients, which brings
+# in systemd, PAM and more. Redmine runs only the commands, and only git's
+# built-in commands, so git's helpers (/usr/libexec/git-core) are left out.
+# svnadmin is for the image tests, which create a repository. /scm gets the
+# commands and the shared libraries they link to that the runtime stage lacks.
+FROM runtime AS scm
+RUN ls /usr/lib64 > /tmp/runtime-libs \
+  && dnf install -y subversion git-core && dnf clean all \
+  && mkdir -p /scm/usr/bin /scm/usr/lib64 \
+  && cp /usr/bin/git /usr/bin/svn /usr/bin/svnadmin /scm/usr/bin/ \
+  && ldd /scm/usr/bin/* | awk '/=>/ { print $1, $3 }' | sort -u | while read -r name path; do \
+    grep -qx "$name" /tmp/runtime-libs || cp -L "$path" "/scm/usr/lib64/$name" || exit 1; \
+  done
+
+FROM runtime
+COPY --from=scm /scm/ /
 COPY --from=build /usr/local/bin/pandoc /usr/local/bin/pandoc
 COPY --from=build /var/task/redmine /var/task/redmine
 COPY --from=build /tmp/rds-global-bundle.pem /var/task/rds-global-bundle.pem

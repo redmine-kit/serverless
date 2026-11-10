@@ -34,7 +34,7 @@ Redmine は、zip ではなくコンテナイメージで実行します。zip �
 | ベースイメージ | 利点 | 欠点 | 判断 |
 | --- | --- | --- | --- |
 | Lambda の Ruby ベースイメージ (`public.ecr.aws/lambda/ruby:4.0`) | Lambda 用のイメージで、Lambda と同じ OS (Amazon Linux 2023) と Ruby。ランタイムインターフェイスクライアントが含まれているので、タスク用の関数をそのまま作成できる。読み取り専用のファイルシステムと、権限の少ないユーザーでの実行を前提に作られている | Redmine と依存関係を自分でインストールし、Redmine の更新にも自分で追随する | 採用 |
-| 公式の Redmine イメージ (`redmine:7.0.3`、Debian 13) | Redmine のリリースに合わせて更新され (7.0.3 は 2026-11-06)、依存関係がそろっている | Docker での実行を前提とした作り。起動のたびに設定ファイルを書き、migration を実行し、gem をインストールするエントリーポイントを外す必要がある。`HOME` が書き込めない場所にある。ランタイムインターフェイスクライアントがない。Pandoc がない。使わない Git、Subversion なども含まれている | 不採用 |
+| 公式の Redmine イメージ (`redmine:7.0.3`、Debian 13) | Redmine のリリースに合わせて更新され (7.0.3 は 2026-11-06)、依存関係がそろっている | Docker での実行を前提とした作り。起動のたびに設定ファイルを書き、migration を実行し、gem をインストールするエントリーポイントを外す必要がある。`HOME` が書き込めない場所にある。ランタイムインターフェイスクライアントがない。Pandoc がない。使わない Mercurial と Bazaar のクライアントも含まれている (docker-library/redmine の `7.0/trixie/Dockerfile`。2026-11-10 に確認) | 不採用 |
 
 コンテナイメージの関数では、どちらのベースイメージでも、Lambda は OS を自動で更新しません。ベースイメージが更新されたら、イメージを再ビルドしてデプロイします。
 
@@ -59,6 +59,7 @@ Amazon Linux 2023 の標準リポジトリで、次のパッケージをイン�
 | PDF のサムネイル | `ghostscript`<br>`urw-base35-fonts` | 9.56.1 |
 | PostgreSQL への接続 | `libpq` (実行時)、`libpq-devel` (`pg` gem のビルド) | 15.0 |
 | ガントチャートの PNG の日本語 | `ipa-gothic-fonts` | 003.03。Redmine の `minimagick_font_path` で指定する |
+| リポジトリ ([下記](#repositories)) | `subversion`<br>`git-core` (イメージにはコマンドだけをコピーする) | 1.14.5<br>2.50.1 (2026-11-10) |
 | gem のビルド | `gcc`<br>`make`<br>`libyaml-devel` | — |
 | ファイルの展開 | `tar`<br>`gzip` | — |
 
@@ -77,6 +78,7 @@ FROM public.ecr.aws/lambda/ruby:4.0@sha256:<digest> AS build
 
 FROM public.ecr.aws/lambda/ruby:4.0@sha256:<digest>
 # ImageMagick、ghostscript、urw-base35-fonts、libpq、ipa-gothic-fonts を入れる
+# subversion と git-core を入れたステージから、svn、svnadmin、git と、必要なライブラリをコピーする
 # Pandoc の実行ファイルを入れる
 # RDS の CA 証明書バンドル(global-bundle.pem)をダウンロードし、SHA256 を確認して /var/task/rds-global-bundle.pem に置く
 # build ステージから /var/task/redmine を取る(gcc などのビルドツールは入れない)
@@ -439,14 +441,37 @@ CloudFront は、定額料金プランの無料プラン (月 0 ドル) を使�
 
 ディストリビューションのキャッシュビヘイビアは、デフォルトのものと `/files/*`、`/tmp/*`、`/assets/*` の 4 つです。無料プランは 5 つまで (2026-11-10 に確認) なので、デフォルトのキャッシュビヘイビアを数に含めても含めなくても収まります。サムネイル、zip、アップロードが `/tmp/*` を共有するのは、このためです。S3 のキーは Redmine 自身の `tmp/` に合わせています ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#bucket-layout))。
 
+<a id="repositories"></a>
+
+## リポジトリ
+
+イメージには、Subversion のクライアント (`svn`) と Git のクライアント (`git`) があります。Lambda では、プラグイン `redmine_serverless` が、「管理 › 設定 › リポジトリ」の「使用するバージョン管理システム」で、この 2 つだけを有効にできるようにします。ほかの種類は、クライアントがイメージにないので無効のままです ([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。これは `redmine_serverless` の次のバージョンからです。今のイメージにある 0.1.0 は、設定を空に固定するので、新しいバージョンがイメージに入るまで、Lambda ではリポジトリを使用できません。
+
+コマンドは、ビルドステージでインストールした Amazon Linux のパッケージ `subversion` と `git-core` のものです。イメージには、コマンド (`svn`、`git` と、イメージテストがリポジトリの作成に使う `svnadmin`) と、それがリンクする共有ライブラリのうちイメージにないもの (Subversion のライブラリ、APR、serf など。`git` には不要) だけをコピーします。パッケージそのものをインストールすると、`git-core` が `openssh-clients` を必要とし、それが systemd、PAM なども追加するので、約 176 MB 増えます。Redmine が実行するのはコマンドだけで、Git の組み込みコマンド (Redmine 7.0.3 では `branch`、`tag`、`ls-tree`、`log`、`diff`、`show`、`blame`) だけを使います。そのため、`/usr/libexec/git-core` にある Git のヘルパー (HTTPS のリモートなどに使う) はコピーしません。Redmine は、リモートの Git のリポジトリから取得しません。
+
+| 種類 | Redmine の読み方 | Lambda での扱い |
+| --- | --- | --- |
+| Subversion | リポジトリの URL を `svn` で読み、コピーを持たない。リモートのリポジトリ (`https://`、`svn://`) を使える | 使用できる。関数がインターネット上のサーバーに接続できるのは、NAT インスタンスの構成だけ。VPC エンドポイントの構成では、インターネットへのルートがない ([rds.md](rds.md#routes-out-of-the-vpc))。Redmine が Lambda のユーザーで Subversion のリポジトリを読めることは、イメージテストで確認する ([testing.md](testing.md#image-tests))。Lambda からリモートのサーバーを読むことは、まだ確認していない |
+| Git | ローカルのディスクにあるベアリポジトリを `git` で読む。Redmine 自身は clone も pull もしない | 未決定の保存先を待つ。Lambda で書き込めるのは `/tmp` だけで、`/tmp` は実行環境ごとのものなので、`/tmp` に置いたリポジトリは実行環境が停止すると失われる。Redmine はプロジェクトに Git のリポジトリを登録できるが、置く場所はまだない |
+
+Redmine は、ファイルと差分を毎回リポジトリから読み、コミット (チェンジセット) はデータベースに保存します。「リビジョン」の一覧や、チケットとコミットの関連付けは、データベースのものを使います。コミットは、Redmine が取得したときだけ追加されます。
+
+| コミットの取得方法 | Lambda での扱い |
+| --- | --- |
+| 「コミットを自動取得する」(`autofetch_changesets`): リポジトリの画面の表示時 | プラグインが無効に固定する。画面がクライアントの処理を待ち、大きなリポジトリの最初の取得は、web の関数のタイムアウト (60 秒) までに終わらないことがある |
+| 「リポジトリ管理用のWebサービスを有効にする」(`sys_api_enabled`): リポジトリのサーバーのフックと `reposman.rb` | プラグインが無効に固定する。`reposman.rb` はサーバーのディスクにリポジトリを作成するが、Lambda にはそのディスクがない |
+| `redmine-task` の `rake redmine:fetch_changesets` | Subversion では今すぐ使える: `bin/rake redmine:fetch_changesets` ([tasks.md](tasks.md))。タスクのタイムアウト (900 秒) の範囲で動く (大きなリポジトリでは計測していない)。それより長い最初の取得は、15 分を超えるタスクとして扱う ([tasks.md](tasks.md#tasks-longer-than-15-minutes))。定期実行はまだ設定していない。スケジュール実行 ([tasks.md](tasks.md#scheduled-runs)) に追加するかは未決定。Git では保存先を待つ |
+
+イメージのサイズは、クライアントなしで 1,353 MB、上のようにコマンドをコピーして 1,365 MB、パッケージをインストールすると 1,529 MB です (2026-11-10 に `docker image inspect` で計測。非圧縮)。コピーしたファイルのレイヤーは 11.7 MB で、gzip で圧縮すると 4.3 MB です。
+
 <a id="features-that-cannot-be-used"></a>
 
 ## 使用できない機能
 
 | 機能 | 理由 |
 | --- | --- |
-| リポジトリの閲覧 | Git などのリポジトリを置く場所がない (Lambda の `/tmp` は環境ごとで、環境とともに消える)。設定はプラグイン `redmine_serverless` が無効に固定する ([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。GitHub などとの連携は、このプロジェクトでは扱わず、ローカルのリポジトリを置き換える別のプラグインとして、別途検討する |
-| 受信メール用の Web サービス | メールは SES で受信する。設定はプラグインが無効に固定する (同上) |
+| Git のリポジトリ | Redmine はローカルのディスクから読むが、Lambda の `/tmp` は実行環境が停止すると失われる。保存先は未決定 ([リポジトリ](#repositories))。Subversion のリポジトリは使用できる。GitHub などとの連携は、このプロジェクトでは扱わず、ローカルのリポジトリを置き換える別のプラグインとして、別途検討する |
+| 受信メール用の Web サービス | メールは SES で受信する。設定はプラグイン `redmine_serverless` が無効に固定する ([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda)) |
 | 6 MB を超えるレスポンス、1 MB を超えるリクエスト本文 | 下記 |
 
 <a id="the-6-mb-limit"></a>

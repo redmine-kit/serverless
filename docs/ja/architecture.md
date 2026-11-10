@@ -77,7 +77,7 @@ flowchart LR
 | Redmine | 7.0.3 (最新の安定バージョン)。サードパーティーのプラグインなし、標準テーマ | 依頼のとおり | [lambda.md](lambda.md) |
 | 拡張機能 | 独自プラグイン。`redmine_serverless` (Lambda での実行)、`redmine_serverless_s3` (S3 の添付ファイル)、`redmine_serverless_ses` (SES でのメール)、`redmine_serverless_sqs` (SQS でのジョブ)、`redmine_serverless_ssm` (SSM Parameter Store の設定とシークレット) | Redmine 標準の拡張の仕組みを使い、本体のファイルを書き換えない | 下の「独自プラグイン」 |
 | 実行環境 | Event Functions、コンテナイメージ、arm64 | Ruby を実行できる。Web Functions は Node.js だけ (下記) | [lambda.md](lambda.md) |
-| イメージ | Lambda の Ruby ベースイメージ (`public.ecr.aws/lambda/ruby:4.0`) に、Redmine、ImageMagick などの依存関係、Lambda Web Adapter をインストールする | Lambda と同じ OS と Ruby で、Lambda で動かす前提の構成。HTTP サーバー (Puma) をそのまま使える | [lambda.md](lambda.md#choosing-the-base) |
+| イメージ | Lambda の Ruby ベースイメージ (`public.ecr.aws/lambda/ruby:4.0`) に、Redmine、ImageMagick などの依存関係、Subversion と Git のクライアント ([lambda.md](lambda.md#repositories))、Lambda Web Adapter をインストールする | Lambda と同じ OS と Ruby で、Lambda で動かす前提の構成。HTTP サーバー (Puma) をそのまま使える | [lambda.md](lambda.md#choosing-the-base) |
 | 3 つの関数 | `redmine-web` (画面)、`redmine-worker` (ジョブ)、`redmine-task` (rake とメールの取り込み)。同じイメージを、環境変数 `REDMINE_ROLE` で切り替える。Puma を起動するのは `redmine-web` だけ | ビルドが 1 回で済み、同じコードが動く | [tasks.md](tasks.md#how-one-image-runs-everything) |
 | エントリーポイント | CloudFront → 関数 URL。関数 URL は IAM 認証にし、OAC で署名したリクエストだけを受け付ける。POST などのリクエスト本文のハッシュは、Lambda@Edge (`redmine-body-hash`) が追加する | 署名のない直接のリクエストは、関数が呼び出される前に拒否される。秘密のヘッダーを持たなくてよい。CloudFront Functions は本文を読めないので Lambda@Edge を使う。リクエスト本文は 1 MB までになる | [lambda.md](lambda.md#cloudfront-and-function-urls) |
 | アセット | CloudFront の `/assets/*` のオリジンを S3 にする | Lambda を通さず、コールドスタートと同時リクエストを減らす | [lambda.md](lambda.md#serving-assets) |
@@ -273,3 +273,5 @@ serverless/
 | CloudFront の料金プラン | 定額料金プランの無料プラン (WAF を含む) / 従量課金 | 無料プランの枠がアカウントに残っているか。[lambda.md](lambda.md#flat-rate-free-plan-and-waf) |
 | 添付ファイルのサイズ上限 | Redmine の `attachment_max_size`。アップロード (`/tmp/incoming/`) は、`/tmp/*` の CloudFront Functions で制限する。登録時に Redmine はファイルを読まないので、制約になるのは 1 回の PUT で CloudFront が受け付けるサイズと、ブラウザーでのハッシュ計算の時間 | 計測結果。[attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload) |
 | メール受信のデフォルトのプロジェクト | サブアドレスがない場合のプロジェクト | [mail.md](mail.md#importing) |
+| Git のリポジトリの保存先 | 未選定。それまでは Subversion のリポジトリだけを使用できる | どの実行環境からも読めるようにベアリポジトリを置く場所と、その更新方法。[lambda.md](lambda.md#repositories) |
+| コミットの取得 | `redmine:fetch_changesets` をスケジュール実行に追加する / 必要なときに `bin/rake` で実行する | リポジトリを使うか、取得にかかる時間。[lambda.md](lambda.md#repositories) |

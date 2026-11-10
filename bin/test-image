@@ -128,6 +128,8 @@ check "Ghostscript" contents 'gs --version >/dev/null'
 check "Pandoc 3.8.3 or later" contents \
   'v=$(pandoc --version | sed -n "1s/^pandoc //p"); printf "3.8.3\n%s\n" "$v" | sort -V -C'
 check "IPA Gothic font" contents 'test -r /usr/share/fonts/ipa-gothic-fonts/ipag.ttf'
+check "Subversion client" contents 'svn --version --quiet >/dev/null'
+check "Git client" contents 'git --version >/dev/null'
 # Run as the low-privilege user, so File.readable? answers for that user.
 check "everything readable by the low-privilege user" contents \
   'ruby -rfind -e "Find.find(%q(/var/task), %q(/opt)) { |f| ok = File.directory?(f) ? File.executable?(f) : File.readable?(f); abort(f) unless ok || File.symlink?(f) }"'
@@ -178,18 +180,46 @@ plugins_loaded() {
     tail -n 1 | grep -qx all
 }
 check "the plugins are loaded (core, SQS, SES, S3, SSM)" plugins_loaded
+runner_says_none() { # <Ruby expression that lists what is missing>
+  local event output
+  event=$(jq -nc --arg code "puts(($1).join(%q(,)).presence || %q(none))" '{command: "runner", args: [$code]}')
+  output=$(task "$event" | tail -n 1)
+  [[ "$output" == none ]] || { echo "  missing: $output" >&2; return 1; }
+}
+# Redmine finds the clients of the repository types allowed on Lambda
+# (docs/lambda.md#repositories) and reads a repository of each type with them,
+# as the Lambda user: one made in /tmp with a file in it, read through
+# Redmine's adapter (entries and revisions).
+check "Redmine finds the Subversion and Git clients" runner_says_none \
+  "%w[Subversion Git].reject { |type| Repository.const_get(type).scm_adapter_class.client_available }"
+reads_repository() { # <Ruby code that makes the repository and returns its URL> <type> <path>
+  local code event
+  code='FileUtils.rm_rf(%q(/tmp/scm-test)); FileUtils.mkdir_p(%q(/tmp/scm-test/src))
+    File.write(%q(/tmp/scm-test/src/README), %q(probe))
+    url = begin
+      '"$1"'
+    end
+    scm = Repository.const_get(ARGV[0]).new(url: url).scm
+    puts [scm.entries(ARGV[1]).map(&:name).join, scm.revisions(%q(), nil, nil).size].join(%q( ))'
+  event=$(jq -nc --arg code "$code" --arg type "$2" --arg path "$3" '{command: "runner", args: [$code, $type, $path]}')
+  task "$event" | tail -n 1 | grep -qx 'README 1'
+}
+check "Redmine reads a Subversion repository" reads_repository \
+  'system(*%w[svnadmin create /tmp/scm-test/svn], exception: true)
+   system(*%w[svn import -q -m probe /tmp/scm-test/src file:///tmp/scm-test/svn/trunk], exception: true)
+   %q(file:///tmp/scm-test/svn)' Subversion trunk
+check "Redmine reads a Git repository" reads_repository \
+  'git = %w[git -c user.name=probe -c user.email=probe@example.com]
+   system(*git, *%w[-C /tmp/scm-test/src init -q -b main], exception: true)
+   system(*git, *%w[-C /tmp/scm-test/src add README], exception: true)
+   system(*git, *%w[-C /tmp/scm-test/src commit -q -m probe], exception: true)
+   %q(/tmp/scm-test/src/.git)' Git ''
 if [[ -n "$derived_config" ]]; then
   # image.plugins and image.themes of the derived image: loaded, their
   # migrations run by redmine:plugins:migrate above, and the themes' assets
   # compiled.
   added_plugins=$(jq -r '[.image.plugins // [] | .[].name] | join(" ")' "$derived_config")
   added_themes=$(jq -r '[.image.themes // [] | .[].name] | join(" ")' "$derived_config")
-  runner_says_none() { # <Ruby expression that lists what is missing>
-    local event output
-    event=$(jq -nc --arg code "puts(($1).join(%q(,)).presence || %q(none))" '{command: "runner", args: [$code]}')
-    output=$(task "$event" | tail -n 1)
-    [[ "$output" == none ]] || { echo "  missing: $output" >&2; return 1; }
-  }
   if [[ -n "$added_plugins" ]]; then
     check "the added plugins are loaded ($added_plugins)" \
       runner_says_none "%w[$added_plugins].reject { |id| Redmine::Plugin.installed?(id) }"

@@ -229,6 +229,7 @@ Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md
 | Redmine の脆弱性 | Redmine と Rails の脆弱性は、バージョンアップするまで残る | Redmine のセキュリティ情報を確認して、早めにバージョンアップする。WAF で一部を防ぐ |
 | ログインの総当たり攻撃 | Redmine に、失敗回数でアカウントをロックする仕組みがない | WAF のレート制限と、二要素認証 |
 | NAT インスタンスを経由する外部への通信 | NAT インスタンス構成では、関数がインターネットにアクセスできる | 侵害されないことに注力する (上の対策)。外部への通信を止める必要があれば、VPC エンドポイント構成にする ([rds.md](rds.md#which-to-choose)) |
+| リポジトリの URL | 「リポジトリの管理」の権限を持つユーザーが、関数が `svn` で読む URL (と `git` が読むパス) を設定する。webhook の `webhook_blocklist` のような拒否リストは、Redmine にない | 「リポジトリの管理」は信頼できるロールにだけ与える。関数が接続できるのは VPC のルートが許す範囲だけで、VPC エンドポイントの構成ではインターネット上のサーバーに接続できない ([lambda.md](lambda.md#repositories)) |
 | データベースパスワード | 一時的な認証情報と違い、パスワードは自動では失効しない | SSM (SecureString) と RDS にだけ保存し、RDS には VPC 内からしか接続できない。インシデントの発生時は変更する (下記) |
 | 添付ファイルのウイルス | Redmine は添付ファイルをスキャンしない | `tmp/incoming/` と `imports/` に GuardDuty Malware Protection for S3 を使い、`REDMINE_S3_MALWARE_SCAN=true` にする。プラグインは、問題がないと判定されたファイルだけを使う ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#malware-scan)、費用も) |
 | CloudFront と WAF のログがない | 定額料金プランの無料プランに、ログが含まれない | Lambda のログと、セキュリティダッシュボードで確認する |

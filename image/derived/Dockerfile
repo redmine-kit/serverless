@@ -8,6 +8,7 @@
 #   <context>/themes/<name>/   themes from Git or a directory
 #   <context>/Gemfile.plugins  the plugin gems, appended to Gemfile.local
 #   <context>/gems             their names, one per line
+# The build context "derived" is image/derived, for lock.rb.
 ARG BASE_IMAGE
 
 FROM ${BASE_IMAGE} AS build
@@ -17,13 +18,17 @@ RUN dnf install -y gcc gcc-c++ make && dnf clean all
 WORKDIR /var/task/redmine
 COPY . /tmp/derived/
 # Bundler runs only when a gem or a plugin's Gemfile is added. The lock is the
-# base image's lock with the new gems added: bundle lock keeps the versions
-# already locked unless a new gem needs a newer one. Bundler's credential for
-# GitHub Packages is a build secret, never in a layer. The plugin gems are
-# linked into plugins/ as the base image links its own. tmp links to
-# /tmp/redmine, which building the assets uses.
-RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM <<'EOF'
+# base image's lock with the added gems, and the base image's gems keep their
+# versions (lock.rb): if an added plugin needs another version of one, the
+# build fails. Bundler's credential for GitHub Packages is a build secret,
+# never in a layer. The plugin gems are linked
+# into plugins/ as the base image links its own. tmp links to /tmp/redmine,
+# which building the assets uses.
+RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM \
+  --mount=type=bind,from=derived,source=lock.rb,target=/tmp/lock.rb <<'EOF'
 set -eu
+cd /var/task/redmine
+ruby /tmp/lock.rb base /tmp/base-gems
 cd /tmp/derived
 for kind in plugins themes; do
   for dir in "$kind"/*/; do
@@ -37,11 +42,23 @@ for kind in plugins themes; do
   done
 done
 cd /var/task/redmine
-if [ -s /tmp/derived/Gemfile.plugins ] || ls plugins/*/Gemfile plugins/*/PluginGemfile >/dev/null 2>&1; then
+gemfiles=false
+for file in plugins/*/Gemfile plugins/*/PluginGemfile; do
+  if [ -e "$file" ]; then gemfiles=true; fi
+done
+if [ -s /tmp/derived/Gemfile.plugins ] || $gemfiles; then
+  fail() {
+    echo "$1: the added plugins may need other versions of gems in the base image, which a derived image keeps," >&2
+    echo "or a gem that cannot be fetched (from GitHub Packages, a token with read:packages is needed)" >&2
+    exit 1
+  }
   cat /tmp/derived/Gemfile.plugins >>Gemfile.local
-  BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false bundle lock
+  BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false ruby /tmp/lock.rb pins /tmp/base-gems >/tmp/pins
+  cat /tmp/pins >>Gemfile.local
+  BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false bundle lock || fail "bundle lock failed"
+  ruby /tmp/lock.rb check /tmp/base-gems
   bundle install --jobs 4
-  rm -rf vendor/bundle/ruby/*/cache
+  rm -rf vendor/bundle/ruby/*/cache /tmp/pins
 fi
 while read -r gem; do
   [ -n "$gem" ] || continue
@@ -53,7 +70,7 @@ while read -r gem; do
 done </tmp/derived/gems
 mkdir -p /tmp/redmine
 SECRET_KEY_BASE_DUMMY=1 bin/rails assets:precompile
-rm -rf /tmp/redmine /tmp/derived
+rm -rf /tmp/redmine /tmp/derived /tmp/base-gems
 # Lambda runs as a low-privilege user, which must read everything.
 chmod -R a+rX /var/task/redmine
 EOF

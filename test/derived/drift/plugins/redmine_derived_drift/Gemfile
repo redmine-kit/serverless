@@ -1,0 +1,6 @@
+# frozen_string_literal: true
+
+# Asks for another version of a gem that the base image has (concurrent-ruby,
+# through Rails), so that building the derived image fails
+# (bin/test-derived-image).
+gem 'concurrent-ruby', '1.3.6'

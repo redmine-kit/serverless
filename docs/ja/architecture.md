@@ -186,7 +186,7 @@ Redmine 7.0.3 は、`plugins/` ディレクトリにあるプラグインだけ�
 
 GitHub Packages の RubyGems レジストリからインストールするには、公開されている gem でも、`read:packages` 権限を持つトークンが必要です (GitHub のドキュメント、2026-11-09 に確認)。CI はそのジョブの `GITHUB_TOKEN` を、ローカルのビルドは `gh` のログイントークンを使います。トークンはビルドにシークレットとして渡し、レイヤーには残しません (`bin/lib/plugin.sh`)。
 
-各プラグインは、バージョンを gemspec、`init.rb` の `version`、Git のタグでそろえ (公開用のワークフローが確認します)、対応する Redmine のバージョンを `requires_redmine` で指定します。利用者は、Redmine のイメージをタグではなく digest で参照します ([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
+各プラグインは、バージョンを gemspec、`init.rb` の `version`、Git のタグでそろえ (公開用のワークフローが確認します)、対応する Redmine のバージョンを `requires_redmine` で指定します。アダプタは、Redmine のイメージをタグではなく digest で参照します ([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
 
 <a id="derived-images"></a>
 
@@ -200,7 +200,7 @@ Redmine 7.0 は、テーマを `themes/` か `app/assets/themes/` から読み�
 
 派生イメージも、プッシュする前に、このプロジェクトのイメージテスト (読み取り専用、権限の少ないユーザー、3 つの役割) を実行します。追加したプラグインが読み込まれてマイグレーション済みであること、追加したテーマが見つかり、そのアセットがコンパイル済みであることも確認します ([testing.md](testing.md#image-tests))。追加したプラグインの動作は、このプロジェクトでは確認しません。
 
-リストで表せないものは、これまでどおり Dockerfile を自分で書けます。`FROM` でこのプロジェクトのイメージを digest で指定し、テーマを `themes/<テーマ>/` に、プラグインを `plugins/<プラグイン>/` に配置してアセットを再生成し、レジストリにプッシュして、`image.repository` と `image.digest` で指定します。`bin/deploy` は、このプロジェクトのイメージと同じく、アカウントの ECR にコピーします。
+リストで表せないものについては、アダプタは、これまでどおり Dockerfile を自分で書けます。`FROM` でこのプロジェクトのイメージを digest で指定し、テーマを `themes/<テーマ>/` に、プラグインを `plugins/<プラグイン>/` に配置してアセットを再生成し、レジストリにプッシュして、`image.repository` と `image.digest` で指定します。`bin/deploy` は、このプロジェクトのイメージと同じく、アカウントの ECR にコピーします。
 
 
 <a id="what-is-not-in-the-plugins"></a>

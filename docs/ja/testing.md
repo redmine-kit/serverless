@@ -15,7 +15,7 @@ Serverless のテスト計画です。独自のプラグイン、Redmine 本体�
 - テストでは、実際の AWS に接続しません。AWS SDK の応答のスタブ (`stub_responses`) と、AWS の API をローカルで再現する moto (Apache-2.0) と LocalStack を使います (下の「代替ツールの使い分け」)。
 - Lambda、CloudFront、SES の受信など、ローカルで再現できないものは、デプロイ後のチェックで確認します。
 
-このプロジェクトの CI は、redmine-kit Organization の LocalStack ライセンス (2026-11-09 から Ultimate) を使い、シークレット `LOCALSTACK_AUTH_TOKEN` でジョブに渡します。Serverless の利用者がテストを実行するときは、その用途を認める自分の LocalStack ライセンスが必要です。ない場合は、このプロジェクトの CI の結果と、自分の環境でのデプロイ後のチェックで確認します。
+このプロジェクトの CI は、redmine-kit Organization の LocalStack ライセンス (2026-11-09 から Ultimate) を使い、シークレット `LOCALSTACK_AUTH_TOKEN` でジョブに渡します。Serverless のアダプタがテストを実行するときは、その用途を認める自分の LocalStack ライセンスが必要です。ない場合は、このプロジェクトの CI の結果と、自分の環境でのデプロイ後のチェックで確認します。
 
 <a id="running-the-tests"></a>
 

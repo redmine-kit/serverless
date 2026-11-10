@@ -83,7 +83,7 @@ Lambda@Edge 関数のほかに、CloudFront の証明書 (ACM) も us-east-1 に
 | `waf.rateLimit` | | 1000 | WAF の全体のリクエスト数制限 (5 分あたり) |
 | `waf.commonRuleSet` | | `count` | WAF の Common Rule Set を、`count` (カウントのみ) にするか `block` (ブロック) にするか |
 | `waf.commonRuleSetCountOnly` | | `["SizeRestrictions_BODY"]` | `block` の場合も、カウントのみにするルール (1 つ) |
-| `image.repository` | | `ghcr.io/redmine-kit/serverless` | 使用するイメージ。利用者が自分で作成した派生イメージは、ここで指定する ([architecture.md](architecture.md#derived-images))。Redmine のバージョンはイメージで決まる。バージョンアップ前の確認方法は [upgrade.md](upgrade.md) |
+| `image.repository` | | `ghcr.io/redmine-kit/serverless` | 使用するイメージ。アダプタが作成した派生イメージは、ここで指定する ([architecture.md](architecture.md#derived-images))。Redmine のバージョンはイメージで決まる。バージョンアップ前の確認方法は [upgrade.md](upgrade.md) |
 | `image.digest` | `image.repository` を指定する場合 | その時点の、Redmine のバージョンタグの digest | イメージの digest (`sha256:…`)。指定しない場合、`bin/deploy` は、このチェックアウトがビルドする Redmine のバージョンタグ (たとえば `7.0.3`。`image/Dockerfile` の `ARG REDMINE_VERSION`) の、その時点の digest を使い、固定できるように表示する |
 | `image.plugins` | | なし | イメージに追加するプラグイン。`bin/deploy` は、上のイメージをベースに、これらを追加した派生イメージをビルドする (下の「プラグインとテーマの追加」)。各要素には、`name` (`plugins/` 内のプラグインのディレクトリ名で、プラグインの ID) と、取得元を 1 つ指定する。取得元は、`version` (gem `name` のそのバージョン。RubyGems か、`source` に指定した `https://rubygems.pkg.github.com/<owner>` などから取得)、`git` と `ref` (HTTPS のリポジトリの、タグか完全なコミットハッシュ)、`path` (`redmine.json` からの相対パスのディレクトリ) のどれか |
 | `image.themes` | | なし | 追加するテーマ。`themes/<name>/` に配置する。各要素には、`name` と、`git` と `ref`、または `path` を指定する |
@@ -219,7 +219,7 @@ Web と worker が新しいイメージになるのは、マイグレーショ�
 
 このプロジェクトの CI が、イメージを GitHub Packages のコンテナレジストリ (`ghcr.io`) に公開します ([architecture.md](architecture.md#distribution))。デプロイコマンドは digest のままコピーするので、ECR のイメージも同じ digest です。
 
-多数のインスタンスを構築するときは、インスタンスの数だけ同じコマンドを繰り返します。順序 (たとえば、検証用の小さなインスタンスから) は、利用者が決めます。
+多数のインスタンスを構築するときは、インスタンスの数だけ同じコマンドを繰り返します。順序 (たとえば、検証用の小さなインスタンスから) は、アダプタが決めます。
 
 <a id="maintenance-page"></a>
 

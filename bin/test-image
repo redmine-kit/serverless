@@ -242,10 +242,20 @@ failed_task() { invoke task '{"command":"rake","args":["no:such:task"]}' | jq -e
 check "failed task returns its exit code" failed_task
 
 echo "== web"
-run web
+# Requests reach Puma as CloudFront sends them through the function URL: the
+# function URL's host name in Host, the domain in X-Forwarded-Host and https
+# in X-Forwarded-Proto (origin custom headers of infra/instance.yaml), with
+# config.hosts set to the domain only (REDMINE_HOST; docs/lambda.md#host-and-scheme).
+domain=redmine.example.test
+function_url_host=abcdefghijklmnopqrstuvwxyz012345.lambda-url.us-east-1.on.aws
+run web -e REDMINE_HOST="$domain"
+web_curl() {
+  docker exec "$prefix-web" curl -sS -H "Host: $function_url_host" -H "X-Forwarded-Host: $domain" \
+    -H 'X-Forwarded-Proto: https' "$@"
+}
 web_up() {
   for _ in $(seq 1 60); do
-    docker exec "$prefix-web" curl -fsS -o /dev/null http://127.0.0.1:3000/login 2>/dev/null && return 0
+    web_curl -f -o /dev/null http://127.0.0.1:3000/login 2>/dev/null && return 0
     sleep 1
   done
   docker logs "$prefix-web" 2>&1 | tail -20 >&2
@@ -256,19 +266,50 @@ check "Puma starts and /login returns 200" web_up
 # fail on a closed pipe, and pipefail counts that as a failure.
 login_page() {
   local page
-  page=$(docker exec "$prefix-web" curl -fsS http://127.0.0.1:3000/login) || return 1
+  page=$(web_curl -f http://127.0.0.1:3000/login) || return 1
   grep -q '<title>Redmine' <<<"$page"
 }
 check "login page is Redmine's" login_page
-# Requests reach Redmine as HTTPS behind CloudFront and the function URL; Rails
-# writes a Secure cookie only on HTTPS requests.
+# Rails writes a Secure cookie only on HTTPS requests.
 secure_cookie() {
   local headers
-  headers=$(docker exec "$prefix-web" curl -fsS -D - -o /dev/null -H 'X-Forwarded-Proto: https' \
-    http://127.0.0.1:3000/login) || return 1
+  headers=$(web_curl -f -D - -o /dev/null http://127.0.0.1:3000/login) || return 1
   grep -i '^set-cookie: _redmine_session=' <<<"$headers" | grep -qi '; secure'
 }
 check "the session cookie is Secure" secure_cookie
+status_of() { # <curl arguments...>: prints the HTTP status
+  docker exec "$prefix-web" curl -sS -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' "$@"
+}
+check "without X-Forwarded-Host, the function URL's host is blocked" \
+  test "$(status_of -H "Host: $function_url_host" http://127.0.0.1:3000/login)" = 403
+check "another X-Forwarded-Host is blocked" \
+  test "$(status_of -H "Host: $function_url_host" -H 'X-Forwarded-Host: evil.example.net' http://127.0.0.1:3000/login)" = 403
+check "the function URL's host as X-Forwarded-Host is blocked" \
+  test "$(status_of -H "Host: $function_url_host" -H "X-Forwarded-Host: $function_url_host" http://127.0.0.1:3000/login)" = 403
+redirects_to_domain() {
+  local headers
+  headers=$(web_curl -D - -o /dev/null http://127.0.0.1:3000/my/page) || return 1
+  grep -qi "^location: https://$domain/login?back_url=https%3A%2F%2F$domain%2Fmy%2Fpage" <<<"$headers"
+}
+check "redirects use the domain" redirects_to_domain
+# Signing in with the login form's POST: the session cookie and its CSRF
+# token from the login page, and the browser's Origin. Redmine does not turn
+# on Rails' origin check (forgery_protection_origin_check), so the token is
+# what CSRF protection checks. The cookie is passed by hand: it is Secure, and
+# curl does not send a Secure cookie over http://.
+sign_in() { # <token, or empty for the page's>: prints the status and the Location of the POST
+  local response cookie token
+  response=$(web_curl -f -i http://127.0.0.1:3000/login) || return 1
+  cookie=$(sed -n 's/^[Ss]et-[Cc]ookie: \(_redmine_session=[^;]*\).*/\1/p' <<<"$response" | head -n 1)
+  token=${1:-$(sed -n 's/.*name="authenticity_token" value="\([^"]*\)".*/\1/p' <<<"$response" | head -n 1)}
+  web_curl -o /dev/null -w '%{http_code} %{redirect_url}' -H "Cookie: $cookie" -H "Origin: https://$domain" \
+    --data-urlencode "authenticity_token=$token" --data-urlencode username=admin --data-urlencode password=admin \
+    http://127.0.0.1:3000/login
+}
+signs_in() { [[ "$(sign_in '')" == "302 https://$domain/my/page" ]]; }
+check "signing in with the login form works with the domain" signs_in
+wrong_token_rejected() { [[ "$(sign_in wrong-token)" == 422* ]]; }
+check "a POST with a wrong CSRF token is rejected" wrong_token_rejected
 # The favicon set in Redmine 7.1 (Administration › Settings › Display; here a
 # PNG of one pixel), which CloudFront's /favicons/* behavior caches by its
 # URL: Redmine answers it public and immutable for a year (Rails' 1.year,
@@ -279,8 +320,7 @@ if [[ "$favicon" == none ]]; then
 else
   favicon_served() {
     local headers
-    headers=$(docker exec "$prefix-web" curl -fsS -D - -o /dev/null -H 'X-Forwarded-Proto: https' \
-      "http://127.0.0.1:3000/favicons/$favicon") || return 1
+    headers=$(web_curl -f -D - -o /dev/null "http://127.0.0.1:3000/favicons/$favicon") || return 1
     grep -qi '^cache-control: max-age=31556952, public, immutable' <<<"$headers" &&
       grep -qi '^content-type: image/' <<<"$headers"
   }

@@ -374,7 +374,7 @@ CloudFront は、関数 URL 自身のホスト名を `Host` として関数 URL 
 - **`Forwarded` ヘッダー:** `AllViewerExceptHostHeader` は、標準の `Forwarded` を含め、ビューワーのほかのヘッダーを転送します。Rails はホストを `X-Forwarded-Host` と `Host` からだけ取るので、`Forwarded` でホストは変わりません。Rack はスキームを `X-Forwarded-Proto` より先に `Forwarded` から読むので (Rack 3.2.8 の `forwarded_priority`)、`Forwarded: proto=http` を送ったビューワーは、自分のリクエストだけを HTTP に見せることになります。そのリクエストにはセッション Cookie が付かず、ログインできません。
 - **CSRF 対策:** Redmine は Rails のオリジンの確認を有効にしていません (Redmine は `load_defaults` を呼ばないので、`forgery_protection_origin_check` は `false` のまま。Rails 8.1.4)。CSRF 対策はセッションのトークンを確認し、ホストは関係しません。
 - **メール:** メールの URL は、リクエストから作りません。Redmine は、設定「ホスト名とパス」と「プロトコル」(管理 › 設定 › 全般。`Mailer.default_url_options`) から作り、これらは `redmine.settings` で設定します ([deploy-config.md](deploy-config.md))。
-- **テスト:** デプロイテストは、テンプレートのオリジンにある 2 つのヘッダーを確認します ([testing.md](testing.md#deployment-tests))。
+- **テスト:** デプロイテストは、テンプレートのオリジンにある 2 つのヘッダーを確認します。イメージテストは、CloudFront と同じ形のリクエスト (`Host` に関数 URL のホスト名、`X-Forwarded-Host` にドメイン) を送り、200 になること、ヘッダーがないときとほかのホストのときに 403 になること、リダイレクト先がドメインになること、フォームの POST でログインできること、CSRF トークンが違えば 422 になることを確認します ([testing.md](testing.md))。
 
 <a id="function-that-adds-the-body-hash-lambdaedge"></a>
 
@@ -532,7 +532,7 @@ Event Functions の同期呼び出しは、リクエストとレスポンスが�
 - Amazon Linux 2023 の ImageMagick 6.9.13 で、Redmine のサムネイルとガントチャートの PNG を生成できるか
 - Lambda のデフォルトのユーザーで、gem、アセット、ImageMagick の設定をすべて読めるか
 - 関数 URL が、CloudFront からの `X-Forwarded-Host` と `X-Forwarded-Proto` をそのまま関数に渡すか。オリジンカスタムヘッダーのあるリクエストに OAC が署名し、関数 URL が受け付けるか。Lambda Web Adapter は、リクエストヘッダーをそのまま Puma に渡します (1.1.0 の `src/lib.rs`)。関数 URL でのこれらのヘッダーの扱いは、Lambda のドキュメントにありません
-- CloudFront を通して、リダイレクトとログインがドメインで動くか
+- CloudFront を通して、リダイレクトとログインがドメインで動くか (イメージテストは、CloudFront に設定したヘッダーで確認している)
 - Lambda@Edge で `x-amz-content-sha256` を追加したあと、OAC の署名で、関数 URL が POST、PUT、PATCH、DELETE を受け付けるか。本文のない POST と、マルチパートのフォームでも成功するか
 - Lambda@Edge の `inputTruncated` で 413 を返したときに、ブラウザーと API クライアントが理解できる応答になるか
 - CloudFront が、関数 URL 自身の `Host` で `/favicons/*` を取得し、Redmine の `Cache-Control` のとおりにキャッシュし、`Set-Cookie` を返さないか

@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Builds a derived image with the plugins and themes of redmine.json
+# (image.plugins and image.themes; docs/architecture.md#derived-images) on top
+# of a base image, as an arm64 single-architecture image (image/derived).
+# bin/deploy runs it when the lists are not empty.
+#   bin/build-derived-image <redmine.json> <base image> [tag]   # default tag: serverless-derived:local
+# Git sources are fetched by BuildKit at a tag (refs/tags/<ref>) or a full
+# commit hash, so a branch is refused. Directories are relative to
+# redmine.json. Bundler's credential for GitHub Packages comes from
+# BUNDLE_RUBYGEMS__PKG__GITHUB__COM, or from the gh login when gh is there,
+# and goes to the build as a secret.
+# jq programs are in single quotes on purpose.
+# shellcheck disable=SC2016
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if [[ $# -lt 2 || ! -f "$1" ]]; then
+  echo "usage: bin/build-derived-image <redmine.json> <base image> [tag]" >&2
+  exit 64
+fi
+config="$1" base="$2" tag="${3:-serverless-derived:local}"
+config_dir=$(cd "$(dirname "$config")" && pwd)
+
+# Each name once, among the plugins and among the themes.
+for kind in plugins themes; do
+  duplicate=$(jq -r --arg kind "$kind" '[.image[$kind] // [] | .[].name] | group_by(.) | map(select(length > 1) | .[0]) | join(" ")' "$config")
+  if [[ -n "$duplicate" ]]; then
+    echo "image.$kind: listed more than once: $duplicate" >&2
+    exit 65
+  fi
+done
+
+context=$(mktemp -d) empty=$(mktemp -d)
+trap 'rm -rf "$context" "$empty"' EXIT
+mkdir -p "$context/plugins" "$context/themes"
+: >"$context/Gemfile.plugins"
+: >"$context/gems"
+
+# A Git repository at a tag or commit, exported into a directory without .git.
+fetch_git() { # <url> <ref> <directory>
+  local ref="$2"
+  [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || ref="refs/tags/$ref"
+  printf 'FROM scratch\nCOPY --from=source / /\n' |
+    docker buildx build --quiet --build-context "source=$1#$ref" --output "type=local,dest=$3" -f - "$empty" >/dev/null
+}
+# A directory next to redmine.json, without .git.
+copy_dir() { # <path> <directory>
+  local source="$config_dir/$1"
+  if [[ ! -d "$source" ]]; then
+    echo "$1: not a directory (relative to $config_dir)" >&2
+    exit 66
+  fi
+  mkdir -p "$2"
+  tar -C "$source" --exclude=.git -cf - . | tar -C "$2" -xf -
+}
+
+# One line per plugin or theme, the fields separated by US (0x1f), which
+# keeps empty fields.
+while IFS=$'\x1f' read -r kind name version source git ref path; do
+  dest="$context/$kind/$name"
+  if [[ -n "$version" ]]; then
+    echo "$kind/$name: gem $version${source:+ from $source}"
+    line="gem '$name', '= $version', require: false"
+    if [[ -n "$source" ]]; then
+      printf "source '%s' do\n  %s\nend\n" "$source" "$line" >>"$context/Gemfile.plugins"
+    else
+      printf '%s\n' "$line" >>"$context/Gemfile.plugins"
+    fi
+    echo "$name" >>"$context/gems"
+  elif [[ -n "$git" ]]; then
+    echo "$kind/$name: $git at $ref"
+    fetch_git "$git" "$ref" "$dest"
+  else
+    echo "$kind/$name: $path"
+    copy_dir "$path" "$dest"
+  fi
+done < <(jq -r '(.image.plugins // [] | .[] | ["plugins"] + [.name, .version, .source, .git, .ref, .path]),
+  (.image.themes // [] | .[] | ["themes"] + [.name, null, null, .git, .ref, .path])
+  | map(. // "") | join("\u001f")' "$config")
+
+secret=()
+if [[ -z "${BUNDLE_RUBYGEMS__PKG__GITHUB__COM:-}" ]] && command -v gh >/dev/null && gh auth token >/dev/null 2>&1; then
+  BUNDLE_RUBYGEMS__PKG__GITHUB__COM="x-access-token:$(gh auth token)"
+fi
+if [[ -n "${BUNDLE_RUBYGEMS__PKG__GITHUB__COM:-}" ]]; then
+  export BUNDLE_RUBYGEMS__PKG__GITHUB__COM
+  secret=(--secret "id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM")
+fi
+docker buildx build --platform linux/arm64 --provenance=false --sbom=false ${secret[@]+"${secret[@]}"} \
+  --build-arg "BASE_IMAGE=$base" --load -t "$tag" -f image/derived/Dockerfile "$context"

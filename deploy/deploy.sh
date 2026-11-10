@@ -29,6 +29,18 @@ params() { jq -c -L "$root/deploy" "include \"params\"; $1" "${@:2}"; }
 # 1. The configuration against the JSON Schema.
 step "1. Check the configuration"
 check-jsonschema --schemafile "$root/schema/redmine.schema.json" "$config" >&2
+# With image.plugins or image.themes, bin/deploy has built and tested the
+# derived image (bin/build-derived-image) and passes it as a tarball
+# (docs/architecture.md#derived-images). --account does not use an image.
+derived_image=${DERIVED_IMAGE:-}
+if $account_only; then
+  :
+elif [[ "$(cfg '(.image.plugins // []) + (.image.themes // []) | length')" != 0 ]]; then
+  [[ -n "$derived_image" && -f "$derived_image" ]] ||
+    fail "image.plugins and image.themes need the derived image that bin/deploy builds"
+elif [[ -n "$derived_image" ]]; then
+  fail "a derived image is given, but image.plugins and image.themes are empty"
+fi
 
 instance=$(cfg '.instance // "redmine"')
 region=$(cfg '.region')
@@ -102,7 +114,10 @@ fi
 
 image_repository=$(cfg '.image.repository // "ghcr.io/redmine-kit/serverless"')
 image_digest=$(cfg '.image.digest // ""')
-if [[ -z "$image_digest" ]]; then
+if [[ -n "$derived_image" ]]; then
+  image_digest=$(crane digest --tarball "$derived_image")
+  note "derived image with image.plugins and image.themes: $image_digest"
+elif [[ -z "$image_digest" ]]; then
   # The image tagged with the Redmine version this checkout builds.
   redmine_version=$(sed -n 's/^ARG REDMINE_VERSION=//p' "$root/image/Dockerfile")
   [[ -n "$redmine_version" ]] || fail "no ARG REDMINE_VERSION in image/Dockerfile"
@@ -174,16 +189,26 @@ if $dry_run; then
   exit 0
 fi
 
-# 5. The image, from the registry into this account's ECR, by digest. The
-# repository's tags are immutable, so the tag is made from the digest.
-step "5. Image $image_repository@$image_digest"
+# 5. The image, from the registry into this account's ECR, by digest, or the
+# derived image from its tarball. The repository's tags are immutable, so the
+# tag is made from the digest.
+if [[ -n "$derived_image" ]]; then
+  step "5. Derived image $image_digest"
+else
+  step "5. Image $image_repository@$image_digest"
+fi
 repository_uri=$(output redmine-shared "$region" RepositoryUri)
 image_uri="$repository_uri@$image_digest"
 if aws ecr describe-images --repository-name "${repository_uri#*/}" --image-ids "imageDigest=$image_digest" >/dev/null 2>&1; then
   note "already in ECR"
 else
   aws ecr get-login-password | crane auth login "${repository_uri%%/*}" -u AWS --password-stdin >/dev/null
-  crane copy "$image_repository@$image_digest" "$repository_uri:sha256-${image_digest#sha256:}"
+  if [[ -n "$derived_image" ]]; then
+    pushed=$(crane push "$derived_image" "$repository_uri:sha256-${image_digest#sha256:}")
+    [[ "$pushed" == "$image_uri" ]] || fail "pushed $pushed, not $image_uri"
+  else
+    crane copy "$image_repository@$image_digest" "$repository_uri:sha256-${image_digest#sha256:}"
+  fi
 fi
 
 # 6. Assets from the image to S3. Old files stay for pages that are still

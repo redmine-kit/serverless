@@ -3,9 +3,16 @@
 set -euo pipefail
 printf 'crane %s\n' "$*" >>"$FAKE/calls"
 case "$1" in
-  digest) echo "sha256:$(printf 'b%.0s' {1..64})" ;;
+  # A derived image's tarball has the digest d…d, an image in a registry b…b.
+  digest)
+    if [[ "$2" == --tarball ]]; then
+      echo "sha256:$(printf 'd%.0s' {1..64})"
+    else
+      echo "sha256:$(printf 'b%.0s' {1..64})"
+    fi ;;
   auth) cat >/dev/null ;;
   copy) ;;
+  push) echo "${3%:*}@sha256:$(printf 'd%.0s' {1..64})" ;;
   # The image's file system: only the assets matter.
   export)
     dir=$(mktemp -d)

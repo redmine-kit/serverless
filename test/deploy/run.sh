@@ -22,10 +22,14 @@ schema() { check-jsonschema --schemafile schema/redmine.schema.json "$1" >/dev/n
 
 echo "== Schema"
 check "the example in docs/deploy-config.md is valid" schema <(
-  sed -n '/^### Example/,/^## /p' docs/deploy-config.md | sed -n '/^```json$/,/^```$/p' | sed '1d;$d')
+  sed -n '/^### Example/,/^##/p' docs/deploy-config.md | sed -n '/^```json$/,/^```$/p' | sed '1d;$d')
 for file in test/deploy/valid/*.json; do
   check "valid: $(basename "$file")" schema "$file"
 done
+check "valid: test/derived/redmine.json (plugins and themes)" schema test/derived/redmine.json
+check "the plugins and themes example in docs/deploy-config.md is valid" schema <(
+  sed -n '/^### Adding plugins and themes/,/^## /p' docs/deploy-config.md | sed -n '1,/^```$/p' |
+    sed -n '/^```json$/,/^```$/p' | sed '1d;$d' | jq -s '.[0] * .[1]' test/deploy/valid/minimal.json -)
 for file in test/deploy/invalid/*.json; do
   check "invalid: $(basename "$file" .json)" bash -c "! check-jsonschema --schemafile schema/redmine.schema.json '$file' >/dev/null 2>&1"
 done
@@ -251,6 +255,35 @@ check "full.json: the settings and the attachment limit" test \
   "$(settings_of "$full_state" | jq -c '[.mode, .settings.attachment_max_size, .settings.app_title, .plugins.redmine_serverless_s3.download_url_expiry]')" == \
   '["enforce","51200","Team A","600"]'
 check "full.json: dns.mode external shows the records to add" grep -q "point redmine.example.org to d111111abcdef8.cloudfront.net" "$full_state/output"
+
+echo "== deploy.sh with a derived image"
+# bin/deploy builds the derived image of image.plugins and image.themes and
+# passes it as a tarball; the fake crane gives it the digest d…d.
+derived_config=test/derived/redmine.json
+derived_state=$(mktemp -d)
+check "image.plugins without the derived image stops before AWS" bash -c \
+  "! FAKE='$derived_state' deploy/deploy.sh $derived_config >'$derived_state/output' 2>&1 && [[ ! -s '$derived_state/calls' ]] &&
+  grep -q 'need the derived image' '$derived_state/output'"
+tarball="$derived_state/image.tar"
+: >"$tarball"
+DERIVED_IMAGE="$tarball" check "a derived image without image.plugins and image.themes is refused" bash -c \
+  "! FAKE='$derived_state' deploy/deploy.sh $config >/dev/null 2>&1"
+DERIVED_IMAGE="$tarball" check "derived image: first deployment succeeds" run_deploy "$derived_state" "$derived_config"
+check "derived image: pushed from the tarball by its digest, then the steps as usual" in_order "$derived_state" \
+  "crane digest --tarball $tarball$" \
+  "create-change-set .*--stack-name redmine-shared " \
+  "crane push $tarball .*/redmine:sha256-d+$" \
+  "create-change-set .*--stack-name redmine " \
+  "crane export .*/redmine@sha256:d+ " \
+  "s3 sync .*s3://redmine-assets-" \
+  'event .*"redmine:plugins:migrate"'
+check "derived image: no copy from the registry and no tag resolved" none "$derived_state" "crane (copy|digest ghcr)"
+check "derived image: the stack gets it by digest" test \
+  "$(value "$(cat "$derived_state/params/redmine.json")" ImageUri)" == \
+  "111122223333.dkr.ecr.ap-northeast-1.amazonaws.com/redmine@sha256:$(printf 'd%.0s' {1..64})"
+check "--account needs no derived image" run_deploy "$(mktemp -d)" "$derived_config" --account
+check "derived image: the added plugin's settings" test \
+  "$(settings_of "$derived_state" | jq -c '.plugins.redmine_derived_sample')" == '{"greeting":"hello"}'
 
 echo
 if ((failures)); then

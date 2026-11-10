@@ -1,0 +1,5 @@
+/* The theme of the derived image tests (test/derived), on top of the default
+ * styles as Redmine's own themes are. */
+@import url(/application.css);
+
+#header { border-bottom: 4px solid currentColor; }

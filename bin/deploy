@@ -3,6 +3,11 @@
 # The steps run in the tools image (deploy/Dockerfile), so only Docker is
 # needed. Credentials come from the AWS_* environment variables or from
 # ~/.aws (read-only); bin/deploy assumes deployRoleArn with them.
+# With image.plugins or image.themes, the derived image is built, tested and
+# saved here first (Docker with Buildx, jq and curl), and the steps push it.
+#   DERIVED_IMAGE_TESTS=<command> bin/deploy redmine.json
+#     tests the derived image with <command> <image> <redmine.json> in place
+#     of bin/test-image
 #   bin/deploy redmine.json              # deploy
 #   bin/deploy redmine.json --dry-run    # show the change sets, change nothing
 #   bin/deploy redmine.json --code-only  # only the image of the functions
@@ -25,9 +30,37 @@ fi
 image=serverless-deploy-tools:local
 docker build --quiet -t "$image" deploy >/dev/null
 
-run=(docker run --rm -i -v "$PWD:/work:ro" -v "$(cd "$(dirname "$config")" && pwd)/$(basename "$config"):/config/redmine.json:ro")
+config_path="$(cd "$(dirname "$config")" && pwd)/$(basename "$config")"
+run=(docker run --rm -i -v "$PWD:/work:ro" -v "$config_path:/config/redmine.json:ro")
+
+# The derived image with image.plugins and image.themes
+# (docs/architecture.md#derived-images), on top of the image that the
+# configuration names: built, put through the image tests, and saved as a
+# tarball for step 5. The configuration is checked first, as step 1 does.
+# --account does not use an image.
+tools() { docker run --rm -i -v "$PWD:/work:ro" -v "$config_path:/config/redmine.json:ro" --entrypoint "$@"; }
+if [[ " ${args[*]} " != *" --account "* ]] &&
+  [[ "$(tools jq "$image" '(.image.plugins // []) + (.image.themes // []) | length' /config/redmine.json)" != 0 ]]; then
+  tools check-jsonschema "$image" --schemafile /work/schema/redmine.schema.json /config/redmine.json >&2
+  repository=$(tools jq "$image" -r '.image.repository // "ghcr.io/redmine-kit/serverless"' /config/redmine.json)
+  digest=$(tools jq "$image" -r '.image.digest // ""' /config/redmine.json)
+  if [[ -z "$digest" ]]; then
+    version=$(sed -n 's/^ARG REDMINE_VERSION=//p' image/Dockerfile)
+    digest=$(tools crane "$image" digest "$repository:$version")
+    echo "image.digest is not set: $repository:$version is $digest now; pin it in redmine.json" >&2
+  fi
+  derived_tag="serverless-derived:$(tools jq "$image" -r '.instance // "redmine"' /config/redmine.json)"
+  bin/build-derived-image "$config_path" "$repository@$digest" "$derived_tag" >&2
+  # The image tests of the base image: this project's, or the command in
+  # DERIVED_IMAGE_TESTS for a base image that has its own.
+  ${DERIVED_IMAGE_TESTS:-bin/test-image} "$derived_tag" "$config_path" >&2
+  derived_dir=$(mktemp -d)
+  trap 'rm -rf "$derived_dir"' EXIT
+  docker save -o "$derived_dir/image.tar" "$derived_tag"
+  run+=(-v "$derived_dir/image.tar:/derived/image.tar:ro" -e DERIVED_IMAGE=/derived/image.tar)
+fi
 for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_REGION; do
   [[ -z "${!name:-}" ]] || run+=(-e "$name")
 done
 [[ ! -d "$HOME/.aws" ]] || run+=(-v "$HOME/.aws:/root/.aws:ro")
-exec "${run[@]}" "$image" /config/redmine.json "${args[@]}"
+"${run[@]}" "$image" /config/redmine.json "${args[@]}"

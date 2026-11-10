@@ -6,12 +6,16 @@
 # is set, and moto otherwise (pull requests from forks); nothing is mocked.
 # worker and task run on the Runtime Interface Emulator in the base image.
 #   bin/test-image [image]          # default: serverless:test (bin/build-image)
+#   bin/test-image <image> <redmine.json>
+#                                   # a derived image (bin/build-derived-image), also
+#                                   # checking the plugins and themes it adds
 #   KEEP=1 bin/test-image [image]   # leave the containers for inspection
 # Commands that run inside containers are in single quotes on purpose.
 # shellcheck disable=SC2016
 set -euo pipefail
 cd "$(dirname "$0")/.."
 image="${1:-serverless:test}"
+derived_config="${2:-}"
 # An internal network: the containers reach PostgreSQL and the AWS backend,
 # but not AWS.
 network=serverless-image-test
@@ -174,6 +178,33 @@ plugins_loaded() {
     tail -n 1 | grep -qx all
 }
 check "the plugins are loaded (core, SQS, SES, S3, SSM)" plugins_loaded
+if [[ -n "$derived_config" ]]; then
+  # image.plugins and image.themes of the derived image: loaded, their
+  # migrations run by redmine:plugins:migrate above, and the themes' assets
+  # compiled.
+  added_plugins=$(jq -r '[.image.plugins // [] | .[].name] | join(" ")' "$derived_config")
+  added_themes=$(jq -r '[.image.themes // [] | .[].name] | join(" ")' "$derived_config")
+  runner_says_none() { # <Ruby expression that lists what is missing>
+    local event output
+    event=$(jq -nc --arg code "puts(($1).join(%q(,)).presence || %q(none))" '{command: "runner", args: [$code]}')
+    output=$(task "$event" | tail -n 1)
+    [[ "$output" == none ]] || { echo "  missing: $output" >&2; return 1; }
+  }
+  if [[ -n "$added_plugins" ]]; then
+    check "the added plugins are loaded ($added_plugins)" \
+      runner_says_none "%w[$added_plugins].reject { |id| Redmine::Plugin.installed?(id) }"
+    check "the added plugins' migrations have run" \
+      runner_says_none "%w[$added_plugins].map { |id| Redmine::Plugin.find(id) }.select { |p| p.latest_migration && p.latest_migration != Redmine::Plugin::Migrator.current_version(p) }.map(&:id)"
+  fi
+  if [[ -n "$added_themes" ]]; then
+    check "the added themes are found ($added_themes)" \
+      runner_says_none "%w[$added_themes].reject { |id| Redmine::Themes.theme(id) }"
+    for theme in $added_themes; do
+      check "the assets of the theme $theme are compiled" contents \
+        "grep -q '\"themes/$theme/application.css\"' /var/task/redmine/public/assets/.manifest.json"
+    done
+  fi
+fi
 rejected() { jq -e '.errorType == "Function<ArgumentError>"' <<<"$(invoke task "$1")" >/dev/null; }
 check "env outside the allowed names is rejected" rejected '{"command":"rake","args":["-T"],"env":{"REDMINE_DB_HOST":"x"}}'
 check "unknown command is rejected" rejected '{"command":"sh","args":["-c","id"]}'

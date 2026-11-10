@@ -1,0 +1,20 @@
+{
+  "region": "ap-northeast-1",
+  "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-infra-deploy",
+  "domain": "redmine.example.com",
+  "dns": { "mode": "external" },
+  "database": { "majorVersion": "17" },
+  "image": {
+    "plugins": [
+      { "name": "redmine_serverless_costexplorer", "version": "0.1.1", "source": "https://rubygems.pkg.github.com/redmine-kit" },
+      { "name": "redmine_issue_template", "git": "https://github.com/redmine-kit/redmine_issue_template.git", "ref": "466e8c3128425c567f01edaf89b8bb1c7558e8d0" },
+      { "name": "redmine_derived_sample", "path": "plugins/redmine_derived_sample" }
+    ],
+    "themes": [
+      { "name": "derived-sample", "path": "themes/derived-sample" }
+    ]
+  },
+  "redmine": {
+    "pluginSettings": { "redmine_derived_sample": { "greeting": "hello" } }
+  }
+}

@@ -106,10 +106,51 @@
     "image": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["digest"],
+      "dependentRequired": { "repository": ["digest"] },
       "properties": {
         "repository": { "type": "string", "default": "ghcr.io/redmine-kit/serverless" },
-        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "plugins": {
+          "description": "Plugins added in a derived image at deployment (docs/architecture.md#derived-images): a gem at a version, a Git repository at a tag or commit, or a directory next to redmine.json.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "$ref": "#/$defs/addonName" },
+              "version": { "type": "string", "pattern": "^[0-9]+(\\.[0-9A-Za-z]+)*$" },
+              "source": { "type": "string", "pattern": "^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._-]+)*/?$" },
+              "git": { "$ref": "#/$defs/gitUrl" },
+              "ref": { "$ref": "#/$defs/gitRef" },
+              "path": { "$ref": "#/$defs/localPath" }
+            },
+            "oneOf": [
+              { "required": ["version"], "not": { "anyOf": [{ "required": ["git"] }, { "required": ["ref"] }, { "required": ["path"] }] } },
+              { "required": ["git", "ref"], "not": { "anyOf": [{ "required": ["version"] }, { "required": ["source"] }, { "required": ["path"] }] } },
+              { "required": ["path"], "not": { "anyOf": [{ "required": ["version"] }, { "required": ["source"] }, { "required": ["git"] }, { "required": ["ref"] }] } }
+            ]
+          }
+        },
+        "themes": {
+          "description": "Themes added in a derived image at deployment: a Git repository at a tag or commit, or a directory next to redmine.json.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "$ref": "#/$defs/addonName" },
+              "git": { "$ref": "#/$defs/gitUrl" },
+              "ref": { "$ref": "#/$defs/gitRef" },
+              "path": { "$ref": "#/$defs/localPath" }
+            },
+            "oneOf": [
+              { "required": ["git", "ref"], "not": { "required": ["path"] } },
+              { "required": ["path"], "not": { "anyOf": [{ "required": ["git"] }, { "required": ["ref"] }] } }
+            ]
+          }
+        }
       }
     },
     "redmine": {
@@ -163,6 +204,20 @@
       }
     },
     "tags": { "type": "object", "additionalProperties": { "type": "string" } }
+  },
+  "$defs": {
+    "addonName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$" },
+    "gitUrl": { "type": "string", "pattern": "^https://[^@\\s#]+$" },
+    "gitRef": {
+      "description": "A tag, or a commit as its full 40-digit hash. Branches are not taken.",
+      "type": "string",
+      "pattern": "^([0-9a-f]{40}|[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9._-]+)*)$"
+    },
+    "localPath": {
+      "description": "A directory, relative to the directory of redmine.json.",
+      "type": "string",
+      "pattern": "^[^/\\s][^\\s]*$"
+    }
   },
   "allOf": [
     {

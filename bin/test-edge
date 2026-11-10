@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests of the functions that run at CloudFront (edge/): redmine-body-hash
-# (Lambda@Edge) and redmine-incoming-size (CloudFront Functions), with
+# (Lambda@Edge), redmine-incoming-size and redmine-attachment-headers
+# (CloudFront Functions), with
 # node:test in the Node.js image. No npm packages. The coverage of the files
 # the tests load as modules is written to coverage/edge.lcov, with Node.js's
 # own coverage.
@@ -11,6 +12,7 @@ mkdir -p coverage
 docker run --rm -v "$PWD:/work:ro" -v "$PWD/coverage:/coverage" -w /work --user "$(id -u):$(id -g)" "$NODE" sh -c '
   node --check edge/body-hash/index.js &&
   node --check edge/incoming-size/index.js &&
+  node --check edge/attachment-headers/index.js &&
   node --test --experimental-test-coverage --test-coverage-include="edge/**/index.js" \
     --test-reporter=spec --test-reporter-destination=stdout \
     --test-reporter=lcov --test-reporter-destination=/coverage/edge.lcov \

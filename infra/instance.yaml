@@ -980,54 +980,58 @@ Resources:
       KeyGroupConfig:
         Name: !Sub ${InstanceName}-attachments
         Items: [!Ref CloudFrontKey]
-  # Attachments: the signature is checked before the cache, so the cache key
-  # holds only the overrides of the file name and type.
-  AttachmentsCachePolicy:
-    Type: AWS::CloudFront::CachePolicy
+  # The attachments' headers, which no managed response headers policy has
+  # and the Free plan allows no custom one for.
+  AttachmentHeaders:
+    Type: AWS::CloudFront::Function
     Properties:
-      CachePolicyConfig:
-        Name: !Sub ${InstanceName}-attachments
-        DefaultTTL: 300
-        MinTTL: 0
-        MaxTTL: 3600
-        ParametersInCacheKeyAndForwardedToOrigin:
-          EnableAcceptEncodingGzip: false
-          EnableAcceptEncodingBrotli: false
-          CookiesConfig:
-            CookieBehavior: none
-          HeadersConfig:
-            HeaderBehavior: none
-          QueryStringsConfig:
-            QueryStringBehavior: whitelist
-            QueryStrings: [response-content-disposition, response-content-type]
-  UploadsOriginRequestPolicy:
-    Type: AWS::CloudFront::OriginRequestPolicy
-    Properties:
-      OriginRequestPolicyConfig:
-        Name: !Sub ${InstanceName}-uploads
-        CookiesConfig:
-          CookieBehavior: none
-        QueryStringsConfig:
-          QueryStringBehavior: none
-        HeadersConfig:
-          HeaderBehavior: whitelist
-          Headers: [x-amz-checksum-sha256]
-  # The sandbox CSP that Redmine's AttachmentsController sets, and nosniff.
-  # It isolates attachments that are served from Redmine's origin.
-  AttachmentsHeaders:
-    Type: AWS::CloudFront::ResponseHeadersPolicy
-    Properties:
-      ResponseHeadersPolicyConfig:
-        Name: !Sub ${InstanceName}-attachments
-        SecurityHeadersConfig:
-          ContentSecurityPolicy:
-            ContentSecurityPolicy: "default-src 'none'; style-src 'unsafe-inline'; sandbox"
-            Override: true
-          ContentTypeOptions:
-            Override: true
-          StrictTransportSecurity:
-            AccessControlMaxAgeSec: 31536000
-            Override: false
+      Name: !Sub ${InstanceName}-attachment-headers
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Sandbox CSP, nosniff and the file name and type of attachments
+        Runtime: cloudfront-js-2.0
+      # edge/attachment-headers/index.js; its tests check that this is the same.
+      FunctionCode: |
+          // redmine-attachment-headers: CloudFront Function (cloudfront-js-2.0) on the
+          // viewer response of the attachments' behaviors (/files/* and /tmp/*).
+          // Attachments are served from Redmine's origin, so they get the sandbox CSP
+          // that Redmine's AttachmentsController sets, and nosniff. The file name and
+          // type come from the signed URL's response-content-disposition and
+          // response-content-type, which are not forwarded to S3: with the signature
+          // in the same query string, S3 would refuse the request.
+          var CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+          var OVERRIDES = { 'response-content-disposition': 'content-disposition', 'response-content-type': 'content-type' };
+
+          function handler(event) {
+            var response = event.response;
+            var query = event.request.querystring;
+            response.headers['content-security-policy'] = { value: CSP };
+            response.headers['x-content-type-options'] = { value: 'nosniff' };
+            if (response.statusCode !== 200 && response.statusCode !== 206 && response.statusCode !== 304) {
+              return response;
+            }
+            for (var name in OVERRIDES) {
+              var value = decode(query[name]);
+              if (value) {
+                response.headers[OVERRIDES[name]] = { value: value };
+              }
+            }
+            return response;
+          }
+
+          // The value of a query string parameter, decoded; nothing if it is missing,
+          // malformed, or not printable ASCII, as header values must be.
+          function decode(param) {
+            if (!param || !param.value) {
+              return null;
+            }
+            try {
+              var value = decodeURIComponent(param.value.replace(/\+/g, ' '));
+              return /^[\x20-\x7e]+$/.test(value) ? value : null;
+            } catch (e) {
+              return null;
+            }
+          }
   IncomingSize:
     Type: AWS::CloudFront::Function
     Properties:
@@ -1120,34 +1124,48 @@ Resources:
               IncludeBody: true
               LambdaFunctionARN: !Ref BodyHashFunctionArn
         CacheBehaviors:
-          # Attachments' files: signed GETs.
+          # Attachments' files: signed GETs. Managed policies only, as the Free
+          # plan allows: CachingDisabled, which forwards no query string to S3
+          # (S3 refuses a request whose query string holds the signature next to
+          # origin access control's), and SecurityHeadersPolicy. The function
+          # adds the sandbox CSP and nosniff, and the file name and type from
+          # the signed URL.
           - PathPattern: /files/*
             TargetOriginId: attachments
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachedMethods: [GET, HEAD]
-            CachePolicyId: !Ref AttachmentsCachePolicy
-            ResponseHeadersPolicyId: !Ref AttachmentsHeaders
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
             TrustedKeyGroups: [!Ref CloudFrontKeyGroup]
+            FunctionAssociations:
+              - EventType: viewer-response
+                FunctionARN: !GetAtt AttachmentHeaders.FunctionMetadata.FunctionARN
           # Thumbnails (/tmp/thumbnails/) and the zips of "download all"
-          # (/tmp/bulk/): signed GETs. Uploads (/tmp/incoming/): signed PUTs,
-          # whose size the function checks. One behavior keeps the
-          # distribution within the 5 behaviors of the Free plan. GETs use the
-          # attachments' cache (the objects never change at a key), and PUTs
-          # are never cached; the bucket policy lets CloudFront only read
-          # thumbnails and zips and only write uploads.
+          # (/tmp/bulk/): signed GETs. Uploads (/tmp/incoming/): signed PUTs.
+          # One behavior keeps the distribution within the 5 behaviors of the
+          # Free plan; the bucket policy lets CloudFront only read thumbnails
+          # and zips and only write uploads. The same policies and headers as
+          # /files/*. On uploads, incoming-size checks the size, and body-hash
+          # gives S3 the checksum that the upload's key ends with, since no
+          # managed policy forwards the browser's checksum header alone.
           - PathPattern: /tmp/*
             TargetOriginId: attachments
             ViewerProtocolPolicy: https-only
             AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
             CachedMethods: [GET, HEAD]
-            CachePolicyId: !Ref AttachmentsCachePolicy
-            OriginRequestPolicyId: !Ref UploadsOriginRequestPolicy
-            ResponseHeadersPolicyId: !Ref AttachmentsHeaders
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
             TrustedKeyGroups: [!Ref CloudFrontKeyGroup]
             FunctionAssociations:
               - EventType: viewer-request
                 FunctionARN: !GetAtt IncomingSize.FunctionMetadata.FunctionARN
+              - EventType: viewer-response
+                FunctionARN: !GetAtt AttachmentHeaders.FunctionMetadata.FunctionARN
+            LambdaFunctionAssociations:
+              - EventType: origin-request
+                IncludeBody: false
+                LambdaFunctionARN: !Ref BodyHashFunctionArn
           # Compiled assets (CachingOptimized).
           - PathPattern: /assets/*
             TargetOriginId: assets

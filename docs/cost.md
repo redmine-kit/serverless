@@ -41,7 +41,6 @@ Two assumptions are not checked in the price list yet. Placing the functions in 
 | Item | Monthly | When to add |
 | --- | --- | --- |
 | Provisioned Concurrency (one 2 GB environment) | about $23 | To remove the wait for start-up |
-| CloudFront flat-rate Pro plan | $15 (log storage and search are charged separately) | To keep CloudFront and WAF logs ([security.md](security.md#plan-and-cost)) |
 | AWS security services the adopter turns on (GuardDuty threat detection, Security Hub, Config, unused access analysis) | from under $1 each; see the page | Per account ([aws-security.md](aws-security.md)) |
 | Costs on the administration pages (`costExplorer.enabled`) | about $0.9 to $1.2 (Cost Explorer API: $0.01 per request; the daily refresh, the plugin's only fetch, makes 3 requests a day, 4 with the tag breakdown) | To see the account's costs in Redmine, with an image that adds the plugin `redmine_serverless_costexplorer` (a derived image) ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
 | A shared cache (ElastiCache Serverless for Valkey) | about $7.4 (one `cache.t4g.micro` node: $14.60) | To share formatted text and search results across environments ([cache.md](cache.md#when-a-shared-cache-is-worth-it)) |

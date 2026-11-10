@@ -51,7 +51,7 @@ The specifications in this page were checked against official information and th
 | Function URLs | Requests without an OAC signature are rejected before the function is invoked ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
 | Request body | Up to 1 MB on Redmine's behaviors. Above that, Lambda@Edge returns 413. Uploads to `/tmp/incoming/` go to S3, not to Lambda; a CloudFront Function rejects a body over the upload limit ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload)) |
 
-Policies you define yourself (cache, origin request and response headers policies), such as a Content Security Policy of your own, are available only on the Business flat-rate plan and above. The distribution uses only AWS-managed policies, and adds the attachments' headers with a CloudFront Function, which every plan includes ([lambda.md](lambda.md#flat-rate-free-plan-and-waf)).
+On every plan, the distribution uses only AWS-managed policies (cache, origin request and response headers) and adds the attachments' headers with a CloudFront Function ([lambda.md](lambda.md#flat-rate-free-plan-and-waf)). The Free and Pro plans allow managed policies only; policies you define yourself, such as a Content Security Policy of your own, come with the Business plan, and this design does not use them.
 
 ## AWS WAF
 
@@ -59,11 +59,13 @@ An AWS WAF web ACL is attached to CloudFront to stop common attacks and excessiv
 
 ### Plan and cost
 
-| Option | WAF cost | Number of rules | Logs | When it fits |
-| --- | --- | --- | --- | --- |
-| CloudFront flat-rate plan Free (default) | USD 0 (included in the plan) | 5 | None. Only the security dashboard and samples of blocked requests | A small team with no rule requiring logs to be kept |
-| Flat-rate plan Pro | USD 15 per month (includes CloudFront and WAF) | 25 | CloudFront access logs and WAF logs can be sent to CloudWatch Logs (ingestion is included; storage and queries are charged separately) | When you want to keep logs. When you want CAPTCHA, header-based rules, or custom responses for blocked requests |
-| Pay-per-use | USD 5 per month per web ACL, USD 1 per month per rule or managed rule group, USD 0.60 per million requests. About USD 10 per month for the 5 rules below | No limit | Can be sent (charged separately) | When the flat-rate plan's rules (below) do not fit |
+The templates create the same configuration on every plan: the 5 rules below, AWS-managed CloudFront policies, and no CloudFront or WAF logs. It is made to fit the flat-rate Free plan; the plan changes only the price and the usage included.
+
+| Plan | WAF cost | When it is used |
+| --- | --- | --- |
+| CloudFront flat-rate plan Free (default) | USD 0 (included in the plan) | The plan this design is made for. It allows 5 WAF rules, and the design uses all 5 |
+| Flat-rate plan Pro | USD 15 per month (includes CloudFront and WAF) | When usage is expected to go beyond Free's 1 million requests and 100 GB per month. The configuration stays the same |
+| Pay-per-use | USD 5 per month per web ACL, USD 1 per month per rule or managed rule group, USD 0.60 per million requests. About USD 10 per month for the 5 rules below | When the account has no Free plan left (up to 3 per account, below). The configuration stays the same |
 
 A flat-rate plan comes with some rules. The web ACL cannot be removed (to remove it, go back to pay-per-use), and custom rule groups cannot be used, so rules are placed one by one. An account can have up to 3 Free plans, and this limit cannot be raised. A web ACL or CloudFront Function used by another distribution cannot be attached to a distribution on a plan, so a web ACL you prepare (`cloudfront.webAclArn`) must be used by this distribution only. Free allows up to 5 cache behaviors; this design uses 4.
 
@@ -89,7 +91,7 @@ A rate limit rule counts over 1, 2, 5 or 10 minutes, with a minimum count of 10.
 
 The Common Rule Set only counts at first, because some of its rules block legitimate Redmine requests. `SizeRestrictions_BODY` (bodies over 8 KB) blocks long wiki pages and issue descriptions, and `CrossSiteScripting_BODY` and others can block code examples written in the wiki. For about the first 2 weeks the whole group only counts. Then look at the requests that would have been blocked on the dashboard, keep only the matching rules at count, and set the others to block.
 
-Blocking by country is available on Free too, but it is not used by default, because some people use Redmine from places such as business trips. To use it, replace the overall rate limit so that there are no more than 5 rules, or move to Pro. When WAF blocks a request on Free, it returns its default 403.
+Blocking by country is available on Free too, but it is not used by default, because some people use Redmine from places such as business trips. To use it, replace the overall rate limit so that there are no more than 5 rules. When WAF blocks a request on Free, it returns its default 403.
 
 WAF applies before the request reaches the origin. For a request WAF blocks, neither Lambda@Edge nor Lambda is invoked, and the request does not count toward the flat-rate plan's usage (CloudFront documentation).
 
@@ -97,7 +99,7 @@ WAF applies before the request reaches the origin. For a request WAF blocks, nei
 
 - **Dashboard:** Use the CloudFront security dashboard (available on Free) to see blocked requests and the rules they matched.
 - **Alarms:** Put alarms on WAF's CloudWatch metrics (blocked count per rule). If the login rate limit suddenly rises, suspect brute force.
-- **Logs:** Free has no WAF logs. If logs are needed to investigate incidents, move to Pro ("Plan and cost" above).
+- **Logs:** The design keeps no CloudFront or WAF logs on any plan (Free does not include them). Investigate incidents with the security dashboard, the samples of blocked requests and the Lambda logs.
 
 ### Settings
 
@@ -197,7 +199,7 @@ Risks this design cannot fully prevent, covered by operations.
 | Outbound traffic through the NAT instance | With the NAT instance setup, functions can reach the internet | Focus on not being taken over (the protections above). If outbound traffic must be blocked, use the VPC endpoint setup ([rds.md](rds.md#which-to-choose)) |
 | The database password | Unlike temporary credentials, a password does not expire by itself | It is kept only in SSM (SecureString) and RDS, and RDS is reachable only from inside the VPC. Change it in an incident (below) |
 | Viruses in attachments | Redmine does not scan attachments | GuardDuty Malware Protection for S3 on `tmp/incoming/` and `imports/`, with `REDMINE_S3_MALWARE_SCAN=true`: the plugin uses a file only after it is found clean ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#malware-scan), with the cost) |
-| No CloudFront and WAF logs | The Free flat-rate plan does not include logs | Use Lambda logs and the security dashboard. If that is not enough, move to Pro |
+| No CloudFront and WAF logs | The Free flat-rate plan does not include logs | Use Lambda logs and the security dashboard |
 
 ## Incidents
 

@@ -361,7 +361,7 @@ By default in Rails 8.1, Rails also serves `public/` (`public_file_server.enable
 
 ### Flat-rate Free plan and WAF
 
-CloudFront uses the flat-rate Free plan ($0 per month) by default. It includes 1 million requests and 100 GB of transfer per month, which is expected to be enough at this scale. It also includes WAF rules (up to 5). The plan differences, what is not included (such as logs) and the WAF rules are in [security.md](security.md#aws-waf).
+CloudFront uses the flat-rate Free plan ($0 per month). The templates use only what Free includes, so the configuration is the same on every plan. Free includes 1 million requests and 100 GB of transfer per month, which is expected to be enough at this scale. It also includes WAF rules (up to 5). The plan differences, what is not included (such as logs) and the WAF rules are in [security.md](security.md#aws-waf).
 
 The features the templates use, against the table of features per plan in the CloudFront documentation ("CloudFront flat-rate pricing plans", checked 2026-11-10):
 

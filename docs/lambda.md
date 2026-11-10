@@ -326,7 +326,7 @@ CloudFront sends the function URL's own host name as `Host` to the function URL 
 - **The `Forwarded` header:** `AllViewerExceptHostHeader` forwards the viewer's other headers, including the standard `Forwarded`. Rails takes the host only from `X-Forwarded-Host` and `Host`, so `Forwarded` cannot change the host. Rack reads the scheme from `Forwarded` before `X-Forwarded-Proto` (Rack 3.2.8, `forwarded_priority`), so a viewer that sends `Forwarded: proto=http` makes only its own request look like HTTP: it gets no session cookie and cannot sign in.
 - **CSRF protection:** Redmine does not turn on Rails' origin check (`forgery_protection_origin_check` stays `false`, because Redmine does not call `load_defaults`; Rails 8.1.4), so CSRF protection checks the session's token, and the host does not take part in it.
 - **Mail:** URLs in mail do not come from the request. Redmine builds them from its settings "Host name and path" and "Protocol" (Administration › Settings › General; `Mailer.default_url_options`), which are set with `redmine.settings` ([deploy-config.md](deploy-config.md)).
-- **Tests:** The deployment tests check the two headers on the origin in the template ([testing.md](testing.md#deployment-tests)).
+- **Tests:** The deployment tests check the two headers on the origin in the template, and the image tests send requests as CloudFront would (the function URL's host name in `Host`, the domain in `X-Forwarded-Host`) and check 200, 403 without the header or with another host, redirects to the domain, signing in with the form's POST and 422 for a wrong CSRF token ([testing.md](testing.md)).
 
 ### Function that adds the body hash (Lambda@Edge)
 
@@ -466,7 +466,7 @@ Synchronous invocations of Event Functions are limited to 6 MB each for the requ
 - Whether ImageMagick 6.9.13 on Amazon Linux 2023 can create Redmine thumbnails and Gantt PNG files
 - Whether Lambda's default user can read all of the gems, assets and ImageMagick settings
 - Whether the function URL passes `X-Forwarded-Host` and `X-Forwarded-Proto` from CloudFront to the function unchanged, and whether OAC signs requests with origin custom headers that the function URL accepts. Lambda Web Adapter passes the request headers to Puma as they are (1.1.0, `src/lib.rs`); Lambda's documentation does not say how function URLs treat these headers
-- Whether redirects and sign-in work through CloudFront with the domain
+- Whether redirects and sign-in work through CloudFront with the domain (the image tests check them with the headers CloudFront is configured to send)
 - Whether, after Lambda@Edge adds `x-amz-content-sha256` and OAC signs the request, the function URL accepts POST, PUT, PATCH and DELETE. Whether POST without a body and multipart forms also pass
 - Whether returning 413 on Lambda@Edge `inputTruncated` gives a response that browsers and API clients can understand
 - Whether CloudFront caches `/favicons/*` from the function URL as Redmine's `Cache-Control` says, with the function URL's own `Host`, and returns no `Set-Cookie`

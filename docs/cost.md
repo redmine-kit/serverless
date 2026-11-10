@@ -14,7 +14,7 @@ Monthly cost estimate in the Tokyo Region. Unit prices come from the Tokyo files
 | ECR | $0.10 per GB-month | 3 GB (three images) | $0.30 |
 | CloudWatch Logs | $0.76 per GB ingested, $0.033 per GB-month stored | 0.5 GB | about $0.4 |
 | CloudFront | Expected to fit the flat-rate Free plan or the always-free tier | — | $0 |
-| Lambda@Edge (`redmine-body-hash`) | $0.60 per million requests, $0.00005001 per GB-second. No free tier | 50,000 requests × 10 ms × 128 MB | about $0.04 |
+| Lambda@Edge (`redmine-body-hash`) | $0.60 per million requests, $0.00005001 per GB-second. No free tier | 60,000 requests (pages, and thumbnails, zips and uploads under `/tmp/*`) × 10 ms × 128 MB | about $0.04 |
 | SES sending | $0.0001 per recipient | 1,000 messages | $0.10 |
 | SES receiving | $0.0001 per message, $0.00009 per chunk | 1,000 messages | about $0.19 |
 | Route 53 | $0.50 per hosted zone per month. Queries to alias records pointing at CloudFront are free; others are $0.40 per million | Only when the Redmine subdomain is delegated. $0 if it is not delegated | about $0.5 |

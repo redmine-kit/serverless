@@ -54,12 +54,12 @@ Serverless のセキュリティの設計です。守るもの、起きうるこ
 | 項目 | 決めたこと |
 | --- | --- |
 | HTTPS | ビューアーには HTTPS だけを許し、HTTP は HTTPS にリダイレクトする。TLS の最低のバージョンは、CloudFront のセキュリティポリシー `TLSv1.2_2021` |
-| 応答のヘッダー | Redmine のビヘイビアに、CloudFront の AWS 管理の応答のヘッダーのポリシー `SecurityHeadersPolicy`(ID `67f7725c-6f97-4210-82d7-5512b31e9d03`)を付ける。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので(`config/environments/production.rb`)、HSTS は CloudFront で付ける |
-| 添付ファイル | ビヘイビアの `/files/*`(添付ファイルを GET)と `/tmp/*`(サムネイルと zip を GET、`/tmp/incoming/` へのアップロードを PUT)は、OAC で添付ファイルのバケットに送り、CloudFront の署名付き URL を必須にする。どちらにも、sandbox の CSP と `nosniff` を付ける、専用のレスポンスヘッダーポリシーを付ける([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
+| 応答のヘッダー | すべてのビヘイビアに、CloudFront の AWS 管理の応答のヘッダーのポリシー `SecurityHeadersPolicy`(ID `67f7725c-6f97-4210-82d7-5512b31e9d03`)を付ける。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので(`config/environments/production.rb`)、HSTS は CloudFront で付ける |
+| 添付ファイル | ビヘイビアの `/files/*`(添付ファイルを GET)と `/tmp/*`(サムネイルと zip を GET、`/tmp/incoming/` へのアップロードを PUT)は、OAC で添付ファイルのバケットに送り、CloudFront の署名付き URL を必須にする。どちらにも、ビューワーレスポンスの CloudFront Functions(`<instance>-attachment-headers`)が、sandbox の CSP と `nosniff`、署名付き URL のファイル名と種類を付ける([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
 | 関数 URL | OAC の署名がない要求は、関数が呼ばれる前に断られる([lambda.md](lambda.md#cloudfront-and-function-urls)) |
 | 要求の本文 | Redmine のビヘイビアでは 1 MB まで。超えたら Lambda@Edge が 413 を返す。`/tmp/incoming/` へのアップロードは、Lambda ではなく S3 に届き、アップロードの上限を超える本文は CloudFront Functions が断る([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
 
-Content Security Policy などを自分で決めるポリシーは、定額プランの Business 以上でだけ使えます。Free と Pro では、上の AWS 管理のポリシーを使います。
+Content Security Policy などを自分で決めるポリシー(キャッシュ、オリジンリクエスト、レスポンスヘッダーのポリシー)は、定額プランの Business 以上でだけ使えます。ディストリビューションは AWS 管理のポリシーだけを使い、添付ファイルのヘッダーは、どのプランにも含まれる CloudFront Functions で付けます([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。
 
 <a id="aws-waf"></a>
 
@@ -77,9 +77,9 @@ CloudFront に AWS WAF の Web ACL を付け、Redmine に届く前に、よく�
 | 定額プラン Pro | 月 15 ドル(CloudFront と WAF を含む) | 25 | CloudFront のアクセスログと WAF のログを、CloudWatch Logs に送れる(取り込みは含まれ、保存と検索は別料金) | ログを残したいとき。CAPTCHA、ヘッダーでのルール、止めたときの応答を変えたいとき |
 | 従量 | Web ACL 1 つで月 5 ドル、ルールか管理ルールのグループ 1 つで月 1 ドル、100 万件の要求で 0.60 ドル。下の 5 つのルールなら月 10 ドルほど | 上限なし | 送れる(別料金) | 定額プランの決まり(下記)に合わないとき |
 
-定額プランには、いくつかの決まりがあります。Web ACL は外せず(外すには従量に戻す)、自分で作るルールのグループは使えないので、ルールを 1 つずつ置きます。Free のプランは 1 つのアカウントで 3 つまでで、この上限は上げられません。キャッシュのビヘイビアは、Free で 5 つまでです(この設計は 2 つ)。
+定額プランには、いくつかの決まりがあります。Web ACL は外せず(外すには従量に戻す)、自分で作るルールのグループは使えないので、ルールを 1 つずつ置きます。Free のプランは 1 つのアカウントで 3 つまでで、この上限は上げられません。ほかのディストリビューションが使っている Web ACL や CloudFront Functions は、プランのディストリビューションに付けられないので、自分で用意する Web ACL(`cloudfront.webAclArn`)は、このディストリビューションだけで使います。キャッシュのビヘイビアは、Free で 5 つまでです(この設計は 4 つ)。
 
-Free では、CAPTCHA、JavaScript のチャレンジ、ヘッダーや正規表現で絞るルール、止めたときの応答を変えること、Bot Control は使えません。Free と Pro では、WAF が中身を調べる本文は最初の 16 KB までです。
+Free では、CAPTCHA、JavaScript のチャレンジ、ヘッダーや正規表現で絞るルール、止めたときの応答を変えること、Bot Control は使えません。そこで、ログインの回数の制限は、正規表現ではなく、文字列の一致(前方一致)でパスを選びます。Free と Pro では、WAF が中身を調べる本文は最初の 16 KB までです。
 
 CloudFront の Web ACL は us-east-1 に作り、インスタンスの us-east-1 のスタック(`<instance>-edge`)に置きます([deploy-config.md](deploy-config.md))。
 
@@ -91,7 +91,7 @@ CloudFront の Web ACL は us-east-1 に作り、インスタンスの us-east-1
 
 | 順 | ルール | 内容 | 既定の値 | 動き |
 | --- | --- | --- | --- | --- |
-| 1 | ログインの回数の制限(rate-based) | `POST` の `/login`、`/account/lost_password`、`/account/register`、`/account/twofa` を、IP アドレスごとに数える | 5 分で 20 回 | 止める |
+| 1 | ログインの回数の制限(rate-based) | `POST` で、パスが `/login`、`/account/lost_password`、`/account/register`、`/account/twofa` のどれかで始まるものを、IP アドレスごとに数える | 5 分で 20 回 | 止める |
 | 2 | 全体の回数の制限(rate-based) | すべての要求を、IP アドレスごとに数える | 5 分で 1,000 回 | 止める |
 | 3 | AWS の管理ルール: Amazon IP Reputation List | 悪い評判の IP アドレス | — | 止める |
 | 4 | AWS の管理ルール: Known Bad Inputs | 知られた悪い入力(Log4j の形など) | — | 止める |
@@ -249,7 +249,7 @@ Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md
 ## 未確認の事項
 
 - `config.filter_redirect` で、CloudFront の署名付き URL へのリダイレクトがログに残らないか
-- CloudFront の応答のヘッダーのポリシーと WAF のルールが、定額プラン Free で使えるか
+- プランの機能の表と照らした構成を、CloudFront が定額プラン Free で受け付けるか([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。AWS 管理のルールグループが WAF のルール 5 つのうち 1 つと数えられるか、AWS 管理のルールグループに範囲の絞り込み(scope-down)を付けられるか
 - WAF の Common Rule Set のうち、Redmine の正しい要求を止めるルール(本文の大きさ、XSS の形など)
 - Rails の `remote_ip` が、CloudFront を通った要求で、利用者の IP アドレスになるか
 - GuardDuty と、S3 のマルウェアの検査の費用

@@ -220,7 +220,7 @@ GitHub Packages の RubyGems のレジストリからインストールするに
 ```text
 serverless/
   image/          コンテナイメージ(Dockerfile、設定ファイル、起動のスクリプト、拡張機能のスクリプト、タスクのハンドラー)
-  edge/           CloudFront で動く関数。redmine-body-hash(Lambda@Edge。本文のハッシュを入れる)と、アップロードの大きさを制限する CloudFront Function、そのテスト
+  edge/           CloudFront で動く関数。redmine-body-hash(Lambda@Edge。本文のハッシュとアップロードのチェックサムを入れる)と、アップロードの大きさを制限し、添付ファイルのヘッダーを付ける CloudFront Functions の関数、そのテスト
   infra/          CloudFormation(アカウントのロール。共有の土台。インスタンスごとの VPC の利用、データベース、S3、SQS、Lambda、CloudFront、WAF、SES、スケジュール、アラーム。us-east-1 の Lambda@Edge、証明書、Web ACL)
   deploy/         bin/deploy の段と、その道具のイメージ
   schema/         redmine.json の JSON Schema

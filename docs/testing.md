@@ -55,7 +55,7 @@ The scripts take Bundler's credential for GitHub Packages from the `gh` login, o
 | Redmine's own tests | Whether Redmine's own behavior still works with the plugins installed | Redmine's tests (unit, functional, integration) | Every commit |
 | System tests | Upload, download and thumbnails in the browser | Capybara, Selenium (headless Chrome), moto | Every commit |
 | Image tests | Whether the three roles start with a read-only file system and a low-privilege user | Docker, Lambda Runtime Interface Emulator | Every image build |
-| Edge function tests | The Lambda@Edge function and the CloudFront Function, and that the templates carry the same code | node:test (Node.js's own) | Every commit |
+| Edge function tests | The Lambda@Edge function and the CloudFront Functions, and that the templates carry the same code | node:test (Node.js's own) | Every commit |
 | Deployment tests | The configuration schema, the stack parameters, and the steps of `bin/deploy` | check-jsonschema, a fake AWS CLI, Minitest | Every commit |
 | Lambda integration tests | Whether the same image, deployed as three functions, works with SQS and SSM for the function URL, jobs from SQS and invocations of `redmine-task` | LocalStack | Every image build |
 | Checks after deployment | Behavior on real AWS | `bin/smoke-test` (the project's own) | Every deployment |
@@ -89,7 +89,7 @@ The plugin tests the jobs on SQS through `aws-activejob-sqs`, the allowlist, the
 | Task handler | Accepts only the defined `command` and `env`. Recognizes SES events and passes their message ID, recipients and verdicts, leaving out values that are not well formed; a command event cannot pass the SES variables. Returns the child process's exit code and the end of its output. Does not cut Japanese text in the middle of a character | Minitest |
 | Extension script | Depending on `REDMINE_ROLE`, starts the real Lambda Web Adapter or registers as an extension that does nothing | ShellCheck, image tests |
 | Webhooks | Not sent to destinations in the `webhook_blocklist` ranges (private, link-local). An error at the destination fails the job, and it is redelivered | Minitest, moto |
-| Function that adds the body hash (`edge/body-hash/`) | Sets the SHA256 of an empty body for requests without a body and with an empty body. Computes the SHA256 of a base64 body over the raw bytes (matching a locally computed value for binary bodies and multipart forms). Returns 413 for requests with `inputTruncated` and does not send them to the origin | Node.js `node:test`. No npm package dependencies |
+| Function that adds the body hash (`edge/body-hash/`) | Sets the SHA256 of an empty body for requests without a body and with an empty body. Computes the SHA256 of a base64 body over the raw bytes (matching a locally computed value for binary bodies and multipart forms). Returns 413 for requests with `inputTruncated` and does not send them to the origin. Gives an upload to S3 the checksum from its key | Node.js `node:test`. No npm package dependencies |
 
 ## Redmine's own tests
 
@@ -161,8 +161,9 @@ Every image build is started in Docker under the same conditions as production.
 
 `bin/test-edge` runs the tests of `edge/` with `node:test` in the Node.js image, without npm packages.
 
-- **`redmine-body-hash` (Lambda@Edge):** The hash of an empty body, of a base64 body over its raw bytes (forms, binary, multipart) and of a text body; a forged `x-amz-content-sha256` is replaced; a truncated body (over 1 MB) gets 413; other fields of the request are kept.
+- **`redmine-body-hash` (Lambda@Edge):** The hash of an empty body, of a base64 body over its raw bytes (forms, binary, multipart) and of a text body; a forged `x-amz-content-sha256` is replaced; a truncated body (over 1 MB) gets 413; other fields of the request are kept. On S3, a PUT to `/tmp/incoming/<UUID>.<SHA256>` gets that SHA256 in `x-amz-checksum-sha256` (base64), and other requests get nothing.
 - **`<instance>-incoming-size` (CloudFront Function):** Run as CloudFront runs it, a plain script with the limit written in: a PUT under `/tmp/incoming/` within the limit passes, a larger one gets 413, one without a valid `Content-Length` gets 411, and other methods and paths (signed GETs of thumbnails and zips) pass.
+- **`<instance>-attachment-headers` (CloudFront Function):** Run as a plain script: every response gets the sandbox CSP and `nosniff`; a successful one gets `Content-Disposition` and `Content-Type` from the decoded `response-content-disposition` and `response-content-type`; without them, S3's headers stay; malformed values, values that are not printable ASCII (such as a line break) and error responses get no override.
 - **The templates:** The code is inline in the templates (`infra/shared-edge.yaml`, `infra/instance.yaml`), so the tests check that the templates carry the same lines as the files.
 
 ## Deployment tests
@@ -206,7 +207,7 @@ On every deployment, `bin/smoke-test` checks behavior on real AWS. A project and
 | POST through CloudFront | Login and issue creation pass (the function URL accepts them with the hash added by Lambda@Edge and the OAC signature) |
 | POST with a body over 1 MB | CloudFront returns 413 |
 | Upload and download | In the check project, a file PUT through CloudFront can be fetched with a signed URL. The SHA256 of the fetched file matches what was sent. A PUT whose contents do not match the declared SHA256 is rejected |
-| Attachment headers | A response under `/files/` has `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` and `X-Content-Type-Options: nosniff`, and the same URL without the signature is refused. Attachments are on Redmine's origin, so this must hold after every change of the distribution |
+| Attachment headers | A response under `/files/` has `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`, `X-Content-Type-Options: nosniff` and the file name of the signed URL in `Content-Disposition` (a Japanese name too), and the same URL without the signature is refused. Attachments are on Redmine's origin, so this must hold after every change of the distribution |
 | Download by a user without permission | No signed URL is exposed |
 | Mail sending | A notification job addressed to the SES mailbox simulator (`success@simulator.amazonses.com`) is sent through SQS |
 | Mail receiving | Mail sent from the check address to the receiving address becomes an issue in the check project |

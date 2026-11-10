@@ -63,7 +63,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 | Redmine 本体のテスト | プラグインを入れても、本体の動きが壊れていないか | Redmine のテスト(ユニット、機能、統合) | コミットのたび |
 | システムのテスト | ブラウザーでのアップロード、ダウンロード、サムネイル | Capybara、Selenium(ヘッドレスの Chrome)、moto | コミットのたび |
 | イメージのテスト | 読み取り専用のファイルシステムと権限の少ないユーザーで、3 つの役割が起動するか | Docker、Lambda のランタイムインターフェイスエミュレーター | イメージを作るたび |
-| CloudFront の関数のテスト | Lambda@Edge の関数と CloudFront Function、テンプレートが同じコードを持つこと | node:test(Node.js の標準) | コミットのたび |
+| CloudFront の関数のテスト | Lambda@Edge の関数と CloudFront Functions の関数、テンプレートが同じコードを持つこと | node:test(Node.js の標準) | コミットのたび |
 | デプロイのテスト | 設定のスキーマ、スタックのパラメーター、`bin/deploy` の段 | check-jsonschema、偽の AWS CLI、Minitest | コミットのたび |
 | Lambda の結合のテスト | 同じイメージを 3 つの関数として作り、関数 URL、SQS からのジョブ、`redmine-task` の呼び出しが、SQS、SSM と一緒に動くか | LocalStack | イメージを作るたび |
 | デプロイしたあとの確認 | 本物の AWS の上での動き | `bin/smoke-test`(自前) | デプロイのたび |
@@ -109,7 +109,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 | タスクのハンドラー | 決めた `command` と `env` だけを受け付ける。SES のイベントを見分け、メッセージ ID、宛先、判定を渡す。形の正しくない値は入れず、コマンドのイベントでは SES の変数を渡せない。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
 | 拡張機能のスクリプト | `REDMINE_ROLE` ごとに、本物の Lambda Web Adapter を起動するか、何もしない拡張機能として登録するかが変わる | ShellCheck、イメージのテスト |
 | webhook | `webhook_blocklist` の範囲(プライベート、リンクローカル)の送り先に送らない。送り先のエラーでジョブが失敗し、届け直される | Minitest、moto |
-| 本文のハッシュを入れる関数(`edge/body-hash/`) | 本文のない要求と空の本文に、空の本文の SHA256 を入れる。base64 の本文を、バイト列のまま SHA256 にする(バイナリの本文とマルチパートのフォームで、手元で計算した値と同じ)。`inputTruncated` の要求に 413 を返し、オリジンに送らない | Node.js の `node:test`。依存の npm のパッケージは使わない |
+| 本文のハッシュを入れる関数(`edge/body-hash/`) | 本文のない要求と空の本文に、空の本文の SHA256 を入れる。base64 の本文を、バイト列のまま SHA256 にする(バイナリの本文とマルチパートのフォームで、手元で計算した値と同じ)。`inputTruncated` の要求に 413 を返し、オリジンに送らない。S3 へのアップロードに、キーからチェックサムを入れる | Node.js の `node:test`。依存の npm のパッケージは使わない |
 
 <a id="redmines-own-tests"></a>
 
@@ -201,8 +201,9 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 
 `bin/test-edge` が、Node.js のイメージの中で、`node:test` で `edge/` のテストを実行します。npm のパッケージは使いません。
 
-- **`redmine-body-hash`(Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ(フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文(1 MB を超えるもの)に 413 を返すこと、要求のほかの項目を変えないこと。
+- **`redmine-body-hash`(Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ(フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文(1 MB を超えるもの)に 413 を返すこと、要求のほかの項目を変えないこと。S3 では、`/tmp/incoming/<UUID>.<SHA256>` への PUT に、その SHA256 を `x-amz-checksum-sha256`(base64)で入れ、ほかの要求には何も入れないこと。
 - **`<instance>-incoming-size`(CloudFront Function):** CloudFront と同じく、上限を書き込んだただのスクリプトとして実行します。`/tmp/incoming/` への上限までの PUT は通り、超えると 413、正しい `Content-Length` がないと 411、ほかのメソッドとパス(サムネイルと zip の署名付きの GET)は通ること。
+- **`<instance>-attachment-headers`(CloudFront Function):** ただのスクリプトとして実行します。すべての応答に sandbox の CSP と `nosniff` が付くこと、成功の応答では、デコードした `response-content-disposition` と `response-content-type` が `Content-Disposition` と `Content-Type` になること、それがなければ S3 のヘッダーのままのこと、壊れた値、印字できる ASCII でない値(改行など)、エラーの応答では上書きしないこと。
 - **テンプレート:** コードはテンプレート(`infra/shared-edge.yaml`、`infra/instance.yaml`)に埋め込むので、テンプレートがファイルと同じ行を持つことも確認します。
 
 <a id="deployment-tests"></a>
@@ -254,7 +255,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 | CloudFront を通る POST | ログインとチケットの作成が通る(Lambda@Edge が入れたハッシュと OAC の署名で、関数 URL が受ける) |
 | 1 MB を超える本文の POST | CloudFront が 413 を返す |
 | アップロードとダウンロード | 確認用のプロジェクトで、CloudFront を通して PUT したファイルを、署名付き URL で取れる。取ったファイルの SHA256 が送ったものと同じ。中身が申告の SHA256 と合わない PUT は断られる |
-| 添付ファイルのヘッダー | `/files/` の下の応答に、`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` と `X-Content-Type-Options: nosniff` が付き、署名のない同じ URL は断られる。添付ファイルは Redmine のオリジンにあるので、ディストリビューションを変えるたびに、これが成り立つ必要がある |
+| 添付ファイルのヘッダー | `/files/` の下の応答に、`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`、`X-Content-Type-Options: nosniff`、`Content-Disposition` の署名付き URL のファイル名(日本語の名前も)が付き、署名のない同じ URL は断られる。添付ファイルは Redmine のオリジンにあるので、ディストリビューションを変えるたびに、これが成り立つ必要がある |
 | 権限のない人のダウンロード | 署名付き URL が出ない |
 | メールの受信 | 確認用のアドレスから受信のアドレスに送ったメールが、確認用のプロジェクトのチケットになる |
 | タスク | `bin/rake -T` が成功する |

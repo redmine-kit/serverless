@@ -306,14 +306,14 @@ flowchart LR
 - **Body hash:** Function URLs do not accept unsigned bodies (`UNSIGNED-PAYLOAD`), so PUT and POST must send the body's SHA256 in `x-amz-content-sha256` (CloudFront documentation). Forms in Redmine pages in the browser do not add it. So the Lambda@Edge function `redmine-body-hash`, which runs at the origin request, computes the hash from the body and adds it. OAC then signs the request.
 - **Not possible with CloudFront Functions:** The request data in CloudFront Functions has no body (only the method, URI, query string, headers and cookies). Only Lambda@Edge can read the body.
 - **`Host`:** The viewer's `Host` is not forwarded to the function URL (the origin request policy is `AllViewerExceptHostHeader`). OAC signs with the function URL's host name. The Redmine domain is passed in the origin custom header `X-Forwarded-Host`. Rails builds URLs from `X-Forwarded-Host`.
-- **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below). Attachments use the behaviors `/files/*` and `/tmp/*` (thumbnails, zips and uploads), which go to the attachments bucket through OAC and require signed URLs ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)); the body hash function is not attached to them.
+- **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below). Attachments use the behaviors `/files/*` and `/tmp/*` (thumbnails, zips and uploads), which go to the attachments bucket through OAC and require signed URLs ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)). They are not cached either (`CachingDisabled`), because no AWS-managed cache policy keeps the file name and type of the signed URL in the cache key (below).
 - **Origin response timeout:** The CloudFront default is 30 seconds, configurable from 1 to 120 seconds. It is set to 60 seconds to match the function timeout.
 
 ### Function that adds the body hash (Lambda@Edge)
 
 | Item | Value | Reason |
 | --- | --- | --- |
-| Function | `redmine-body-hash`, attached to the origin request of the default behavior, with the body included (`IncludeBody`) | Only Lambda@Edge can read the body. At the origin request it can read up to 1 MB of the body (up to 40 KB at the viewer request) |
+| Function | `redmine-body-hash`, attached to the origin request of the default behavior, with the body included (`IncludeBody`), and of `/tmp/*`, without the body | Only Lambda@Edge can read the body. At the origin request it can read up to 1 MB of the body (up to 40 KB at the viewer request). On `/tmp/*` it gives S3 the checksum of uploads |
 | Runtime | Node.js 24 (`nodejs24.x`, the latest Lambda@Edge supports), x86_64, 128 MB, 5 seconds. Written with `node:crypto` only, without npm package dependencies. The code is inline in `infra/shared-edge.yaml` and is tested by `bin/test-edge` ([testing.md](testing.md#edge-function-tests)) | Lambda@Edge supports only Node.js and Python, and does not support container images or arm64 |
 | Architecture, memory, timeout | x86_64, 128 MB, 5 seconds | It only computes a hash |
 | Region | us-east-1 (N. Virginia) | Lambda@Edge functions must be created in us-east-1 |
@@ -321,13 +321,14 @@ flowchart LR
 
 The processing is as follows.
 
-1. If there is no body or the body is empty, add the SHA256 of an empty body (`e3b0c442…b855`).
-2. If the body is over 1 MB and was truncated (`inputTruncated`), return 413 without sending it to the origin. A request with a mismatched hash would only be rejected by the function URL.
-3. Compute the SHA256 over the body as bytes decoded from base64 and put it in `x-amz-content-sha256`. Computing it after converting to a string would change the value for binary bodies, so it is computed over the bytes.
+1. For a request to S3 (`/tmp/*`), only the uploads' checksum: a PUT to `/tmp/incoming/<UUID>.<SHA256 in hexadecimal>` gets that SHA256 in `x-amz-checksum-sha256` (base64), and other requests pass unchanged. The Free plan allows only AWS-managed origin request policies, and none forwards the browser's `x-amz-checksum-sha256` alone; the signed URL covers the key, so the checksum is Redmine's ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload)).
+2. If there is no body or the body is empty, add the SHA256 of an empty body (`e3b0c442…b855`).
+3. If the body is over 1 MB and was truncated (`inputTruncated`), return 413 without sending it to the origin. A request with a mismatched hash would only be rejected by the function URL.
+4. Compute the SHA256 over the body as bytes decoded from base64 and put it in `x-amz-content-sha256`. Computing it after converting to a string would change the value for binary bodies, so it is computed over the bytes.
 
 Because of this function, request bodies that reach Redmine through CloudFront are limited to 1 MB. Attachments from pages go directly to S3, so they are not affected; what is affected is listed under ["The 6 MB limit"](#the-6-mb-limit) below.
 
-The function runs on the origin request, so it runs for every uncached page request. In Tokyo it costs $0.60 per million requests and $0.00005001 per GB-second (price list), which comes to less than $0.1 at 50,000 requests a month. It also works with the CloudFront flat-rate plans and is charged separately from the plan (AWS blog, 2026-03-24). Its logs go to CloudWatch Logs in the region near the edge where it ran (`/aws/lambda/us-east-1.redmine-body-hash`).
+The function runs on the origin request, so it runs for every uncached page request, and for every request to `/tmp/*` (thumbnails, zips and uploads; nothing there is cached). In Tokyo it costs $0.60 per million requests and $0.00005001 per GB-second (price list), which comes to less than $0.1 at 50,000 requests a month. It also works with the CloudFront flat-rate plans and is charged separately from the plan (AWS blog, 2026-03-24). Its logs go to CloudWatch Logs in the region near the edge where it ran (`/aws/lambda/us-east-1.redmine-body-hash`).
 
 Adding the body hash with Lambda@Edge and then signing with OAC is not described in the official documentation. A practical report says it works (a Classmethod article, 2024-07-29; not official information); it is the first thing to try.
 
@@ -363,7 +364,27 @@ By default in Rails 8.1, Rails also serves `public/` (`public_file_server.enable
 
 CloudFront uses the flat-rate Free plan ($0 per month) by default. It includes 1 million requests and 100 GB of transfer per month, which is expected to be enough at this scale. It also includes WAF rules (up to 5). The plan differences, what is not included (such as logs) and the WAF rules are in [security.md](security.md#aws-waf).
 
-Free has no custom cache rules and no origins inside a VPC; this design uses neither. It uses only the cache policies AWS provides, and its origins (the function URL and S3) are outside a VPC. The distribution has 4 cache behaviors: the default one and `/files/*`, `/tmp/*` and `/assets/*`. Free allows 5 (checked 2026-11-10), so it fits whether or not the default behavior counts. Thumbnails, zips and uploads share `/tmp/*` for this reason; their S3 keys follow Redmine's own `tmp/` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#bucket-layout)).
+The features the templates use, against the table of features per plan in the CloudFront documentation ("CloudFront flat-rate pricing plans", checked 2026-11-10):
+
+| Feature | Free | How this design uses it |
+| --- | --- | --- |
+| Cache behaviors | Up to 5 | 4 (below) |
+| Cache policies | AWS-managed only ("custom caching rules" from Business) | `CachingDisabled` on Redmine, `/files/*` and `/tmp/*`; `CachingOptimized` on `/assets/*` |
+| Origin request policies | AWS-managed only ("custom origin request rules" from Business) | `AllViewerExceptHostHeader` on Redmine; none on S3 |
+| Response headers policies | AWS-managed only ("custom response header rules" from Business) | `SecurityHeadersPolicy` on every behavior. The attachments' sandbox CSP and `nosniff` come from a CloudFront Function |
+| CloudFront Functions | Included. A function used by another distribution cannot be attached | `<instance>-incoming-size` (viewer request) and `<instance>-attachment-headers` (viewer response), per instance |
+| Lambda@Edge | Can be used, charged per invocation outside the plan | `redmine-body-hash` (origin request), shared by the instances |
+| KeyValueStore | Not included | Not used |
+| Origin access control, signed URLs | Included | Function URL and S3 origins; the key group of the attachments |
+| Origins inside a VPC | Not included | Not used: the function URL and S3 are outside a VPC |
+| WAF | Up to 5 rules, including AWS managed rules. IP rate limits and country blocking included; header-based and regular-expression rules, CAPTCHA and custom responses not included. A web ACL used by another distribution cannot be attached | 5 rules: two rate limits with string matches and three AWS managed rule groups ([security.md](security.md#rules)) |
+| Access logs, WAF logs | Not included (from Pro) | Not configured |
+| Real-time logs, continuous deployment, OAI, legacy cache settings (`ForwardedValues`) | Cannot be used with any plan | Not used |
+| Free plans per account | 3 | One per instance |
+
+The custom error pages (`CustomErrorResponses`), HTTP/3, IPv6 and the ACM certificate are not plan features in the table. The AWS account must not be on the AWS Free Tier. Not confirmed by the table: whether each AWS managed rule group counts as one of the 5 rules, and whether a scope-down statement on a managed rule group is allowed ([security.md](security.md#to-verify)).
+
+The distribution has 4 cache behaviors: the default one and `/files/*`, `/tmp/*` and `/assets/*`. Free allows 5 (checked 2026-11-10), so it fits whether or not the default behavior counts. Thumbnails, zips and uploads share `/tmp/*` for this reason; their S3 keys follow Redmine's own `tmp/` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#bucket-layout)).
 
 ## Features that cannot be used
 
@@ -393,4 +414,4 @@ Synchronous invocations of Event Functions are limited to 6 MB each for the requ
 - Whether redirects and URLs in mail use the correct domain with `X-Forwarded-Host`
 - Whether, after Lambda@Edge adds `x-amz-content-sha256` and OAC signs the request, the function URL accepts POST, PUT, PATCH and DELETE. Whether POST without a body and multipart forms also pass
 - Whether returning 413 on Lambda@Edge `inputTruncated` gives a response that browsers and API clients can understand
-- How many CloudFront flat-rate Free plans an account can use
+- Whether OAC signs the `x-amz-checksum-sha256` that `redmine-body-hash` adds on `/tmp/*`, as it does for `x-amz-content-sha256` on Redmine's behavior

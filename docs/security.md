@@ -46,12 +46,12 @@ The specifications in this page were checked against official information and th
 | Item | Decision |
 | --- | --- |
 | HTTPS | Viewers are allowed HTTPS only; HTTP is redirected to HTTPS. The minimum TLS version is the CloudFront security policy `TLSv1.2_2021` |
-| Response headers | On Redmine's behaviors, attach the CloudFront AWS-managed response headers policy `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`). It adds `Strict-Transport-Security: max-age=31536000`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin` and `X-XSS-Protection: 1; mode=block`. Redmine does not enable `force_ssl` (`config/environments/production.rb`), so HSTS is added by CloudFront |
-| Attachments | The behaviors `/files/*` (attachments, GET) and `/tmp/*` (thumbnails and zips with GET, uploads to `/tmp/incoming/` with PUT) go to the attachments bucket through OAC and require CloudFront signed URLs. Both have their own response headers policy with the sandbox CSP and `nosniff` ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)) |
+| Response headers | On every behavior, attach the CloudFront AWS-managed response headers policy `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`). It adds `Strict-Transport-Security: max-age=31536000`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin` and `X-XSS-Protection: 1; mode=block`. Redmine does not enable `force_ssl` (`config/environments/production.rb`), so HSTS is added by CloudFront |
+| Attachments | The behaviors `/files/*` (attachments, GET) and `/tmp/*` (thumbnails and zips with GET, uploads to `/tmp/incoming/` with PUT) go to the attachments bucket through OAC and require CloudFront signed URLs. A CloudFront Function on their viewer response (`<instance>-attachment-headers`) adds the sandbox CSP and `nosniff`, and the file name and type from the signed URL ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download)) |
 | Function URLs | Requests without an OAC signature are rejected before the function is invoked ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
 | Request body | Up to 1 MB on Redmine's behaviors. Above that, Lambda@Edge returns 413. Uploads to `/tmp/incoming/` go to S3, not to Lambda; a CloudFront Function rejects a body over the upload limit ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload)) |
 
-Policies you define yourself, such as a Content Security Policy of your own, are available only on the Business flat-rate plan and above. Free and Pro use the AWS-managed policy above.
+Policies you define yourself (cache, origin request and response headers policies), such as a Content Security Policy of your own, are available only on the Business flat-rate plan and above. The distribution uses only AWS-managed policies, and adds the attachments' headers with a CloudFront Function, which every plan includes ([lambda.md](lambda.md#flat-rate-free-plan-and-waf)).
 
 ## AWS WAF
 
@@ -65,9 +65,9 @@ An AWS WAF web ACL is attached to CloudFront to stop common attacks and excessiv
 | Flat-rate plan Pro | USD 15 per month (includes CloudFront and WAF) | 25 | CloudFront access logs and WAF logs can be sent to CloudWatch Logs (ingestion is included; storage and queries are charged separately) | When you want to keep logs. When you want CAPTCHA, header-based rules, or custom responses for blocked requests |
 | Pay-per-use | USD 5 per month per web ACL, USD 1 per month per rule or managed rule group, USD 0.60 per million requests. About USD 10 per month for the 5 rules below | No limit | Can be sent (charged separately) | When the flat-rate plan's rules (below) do not fit |
 
-A flat-rate plan comes with some rules. The web ACL cannot be removed (to remove it, go back to pay-per-use), and custom rule groups cannot be used, so rules are placed one by one. An account can have up to 3 Free plans, and this limit cannot be raised. Free allows up to 5 cache behaviors; this design uses 2.
+A flat-rate plan comes with some rules. The web ACL cannot be removed (to remove it, go back to pay-per-use), and custom rule groups cannot be used, so rules are placed one by one. An account can have up to 3 Free plans, and this limit cannot be raised. A web ACL or CloudFront Function used by another distribution cannot be attached to a distribution on a plan, so a web ACL you prepare (`cloudfront.webAclArn`) must be used by this distribution only. Free allows up to 5 cache behaviors; this design uses 4.
 
-Free does not offer CAPTCHA, JavaScript challenges, rules that match on headers or on regular expressions, custom responses for blocked requests, or Bot Control. On Free and Pro, WAF inspects only the first 16 KB of a body.
+Free does not offer CAPTCHA, JavaScript challenges, rules that match on headers or on regular expressions, custom responses for blocked requests, or Bot Control. The login rate limit therefore matches the paths with string matches (starts with), not with a regular expression. On Free and Pro, WAF inspects only the first 16 KB of a body.
 
 The CloudFront web ACL is created in us-east-1, in the instance's us-east-1 stack (`<instance>-edge`) ([deploy-config.md](deploy-config.md)).
 
@@ -77,7 +77,7 @@ There are 5 rules (the Free limit). They are applied from the top. The default a
 
 | Order | Rule | What it does | Default value | Action |
 | --- | --- | --- | --- | --- |
-| 1 | Login rate limit (rate-based) | Counts `POST` to `/login`, `/account/lost_password`, `/account/register` and `/account/twofa` per IP address | 20 in 5 minutes | Block |
+| 1 | Login rate limit (rate-based) | Counts `POST` to paths that start with `/login`, `/account/lost_password`, `/account/register` or `/account/twofa`, per IP address | 20 in 5 minutes | Block |
 | 2 | Overall rate limit (rate-based) | Counts all requests per IP address | 1,000 in 5 minutes | Block |
 | 3 | AWS managed rules: Amazon IP Reputation List | IP addresses with a bad reputation | — | Block |
 | 4 | AWS managed rules: Known Bad Inputs | Known bad inputs (Log4j patterns, etc.) | — | Block |
@@ -213,7 +213,7 @@ Risks this design cannot fully prevent, covered by operations.
 ## To verify
 
 - Whether `config.filter_redirect` keeps redirects to CloudFront signed URLs out of the logs
-- Whether the CloudFront response headers policy and the WAF rules are available on the Free flat-rate plan
+- Whether CloudFront accepts the template on the Free flat-rate plan as checked against the plan's feature table ([lambda.md](lambda.md#flat-rate-free-plan-and-waf)), including whether each AWS managed rule group counts as one of the 5 WAF rules and whether a scope-down statement on a managed rule group is allowed
 - Which rules in the WAF Common Rule Set block legitimate Redmine requests (body size, XSS patterns, etc.)
 - Whether Rails' `remote_ip` is the user's IP address for requests that pass through CloudFront
 - The cost of GuardDuty and S3 malware scanning

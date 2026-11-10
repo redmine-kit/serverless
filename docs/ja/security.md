@@ -55,7 +55,7 @@ Serverless のセキュリティ設計です。保護対象、脅威、層ごと
 | --- | --- |
 | HTTPS | ビューワーには HTTPS だけを許可し、HTTP は HTTPS にリダイレクトする。TLS の最小バージョンは、CloudFront のセキュリティポリシー `TLSv1.2_2021` |
 | レスポンスヘッダー | すべてのビヘイビアに、CloudFront の AWS マネージドのレスポンスヘッダーポリシー `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`) を設定する。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので (`config/environments/production.rb`)、HSTS は CloudFront で付ける |
-| 添付ファイル | ビヘイビア `/files/*` (添付ファイルの GET) と `/tmp/*` (サムネイルと zip の GET、`/tmp/incoming/` へのアップロードの PUT) は、OAC で添付ファイル用バケットに転送し、CloudFront 署名付き URL を必須にする。どちらにも、ビューワーレスポンスの CloudFront Functions (`<instance>-attachment-headers`) が、sandbox の CSP と `nosniff`、署名付き URL のファイル名と種類を付ける ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
+| 添付ファイル | ビヘイビア `/files/*` (添付ファイルの GET) と `/tmp/*` (サムネイルと zip の GET、`/tmp/incoming/` へのアップロードの PUT) は、OAC で添付ファイル用バケットに転送し、CloudFront 署名付き URL を必須にする。どちらにも、`SecurityHeadersPolicy` が `nosniff` を付け、ビューワーレスポンスの CloudFront Functions (`<instance>-attachment-headers`) が、sandbox の CSP と、署名付き URL のファイル名と種類を付ける ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
 | 関数 URL | OAC の署名がないリクエストは、関数が呼び出される前に拒否される ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
 | リクエスト本文 | Redmine のビヘイビアでは 1 MB まで。超えると Lambda@Edge が 413 を返す。`/tmp/incoming/` へのアップロードは、Lambda ではなく S3 に到達し、アップロードの上限を超える本文は CloudFront Functions が拒否する ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
 

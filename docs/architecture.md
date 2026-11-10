@@ -111,7 +111,7 @@ One environment handles only one request at a time. When concurrent requests inc
 
 ### Attachments
 
-- **Upload:** The browser computes the SHA256 of the file, receives a CloudFront signed URL from Redmine and PUTs the file through CloudFront to S3, which rejects it if the contents do not match the SHA256. Redmine reads the checksum S3 has checked and creates the attachment record.
+- **Upload:** The browser receives a CloudFront signed URL from Redmine and PUTs the file through CloudFront to S3. Redmine copies it to its place in S3, where S3 computes its SHA256, and creates the attachment record with that digest.
 - **Download:** Redmine checks permissions, then redirects to a CloudFront signed URL under `/files/`. CloudFront reads the object from S3 through OAC and adds Redmine's sandbox CSP.
 - **Server-side processing:** Processing that needs a local file, such as thumbnails and previews of Office files, fetches the file from S3 into the `/tmp` cache.
 
@@ -192,7 +192,7 @@ Mail sending (`aws-actionmailer-ses`) and jobs (`aws-activejob-sqs`) use AWS's o
 ```text
 serverless/
   image/          Container image (Dockerfile, configuration files, startup script, extension script, task handler)
-  edge/           The functions that run at CloudFront: redmine-body-hash (Lambda@Edge, adds the body hash and the uploads' checksum), and the CloudFront Functions that limit uploads and add the attachments' headers, with their tests
+  edge/           The functions that run at CloudFront: redmine-body-hash (Lambda@Edge, adds the body hash), and the CloudFront Functions that limit uploads and add the attachments' headers, with their tests
   infra/          CloudFormation (the account roles; the shared base; per instance: VPC use, database, S3, SQS, Lambda, CloudFront, WAF, SES, schedules, alarms; Lambda@Edge, the certificate and the web ACL in us-east-1)
   deploy/         The steps of bin/deploy and its tools image
   schema/         The JSON Schema of redmine.json

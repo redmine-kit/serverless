@@ -109,7 +109,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 | タスクハンドラー | 決められた `command` と `env` だけを受け付ける。SES イベントを判別し、メッセージ ID、宛先、判定を渡す。形式が正しくない値は設定せず、コマンドのイベントでは SES の変数を渡せない。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
 | 拡張機能のスクリプト | `REDMINE_ROLE` によって、実際の Lambda Web Adapter を起動するか、何もしない拡張機能として登録するかが変わる | ShellCheck、イメージテスト |
 | webhook | `webhook_blocklist` の範囲 (プライベート、リンクローカル) の送信先に送らない。送信先のエラーでジョブが失敗し、再配信される | Minitest、moto |
-| リクエスト本文のハッシュを設定する関数 (`edge/body-hash/`) | 本文のないリクエストと空の本文に、空の本文の SHA256 を設定する。base64 の本文を、バイト列のまま SHA256 にする (バイナリの本文とマルチパートのフォームで、ローカルで計算した値と一致する)。`inputTruncated` のリクエストに 413 を返し、オリジンに送らない。S3 へのアップロードに、キーからチェックサムを設定する | Node.js の `node:test`。npm パッケージには依存しない |
+| リクエスト本文のハッシュを設定する関数 (`edge/body-hash/`) | 本文のないリクエストと空の本文に、空の本文の SHA256 を設定する。base64 の本文を、バイト列のまま SHA256 にする (バイナリの本文とマルチパートのフォームで、ローカルで計算した値と一致する)。`inputTruncated` のリクエストに 413 を返し、オリジンに送らない | Node.js の `node:test`。npm パッケージには依存しない |
 
 <a id="redmines-own-tests"></a>
 
@@ -201,9 +201,9 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 
 `bin/test-edge` が、Node.js のイメージ内で、`node:test` で `edge/` のテストを実行します。npm パッケージは使いません。
 
-- **`redmine-body-hash` (Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ (フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文 (1 MB を超えるもの) に 413 を返すこと、リクエストのほかの項目を変更しないこと。S3 では、`/tmp/incoming/<UUID>.<SHA256>` への PUT に、その SHA256 を `x-amz-checksum-sha256` (base64) で設定し、ほかのリクエストには何も設定しないこと。
+- **`redmine-body-hash` (Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ (フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文 (1 MB を超えるもの) に 413 を返すこと、リクエストのほかの項目を変更しないこと。
 - **`<instance>-incoming-size` (CloudFront Function):** CloudFront と同じく、上限を埋め込んだ通常のスクリプトとして実行します。`/tmp/incoming/` への上限以内の PUT は通過し、超えると 413、正しい `Content-Length` がないと 411、ほかのメソッドとパス (サムネイルと zip の署名付き GET) は通過すること。
-- **`<instance>-attachment-headers` (CloudFront Function):** 通常のスクリプトとして実行します。すべての応答に sandbox の CSP と `nosniff` が付くこと、成功の応答では、デコードした `response-content-disposition` と `response-content-type` が `Content-Disposition` と `Content-Type` になること、それがなければ S3 のヘッダーのままであること、不正な値、印字可能な ASCII 以外の値 (改行など)、エラー応答では上書きしないこと。
+- **`<instance>-attachment-headers` (CloudFront Function):** 通常のスクリプトとして実行します。すべての応答に sandbox の CSP が付くこと、成功の応答では、デコードした `response-content-disposition` と `response-content-type` が `Content-Disposition` と `Content-Type` になること、それがなければ S3 のヘッダーのままであること、不正な値、印字可能な ASCII 以外の値 (改行など)、エラー応答では上書きしないこと。
 - **テンプレート:** コードはテンプレート (`infra/shared-edge.yaml`、`infra/instance.yaml`) に埋め込むので、テンプレートがファイルと同じ行を持つことも確認します。
 
 <a id="deployment-tests"></a>
@@ -254,7 +254,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 | 関数 URL への直接リクエスト | 署名がないので 403。関数のログに出ない (関数が呼び出されない) |
 | CloudFront を経由する POST | ログインとチケットの作成が成功する (Lambda@Edge が設定したハッシュと OAC 署名で、関数 URL が受け付ける) |
 | 1 MB を超える本文の POST | CloudFront が 413 を返す |
-| アップロードとダウンロード | 確認用のプロジェクトで、CloudFront を経由して PUT したファイルを、署名付き URL で取得できる。取得したファイルの SHA256 が送信したものと一致する。内容が申告した SHA256 と一致しない PUT は拒否される |
+| アップロードとダウンロード | 確認用のプロジェクトで、CloudFront を経由して PUT したファイルを、署名付き URL で取得できる。取得したファイルの SHA256 が、送信したものと、添付ファイルのダイジェストに一致する。申告と違うサイズのアップロードは登録されない |
 | 添付ファイルのヘッダー | `/files/` の下の応答に、`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`、`X-Content-Type-Options: nosniff`、`Content-Disposition` の署名付き URL のファイル名 (日本語の名前も) が付き、署名のない同じ URL は拒否される。添付ファイルは Redmine のオリジンにあるので、ディストリビューションを変更するたびに、これが成り立つ必要がある |
 | 権限のないユーザーのダウンロード | 署名付き URL が発行されない |
 | メール受信 | 確認用のアドレスから受信アドレスに送ったメールが、確認用のプロジェクトのチケットになる |
@@ -269,7 +269,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 | 起動時間 | Lambda のログの初期化時間と、最初のリクエストの処理時間 | ウォームアップの呼び出しが必要か、メモリサイズ |
 | メモリ | Lambda のログの最大メモリ | メモリサイズ |
 | リクエストの処理時間 | Lambda のログの実行時間 | 費用の見積もりの見直し ([cost.md](cost.md)) |
-| ブラウザーでの SHA256 の計算 | 大きなファイルを、アップロード前にハッシュする時間 | 添付ファイルのサイズの上限 |
+| 大きなアップロードの登録 | 登録時の S3 でのコピーの時間 | 添付ファイルのサイズの上限 |
 
 <a id="coverage"></a>
 
@@ -334,7 +334,7 @@ LocalStack は、`LOCALSTACK_AUTH_TOKEN` に認証トークンが必要です。
 
 ## 未確認の事項
 
-- moto が、`x-amz-checksum-sha256` を付けた PUT で `ChecksumSHA256` を保存して返し、一致しない内容を拒否するか
+- moto が、`ChecksumAlgorithm` に `SHA256` を指定したコピーで `ChecksumSHA256` を返すか
 - moto が、SES v2 の `SendEmail` (全文での送信) を再現できるか
 - Lambda Web Adapter を、ランタイムインターフェイスエミュレーター上で実行できるか
 - Redmine の添付ファイルのテストのうち、S3 構成で通せるものの数

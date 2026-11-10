@@ -39,7 +39,7 @@ flowchart LR
 | `redmine-task` | Lambda (`redmine-task`) | rake, `rails runner`, email import |
 | `redmine-scheduler` | EventBridge Scheduler | Scheduled rake and warm-up calls during business hours |
 | `redmine-malware-scan` | GuardDuty Malware Protection (`malware-protection-plan.guardduty.amazonaws.com`) | Scans and tags new objects under `tmp/incoming/` and `imports/` of the attachment bucket ([aws-security.md](aws-security.md#malware-protection-for-s3)). Only with `uploads.malwareScan` |
-| `redmine-body-hash` | Lambda and Lambda@Edge (`redmine-body-hash`) | Adds the hash of the request body, and the checksum of uploads to S3 ([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge)). Only writes logs |
+| `redmine-body-hash` | Lambda and Lambda@Edge (`redmine-body-hash`) | Adds the hash of the request body ([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge)). Only writes logs |
 | `redmine-github-deploy` | GitHub Actions (OIDC) | Code deployment. Pushing the image, syncing assets, updating functions, migrations |
 | `redmine-infra-deploy` | SSO administrators, a GitHub Environment that requires approval (OIDC) | Applies the stacks with `bin/deploy`. The role that `deployRoleArn` in the configuration file points to |
 | `redmine-cfn-exec` | CloudFormation | Creates the stack resources (CloudFormation service role) |

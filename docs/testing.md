@@ -89,7 +89,7 @@ The plugin tests the jobs on SQS through `aws-activejob-sqs`, the allowlist, the
 | Task handler | Accepts only the defined `command` and `env`. Recognizes SES events and passes their message ID, recipients and verdicts, leaving out values that are not well formed; a command event cannot pass the SES variables. Returns the child process's exit code and the end of its output. Does not cut Japanese text in the middle of a character | Minitest |
 | Extension script | Depending on `REDMINE_ROLE`, starts the real Lambda Web Adapter or registers as an extension that does nothing | ShellCheck, image tests |
 | Webhooks | Not sent to destinations in the `webhook_blocklist` ranges (private, link-local). An error at the destination fails the job, and it is redelivered | Minitest, moto |
-| Function that adds the body hash (`edge/body-hash/`) | Sets the SHA256 of an empty body for requests without a body and with an empty body. Computes the SHA256 of a base64 body over the raw bytes (matching a locally computed value for binary bodies and multipart forms). Returns 413 for requests with `inputTruncated` and does not send them to the origin. Gives an upload to S3 the checksum from its key | Node.js `node:test`. No npm package dependencies |
+| Function that adds the body hash (`edge/body-hash/`) | Sets the SHA256 of an empty body for requests without a body and with an empty body. Computes the SHA256 of a base64 body over the raw bytes (matching a locally computed value for binary bodies and multipart forms). Returns 413 for requests with `inputTruncated` and does not send them to the origin | Node.js `node:test`. No npm package dependencies |
 
 ## Redmine's own tests
 
@@ -161,9 +161,9 @@ Every image build is started in Docker under the same conditions as production.
 
 `bin/test-edge` runs the tests of `edge/` with `node:test` in the Node.js image, without npm packages.
 
-- **`redmine-body-hash` (Lambda@Edge):** The hash of an empty body, of a base64 body over its raw bytes (forms, binary, multipart) and of a text body; a forged `x-amz-content-sha256` is replaced; a truncated body (over 1 MB) gets 413; other fields of the request are kept. On S3, a PUT to `/tmp/incoming/<UUID>.<SHA256>` gets that SHA256 in `x-amz-checksum-sha256` (base64), and other requests get nothing.
+- **`redmine-body-hash` (Lambda@Edge):** The hash of an empty body, of a base64 body over its raw bytes (forms, binary, multipart) and of a text body; a forged `x-amz-content-sha256` is replaced; a truncated body (over 1 MB) gets 413; other fields of the request are kept.
 - **`<instance>-incoming-size` (CloudFront Function):** Run as CloudFront runs it, a plain script with the limit written in: a PUT under `/tmp/incoming/` within the limit passes, a larger one gets 413, one without a valid `Content-Length` gets 411, and other methods and paths (signed GETs of thumbnails and zips) pass.
-- **`<instance>-attachment-headers` (CloudFront Function):** Run as a plain script: every response gets the sandbox CSP and `nosniff`; a successful one gets `Content-Disposition` and `Content-Type` from the decoded `response-content-disposition` and `response-content-type`; without them, S3's headers stay; malformed values, values that are not printable ASCII (such as a line break) and error responses get no override.
+- **`<instance>-attachment-headers` (CloudFront Function):** Run as a plain script: every response gets the sandbox CSP; a successful one gets `Content-Disposition` and `Content-Type` from the decoded `response-content-disposition` and `response-content-type`; without them, S3's headers stay; malformed values, values that are not printable ASCII (such as a line break) and error responses get no override.
 - **The templates:** The code is inline in the templates (`infra/shared-edge.yaml`, `infra/instance.yaml`), so the tests check that the templates carry the same lines as the files.
 
 ## Deployment tests
@@ -206,7 +206,7 @@ On every deployment, `bin/smoke-test` checks behavior on real AWS. A project and
 | Direct request to the function URL | 403 because there is no signature. Does not appear in the function logs (the function is not invoked) |
 | POST through CloudFront | Login and issue creation pass (the function URL accepts them with the hash added by Lambda@Edge and the OAC signature) |
 | POST with a body over 1 MB | CloudFront returns 413 |
-| Upload and download | In the check project, a file PUT through CloudFront can be fetched with a signed URL. The SHA256 of the fetched file matches what was sent. A PUT whose contents do not match the declared SHA256 is rejected |
+| Upload and download | In the check project, a file PUT through CloudFront can be fetched with a signed URL. The SHA256 of the fetched file matches what was sent and the attachment's digest. An upload of another size than declared is not registered |
 | Attachment headers | A response under `/files/` has `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`, `X-Content-Type-Options: nosniff` and the file name of the signed URL in `Content-Disposition` (a Japanese name too), and the same URL without the signature is refused. Attachments are on Redmine's origin, so this must hold after every change of the distribution |
 | Download by a user without permission | No signed URL is exposed |
 | Mail sending | A notification job addressed to the SES mailbox simulator (`success@simulator.amazonses.com`) is sent through SQS |
@@ -220,7 +220,7 @@ On every deployment, `bin/smoke-test` checks behavior on real AWS. A project and
 | Startup time | Init duration and first request duration in the Lambda logs | Whether warm-up invocations are needed, memory size |
 | Memory | Max memory used in the Lambda logs | Memory size |
 | Request time | Duration in the Lambda logs | Revising the cost estimate ([cost.md](cost.md)) |
-| SHA256 computation in the browser | Time to hash large files before the upload | Attachment size limit |
+| Registering a large upload | Time of the copy in S3 when the upload is registered | Attachment size limit |
 
 ## Coverage
 
@@ -273,7 +273,7 @@ LocalStack needs an auth token in `LOCALSTACK_AUTH_TOKEN`, which is never writte
 
 ## To verify
 
-- Whether moto stores and returns `ChecksumSHA256` for a PUT with `x-amz-checksum-sha256`, and rejects a mismatch
+- Whether moto returns `ChecksumSHA256` for a copy made with `ChecksumAlgorithm` `SHA256`
 - Whether moto reproduces SES v2 `SendEmail` (sending the full message)
 - Whether Lambda Web Adapter can run on the Runtime Interface Emulator
 - How many of Redmine's attachment tests can pass with S3

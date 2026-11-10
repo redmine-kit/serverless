@@ -361,7 +361,7 @@ flowchart LR
 
 | 項目 | 値 | 理由 |
 | --- | --- | --- |
-| 関数 | `redmine-body-hash`。デフォルトのキャッシュビヘイビアのオリジンリクエスト (origin request) に、本文を含めて (`IncludeBody`) 関連付ける。`/tmp/*` にも、本文を含めずに関連付ける | 本文を読めるのは Lambda@Edge だけ。オリジンリクエストなら、本文を 1 MB まで読める (ビューワーリクエストでは 40 KB まで)。`/tmp/*` では、アップロードのチェックサムを S3 に渡す |
+| 関数 | `redmine-body-hash`。デフォルトのキャッシュビヘイビアのオリジンリクエスト (origin request) に、本文を含めて (`IncludeBody`) 関連付ける | 本文を読めるのは Lambda@Edge だけ。オリジンリクエストなら、本文を 1 MB まで読める (ビューワーリクエストでは 40 KB まで) |
 | ランタイム | Node.js 24 (`nodejs24.x`。Lambda@Edge が対応する最新のもの)、x86_64、128 MB、5 秒。依存する npm パッケージは使わず、`node:crypto` だけで実装する。コードは `infra/shared-edge.yaml` に埋め込み、`bin/test-edge` でテストする ([testing.md](testing.md#edge-function-tests)) | Lambda@Edge は Node.js と Python だけで、コンテナイメージと arm64 には対応しない |
 | アーキテクチャ、メモリ、タイムアウト | x86_64、128 MB、5 秒 | ハッシュの計算だけ |
 | リージョン | us-east-1 | Lambda@Edge 関数は us-east-1 に作成する必要がある |
@@ -369,14 +369,13 @@ flowchart LR
 
 処理は次のとおりです。
 
-1. S3 へのリクエスト (`/tmp/*`) では、アップロードのチェックサムだけを扱います。`/tmp/incoming/<UUID>.<SHA256 の 16 進数>` への PUT では、その SHA256 を `x-amz-checksum-sha256` (base64) に入れ、ほかのリクエストはそのまま通します。無料プランで使えるのはマネージドオリジンリクエストポリシーだけで、ブラウザーの `x-amz-checksum-sha256` だけを転送するものはありません。署名付き URL はキーを含むので、チェックサムは Redmine が決めたものです ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload))。
-2. 本文がないか空なら、空の本文の SHA256 (`e3b0c442…b855`) を入れます。
-3. 本文が 1 MB を超えて切り詰められていたら (`inputTruncated`)、オリジンに転送せず、413 を返します。ハッシュが一致しないリクエストを転送しても、関数 URL で拒否されるだけだからです。
-4. 本文を base64 からデコードしたバイト列のまま SHA256 を計算して、`x-amz-content-sha256` に入れます。文字列に変換してから計算すると、バイナリの本文で値が変わるので、バイト列のまま計算します。
+1. 本文がないか空なら、空の本文の SHA256 (`e3b0c442…b855`) を入れます。
+2. 本文が 1 MB を超えて切り詰められていたら (`inputTruncated`)、オリジンに転送せず、413 を返します。ハッシュが一致しないリクエストを転送しても、関数 URL で拒否されるだけだからです。
+3. 本文を base64 からデコードしたバイト列のまま SHA256 を計算して、`x-amz-content-sha256` に入れます。文字列に変換してから計算すると、バイナリの本文で値が変わるので、バイト列のまま計算します。
 
 この関数があるので、CloudFront を経由して Redmine に転送されるリクエスト本文は 1 MB までになります。画面からの添付ファイルは S3 に直接送るので、この制限を受けません。制限を受けるものは、下の[「6 MB の制限」](#the-6-mb-limit)にまとめました。
 
-この関数はオリジンリクエストで実行されるので、キャッシュしない画面のリクエストごとと、`/tmp/*` (サムネイル、zip、アップロード。どれもキャッシュしない) のリクエストごとに実行されます。ap-northeast-1 では 100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルで (料金表)、月 5 万件なら 0.1 ドル未満です。CloudFront の定額料金プランでも使え、料金はプランとは別にかかります (AWS のブログ、2026-03-24)。ログは、関数が実行されたエッジロケーションに近いリージョンの CloudWatch Logs に出力されます (`/aws/lambda/us-east-1.redmine-body-hash`)。
+この関数はオリジンリクエストで実行されるので、キャッシュしない画面のリクエストごとに実行されます。添付ファイルのビヘイビアには関連付けません。アップロードの SHA256 は、Redmine がコピーするときに S3 が計算します ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload))。ap-northeast-1 では 100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルで (料金表)、月 5 万件なら 0.1 ドル未満です。CloudFront の定額料金プランでも使え、料金はプランとは別にかかります (AWS のブログ、2026-03-24)。ログは、関数が実行されたエッジロケーションに近いリージョンの CloudWatch Logs に出力されます (`/aws/lambda/us-east-1.redmine-body-hash`)。
 
 Lambda@Edge で本文のハッシュを追加してから OAC が署名する構成は、公式のドキュメントには記載されていません。動作したという実践の記録はあります (クラスメソッドの記事、2024-07-29。公式の情報ではありません)。最初に試して確認します。
 
@@ -425,9 +424,9 @@ CloudFront は、定額料金プランの無料プラン (月 0 ドル) を既�
 | キャッシュビヘイビア | 5 つまで | 4 つ (下記) |
 | キャッシュポリシー | マネージドポリシーだけ (カスタムのキャッシュルールはビジネスプランから) | Redmine、`/files/*`、`/tmp/*` は `CachingDisabled`、`/assets/*` は `CachingOptimized` |
 | オリジンリクエストポリシー | マネージドポリシーだけ (カスタムポリシーはビジネスプランから) | Redmine は `AllViewerExceptHostHeader`、S3 はなし |
-| レスポンスヘッダーポリシー | マネージドポリシーだけ (カスタムポリシーはビジネスプランから) | すべてのビヘイビアに `SecurityHeadersPolicy`。添付ファイルの sandbox の CSP と `nosniff` は CloudFront Functions で追加する |
+| レスポンスヘッダーポリシー | マネージドポリシーだけ (カスタムポリシーはビジネスプランから) | すべてのビヘイビアに `SecurityHeadersPolicy`。添付ファイルの `nosniff` もこのポリシーで付く。sandbox の CSP とファイル名は CloudFront Functions で追加する |
 | CloudFront Functions | 含まれる。ほかのディストリビューションが使う関数は関連付けられない | `<instance>-incoming-size` (ビューワーリクエスト) と `<instance>-attachment-headers` (ビューワーレスポンス)。インスタンスごと |
-| Lambda@Edge | 使える。呼び出し料金はプランとは別 | `redmine-body-hash` (オリジンリクエスト)。インスタンス間で共有 |
+| Lambda@Edge | 使える。呼び出し料金はプランとは別 | `redmine-body-hash` (Redmine のビヘイビアのオリジンリクエスト)。インスタンス間で共有 |
 | KeyValueStore | 含まれない | 使わない |
 | オリジンアクセスコントロール、署名付き URL | 含まれる | 関数 URL と S3 のオリジン、添付ファイルのキーグループ |
 | VPC オリジン | 含まれない | 使わない。関数 URL と S3 は VPC 外 |
@@ -474,4 +473,3 @@ Event Functions の同期呼び出しは、リクエストとレスポンスが�
 - `X-Forwarded-Host` で、リダイレクトとメールの URL が正しいドメインになるか
 - Lambda@Edge で `x-amz-content-sha256` を追加したあと、OAC の署名で、関数 URL が POST、PUT、PATCH、DELETE を受け付けるか。本文のない POST と、マルチパートのフォームでも成功するか
 - Lambda@Edge の `inputTruncated` で 413 を返したときに、ブラウザーと API クライアントが理解できる応答になるか
-- `/tmp/*` で `redmine-body-hash` が追加する `x-amz-checksum-sha256` に、Redmine のビヘイビアの `x-amz-content-sha256` と同じく OAC が署名するか

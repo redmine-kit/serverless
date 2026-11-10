@@ -125,7 +125,7 @@ Lambda Managed Instances (1 つの実行環境で複数のリクエストを処�
 
 ### 添付ファイル
 
-- **アップロード:** ブラウザーがファイルの SHA256 を計算し、Redmine から CloudFront 署名付き URL を受け取って、CloudFront 経由で S3 に PUT します。内容が SHA256 と一致しなければ、S3 が拒否します。Redmine は、S3 が検証したチェックサムを読み取って、添付ファイルのレコードを作成します。
+- **アップロード:** ブラウザーが、Redmine から CloudFront 署名付き URL を受け取って、CloudFront 経由で S3 に PUT します。Redmine は、ファイルを S3 の中の保存先にコピーし、S3 が計算した SHA256 をダイジェストにして、添付ファイルのレコードを作成します。
 - **ダウンロード:** Redmine が権限を確認してから、`/files/` の下の CloudFront 署名付き URL へリダイレクトします。CloudFront が OAC で S3 からオブジェクトを読み込み、Redmine の sandbox の CSP を付けます。
 - **サーバーでの処理:** サムネイルや Office ファイルのプレビューなど、ローカルファイルが必要な処理は、S3 から `/tmp` のキャッシュに取得して行います。
 
@@ -220,7 +220,7 @@ GitHub Packages の RubyGems レジストリからインストールするには
 ```text
 serverless/
   image/          コンテナイメージ(Dockerfile、設定ファイル、起動スクリプト、拡張機能のスクリプト、タスクハンドラー)
-  edge/           CloudFront で動作する関数。redmine-body-hash(Lambda@Edge。リクエスト本文のハッシュとアップロードのチェックサムを追加する)と、アップロードのサイズを制限し、添付ファイルのヘッダーを付ける CloudFront Functions の関数、そのテスト
+  edge/           CloudFront で動作する関数。redmine-body-hash(Lambda@Edge。リクエスト本文のハッシュを追加する)と、アップロードのサイズを制限し、添付ファイルのヘッダーを付ける CloudFront Functions の関数、そのテスト
   infra/          CloudFormation(アカウント単位のロール。共有基盤。インスタンス別の VPC の利用、データベース、S3、SQS、Lambda、CloudFront、WAF、SES、スケジュール、アラーム。us-east-1 の Lambda@Edge、証明書、Web ACL)
   deploy/         bin/deploy の手順と、そのツールのイメージ
   schema/         redmine.json の JSON Schema

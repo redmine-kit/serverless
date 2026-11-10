@@ -313,7 +313,7 @@ flowchart LR
 
 | Item | Value | Reason |
 | --- | --- | --- |
-| Function | `redmine-body-hash`, attached to the origin request of the default behavior, with the body included (`IncludeBody`), and of `/tmp/*`, without the body | Only Lambda@Edge can read the body. At the origin request it can read up to 1 MB of the body (up to 40 KB at the viewer request). On `/tmp/*` it gives S3 the checksum of uploads |
+| Function | `redmine-body-hash`, attached to the origin request of the default behavior, with the body included (`IncludeBody`) | Only Lambda@Edge can read the body. At the origin request it can read up to 1 MB of the body (up to 40 KB at the viewer request) |
 | Runtime | Node.js 24 (`nodejs24.x`, the latest Lambda@Edge supports), x86_64, 128 MB, 5 seconds. Written with `node:crypto` only, without npm package dependencies. The code is inline in `infra/shared-edge.yaml` and is tested by `bin/test-edge` ([testing.md](testing.md#edge-function-tests)) | Lambda@Edge supports only Node.js and Python, and does not support container images or arm64 |
 | Architecture, memory, timeout | x86_64, 128 MB, 5 seconds | It only computes a hash |
 | Region | us-east-1 | Lambda@Edge functions must be created in us-east-1 |
@@ -321,14 +321,13 @@ flowchart LR
 
 The processing is as follows.
 
-1. For a request to S3 (`/tmp/*`), only the uploads' checksum: a PUT to `/tmp/incoming/<UUID>.<SHA256 in hexadecimal>` gets that SHA256 in `x-amz-checksum-sha256` (base64), and other requests pass unchanged. The Free plan allows only AWS-managed origin request policies, and none forwards the browser's `x-amz-checksum-sha256` alone; the signed URL covers the key, so the checksum is Redmine's ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload)).
-2. If there is no body or the body is empty, add the SHA256 of an empty body (`e3b0c442…b855`).
-3. If the body is over 1 MB and was truncated (`inputTruncated`), return 413 without sending it to the origin. A request with a mismatched hash would only be rejected by the function URL.
-4. Compute the SHA256 over the body as bytes decoded from base64 and put it in `x-amz-content-sha256`. Computing it after converting to a string would change the value for binary bodies, so it is computed over the bytes.
+1. If there is no body or the body is empty, add the SHA256 of an empty body (`e3b0c442…b855`).
+2. If the body is over 1 MB and was truncated (`inputTruncated`), return 413 without sending it to the origin. A request with a mismatched hash would only be rejected by the function URL.
+3. Compute the SHA256 over the body as bytes decoded from base64 and put it in `x-amz-content-sha256`. Computing it after converting to a string would change the value for binary bodies, so it is computed over the bytes.
 
 Because of this function, request bodies that reach Redmine through CloudFront are limited to 1 MB. Attachments from pages go directly to S3, so they are not affected; what is affected is listed under ["The 6 MB limit"](#the-6-mb-limit) below.
 
-The function runs on the origin request, so it runs for every uncached page request, and for every request to `/tmp/*` (thumbnails, zips and uploads; nothing there is cached). In ap-northeast-1 it costs $0.60 per million requests and $0.00005001 per GB-second (price list), which comes to less than $0.1 at 50,000 requests a month. It also works with the CloudFront flat-rate plans and is charged separately from the plan (AWS blog, 2026-03-24). Its logs go to CloudWatch Logs in the region near the edge where it ran (`/aws/lambda/us-east-1.redmine-body-hash`).
+The function runs on the origin request, so it runs for every uncached page request. It is not attached to the attachments' behaviors: S3 computes the SHA256 of an upload itself when Redmine copies it ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload)). In ap-northeast-1 it costs $0.60 per million requests and $0.00005001 per GB-second (price list), which comes to less than $0.1 at 50,000 requests a month. It also works with the CloudFront flat-rate plans and is charged separately from the plan (AWS blog, 2026-03-24). Its logs go to CloudWatch Logs in the region near the edge where it ran (`/aws/lambda/us-east-1.redmine-body-hash`).
 
 Adding the body hash with Lambda@Edge and then signing with OAC is not described in the official documentation. A practical report says it works (a Classmethod article, 2024-07-29; not official information); it is the first thing to try.
 
@@ -371,9 +370,9 @@ The features the templates use, against the table of features per plan in the Cl
 | Cache behaviors | Up to 5 | 4 (below) |
 | Cache policies | AWS-managed only ("custom caching rules" from Business) | `CachingDisabled` on Redmine, `/files/*` and `/tmp/*`; `CachingOptimized` on `/assets/*` |
 | Origin request policies | AWS-managed only ("custom origin request rules" from Business) | `AllViewerExceptHostHeader` on Redmine; none on S3 |
-| Response headers policies | AWS-managed only ("custom response header rules" from Business) | `SecurityHeadersPolicy` on every behavior. The attachments' sandbox CSP and `nosniff` come from a CloudFront Function |
+| Response headers policies | AWS-managed only ("custom response header rules" from Business) | `SecurityHeadersPolicy` on every behavior; it also gives the attachments `nosniff`. Their sandbox CSP and file name come from a CloudFront Function |
 | CloudFront Functions | Included. A function used by another distribution cannot be attached | `<instance>-incoming-size` (viewer request) and `<instance>-attachment-headers` (viewer response), per instance |
-| Lambda@Edge | Can be used, charged per invocation outside the plan | `redmine-body-hash` (origin request), shared by the instances |
+| Lambda@Edge | Can be used, charged per invocation outside the plan | `redmine-body-hash` (origin request of Redmine's behavior), shared by the instances |
 | KeyValueStore | Not included | Not used |
 | Origin access control, signed URLs | Included | Function URL and S3 origins; the key group of the attachments |
 | Origins inside a VPC | Not included | Not used: the function URL and S3 are outside a VPC |
@@ -414,4 +413,3 @@ Synchronous invocations of Event Functions are limited to 6 MB each for the requ
 - Whether redirects and URLs in mail use the correct domain with `X-Forwarded-Host`
 - Whether, after Lambda@Edge adds `x-amz-content-sha256` and OAC signs the request, the function URL accepts POST, PUT, PATCH and DELETE. Whether POST without a body and multipart forms also pass
 - Whether returning 413 on Lambda@Edge `inputTruncated` gives a response that browsers and API clients can understand
-- Whether OAC signs the `x-amz-checksum-sha256` that `redmine-body-hash` adds on `/tmp/*`, as it does for `x-amz-content-sha256` on Redmine's behavior

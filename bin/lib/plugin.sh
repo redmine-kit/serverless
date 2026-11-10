@@ -13,8 +13,8 @@ export BUNDLE_RUBYGEMS__PKG__GITHUB__COM
 # shellcheck disable=SC2034
 plugin_context=(--secret "id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM")
 
-# With REDMINE_SERVERLESS_SSM_DIR or REDMINE_SERVERLESS_S3_DIR set to a
-# checkout of the plugin, its working tree (the files git tracks or would
+# With REDMINE_SERVERLESS_DIR, REDMINE_SERVERLESS_SSM_DIR or
+# REDMINE_SERVERLESS_S3_DIR set to a checkout of the plugin, its working tree (the files git tracks or would
 # track) replaces the installed gem, for working on several repositories at
 # once:
 #   REDMINE_SERVERLESS_S3_DIR=../redmine_serverless_s3 bin/test-image
@@ -27,6 +27,7 @@ export_plugin() {
   git -C "$2" ls-files -z --cached --others --exclude-standard |
     tar -C "$2" --null -T - -cf - | tar -C "$overrides/$1" -xf -
 }
+[[ -z "${REDMINE_SERVERLESS_DIR:-}" ]] || export_plugin redmine_serverless "$REDMINE_SERVERLESS_DIR"
 [[ -z "${REDMINE_SERVERLESS_SSM_DIR:-}" ]] || export_plugin redmine_serverless_ssm "$REDMINE_SERVERLESS_SSM_DIR"
 [[ -z "${REDMINE_SERVERLESS_S3_DIR:-}" ]] || export_plugin redmine_serverless_s3 "$REDMINE_SERVERLESS_S3_DIR"
 plugin_context+=(--build-context "plugin-overrides=$overrides")

@@ -42,7 +42,7 @@ GitHub Actions も同じ `bin/test` の手順を順に呼び出すので、ロ�
 
 ### プラグインの同時修正
 
-イメージは、プラグインを `image/Gemfile.lock` のバージョンの gem として、GitHub Packages からインストールします ([architecture.md](architecture.md#distribution))。`REDMINE_SERVERLESS_SSM_DIR` か `REDMINE_SERVERLESS_S3_DIR` にプラグインのチェックアウトを指定すると、イメージをビルドするスクリプトは、インストールした gem をその作業ツリーで置き換えます (`bin/lib/plugin.sh`)。たとえば、このリポジトリの隣にある SSM プラグインのチェックアウトでイメージをテストするときは、次のようにします。
+イメージは、プラグインを `image/Gemfile.lock` のバージョンの gem として、GitHub Packages からインストールします ([architecture.md](architecture.md#distribution))。`REDMINE_SERVERLESS_DIR`、`REDMINE_SERVERLESS_SSM_DIR`、`REDMINE_SERVERLESS_S3_DIR` のいずれかにプラグインのチェックアウトを指定すると、イメージをビルドするスクリプトは、インストールした gem をその作業ツリーで置き換えます (`bin/lib/plugin.sh`)。たとえば、このリポジトリの隣にある SSM プラグインのチェックアウトでイメージをテストするときは、次のようにします。
 
 ```sh
 REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image

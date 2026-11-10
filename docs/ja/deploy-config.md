@@ -157,9 +157,13 @@ Lambda@Edge 関数のほかに、CloudFront の証明書 (ACM) も us-east-1 に
 }
 ```
 
-どちらかのリストが空でなければ、`bin/deploy` は、下の手順の前に、実行しているマシンで派生イメージをビルドします。ベースは `image.repository` と `image.digest` のイメージです (指定がなければ、リストがないときと同じく Redmine のバージョンのタグ)。`bin/build-derived-image` は、プラグインを `plugins/` に、テーマを `themes/` に配置し、プラグインの gem とプラグインの Gemfile にある gem を、ベースイメージのロックに追加します (ロック済みのバージョンは、追加した gem がより新しいバージョンを必要とする場合だけ変わる)。gem のプラグインは、ベースイメージと同じく `plugins/` にリンクし、アセットを再生成します (`assets:precompile`)。そのあと、追加したプラグインとテーマの確認を加えたイメージテストを実行し ([testing.md](testing.md#image-tests))、手順 5 でアカウントの ECR にプッシュします。続く手順で、テーマのアセットを含めて S3 にアップロードし、追加したプラグインのマイグレーション (`redmine:plugins:migrate`) を実行し、関数のイメージを更新します。追加したプラグインの設定も、ほかのプラグインと同じく `redmine.pluginSettings` で指定できます。
+どちらかのリストが空でなければ、`bin/deploy` は、下の手順の前に、実行しているマシンで派生イメージをビルドします。ベースは `image.repository` と `image.digest` のイメージです (指定がなければ、リストがないときと同じく Redmine のバージョンのタグ)。`bin/build-derived-image` は、プラグインを `plugins/` に、テーマを `themes/` に配置し、プラグインの gem とプラグインの Gemfile にある gem を、ベースイメージのロックに追加します。gem のプラグインは、ベースイメージと同じく `plugins/` にリンクし、アセットを再生成します (`assets:precompile`)。そのあと、追加したプラグインとテーマの確認を加えたイメージテストを実行し ([testing.md](testing.md#image-tests))、手順 5 でアカウントの ECR にプッシュします。続く手順で、テーマのアセットを含めて S3 にアップロードし、追加したプラグインのマイグレーション (`redmine:plugins:migrate`) を実行し、関数のイメージを更新します。追加したプラグインの設定も、ほかのプラグインと同じく `redmine.pluginSettings` で指定できます。
 
-Git の取得元は、BuildKit が `refs/tags/<ref>` かそのコミットで取得するので、HTTPS の公開リポジトリだけを指定できます。非公開のプラグインは、`redmine.json` の隣にチェックアウトして `path` で指定するか、gem として公開します。GitHub Packages 用の Bundler の認証情報は、環境変数 `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (`x-access-token:<read:packages を持つトークン>`) か、`gh` がインストールされていれば `gh` のログインから取得します。BuildKit のシークレットとしてビルドに渡すので、レイヤーにも `redmine.json` にも残りません。リストがなければ何もビルドせず、これまでどおりイメージをコピーします。
+派生イメージでも、ベースイメージの gem のバージョンは変えません。追加したプラグインが、このプロジェクトでテストした内容を変えないようにするためです。Bundler は、追加する gem のバージョンを、ベースイメージの gem と両立するものから選びます。追加したプラグインがベースイメージの gem の別のバージョンを必要とする場合は、ビルドが失敗し、その gem の名前を表示します。ベースイメージの gem で動くバージョンのプラグインを選ぶか、プラグインが必要とするバージョンを持つベースイメージを使います。
+
+Git の取得元には、HTTPS の公開リポジトリだけを指定できます。ビルドでは、BuildKit が `refs/tags/<ref>` かそのコミットを、認証情報なしで取得します。認証情報が必要なリポジトリは取得できず、ビルドはその旨のメッセージを表示して止まります。非公開のプラグインやテーマは、`redmine.json` の隣にチェックアウトして `path` で指定するか、プラグインなら gem として公開します。
+
+RubyGems の gem には、認証情報は不要です。GitHub Packages 用の Bundler の認証情報は、環境変数 `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (`x-access-token:<read:packages を持つトークン>`) から取得します。この変数がなく、`gh` がインストールされていれば、`gh` のログインから取得します。BuildKit のシークレットとしてビルドに渡すので、レイヤーにも `redmine.json` にも残りません。リストがなければ何もビルドせず、これまでどおりイメージをコピーします。
 
 デプロイせずに派生イメージをビルドしてテストするには、同じスクリプトを実行します。
 
@@ -265,5 +269,6 @@ CloudFormation は SecureString パラメーターを作成できないので、
 - SES の受信ルールセットを共有基盤に置き、インスタンスのスタックからルールを追加する構成を、CloudFormation で作成できるか
 - RDS インスタンスが、作成時と更新時に、`ssm-secure` の動的参照でパスワードを受け取れるか (CloudFormation のドキュメントでは対応しているプロパティ。まだ試していない)
 - crane が `ghcr.io` からコピーしたイメージ (同じ digest) を、Lambda が実行できるか。初回のコピーにかかる時間
+- 実際の AWS で、派生イメージを tarball から ECR にプッシュできるか (手順 5)。LocalStack の ECR でだけテストしていて、プッシュしたイメージを LocalStack の Lambda が実行する ([testing.md](testing.md#lambda-integration-tests))
 - 実際のアカウントでの `bin/deploy` 全体の動作。現在は、AWS CLI のスタブと LocalStack でだけテストしている ([testing.md](testing.md#deployment-tests))
 - `redmine-web` の予約された同時実行が 0 のあいだ、ブラウザーに何が表示されるか (CloudFront 経由の関数 URL の 429)。メンテナンス画面を表示する別の方法が必要か

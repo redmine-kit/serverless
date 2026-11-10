@@ -36,7 +36,7 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 
 GitHub Actions も同じ `bin/test` の手順を順に呼び出すので、ローカルと CI でテストの方法は変わりません。CI の実行順序 (下記) の途中で失敗したらそこで止まり、テストに通らないものはデプロイしません。
 
-`bin/test` にまとめるまでは、ここまでに作った手順は個別のスクリプトです。`bin/lint` (静的解析)、`bin/test-services` (PostgreSQL、moto、LocalStack を起動し、それぞれが応答するか確認する)、`bin/build-image`、`bin/test-image` (イメージテスト)、`bin/build-derived-image` (プラグインとテーマを追加した派生イメージ)、`bin/test-core` (Redmine 本体のテスト)、`bin/update-gems` (`image/Gemfile.lock` を書き出す) です。
+`bin/test` にまとめるまでは、ここまでに作った手順は個別のスクリプトです。`bin/lint` (静的解析)、`bin/test-services` (PostgreSQL、moto、LocalStack を起動し、それぞれが応答するか確認する)、`bin/build-image`、`bin/test-image` (イメージテスト)、`bin/build-derived-image` (プラグインとテーマを追加した派生イメージ)、`bin/test-derived-image` (派生イメージのテスト)、`bin/test-core` (Redmine 本体のテスト)、`bin/update-gems` (`image/Gemfile.lock` を書き出す) です。
 
 <a id="working-on-a-plugin-at-the-same-time"></a>
 
@@ -194,7 +194,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 - **`task`:** ベースイメージにあるランタイムインターフェイスエミュレーター (`aws-lambda-rie`) でハンドラーを呼び出し、`rake db:migrate`、`redmine:load_default_data`、`rake -T`、`rails runner` が動くこと、失敗したタスクが終了コードを返すこと、許可していないコマンドと `env` の名前を拒否することを確認します。メールの取り込みは、プラグインと一緒に追加します。
 - **`worker`:** 同じくエミュレーターで実行します。ジョブをキューに送信して受信し、そのメッセージの受信ハンドルを付けた SQS 形式のイベントで worker に渡します。呼び出しが成功すること、ジョブが実行されること (プロジェクトが削除され、その通知メールが SQS に追加される)、worker がメッセージを削除すること (処理中のメッセージが残らない。`redmine_serverless_sqs` は `REDMINE_JOBS_QUEUE_URL` で削除する。[setup.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/setup.html))、許可していないジョブクラスが実行されないことを確認します。
 - **内容:** ImageMagick の `convert`、Ghostscript、Pandoc (3.8.3 以上) が動くこと、`/var/task` と `/opt` のすべてを非特権ユーザーが読めること、ビルドしたアセットがあることを確認します。タスクハンドラーの単体テストも、イメージ内で実行します。push したマニフェストが arm64 だけで、インデックス形式になっていないかは、イメージを push するときに確認します。
-- **派生イメージ:** `bin/test-image <イメージ> <redmine.json>` は、`image.plugins` と `image.themes` の派生イメージ ([architecture.md](architecture.md#derived-images)) に同じテストを実行し、追加したプラグインが読み込まれてマイグレーション済みであること、追加したテーマが見つかり、そのアセットがコンパイル済みであることも確認します。`bin/deploy` は、派生イメージをプッシュする前にこれを実行します。CI では、Redmine のリリースのイメージのジョブが、ビルドしたばかりのイメージをベースに `test/derived/redmine.json` の派生イメージをビルドしてテストします。GitHub Packages の gem、コミットを指定した Git のプラグイン、ディレクトリのプラグインとテーマ (`test/derived/`)、プラグインの設定を含みます。
+- **派生イメージ:** `bin/test-image <イメージ> <redmine.json>` は、`image.plugins` と `image.themes` の派生イメージ ([architecture.md](architecture.md#derived-images)) に同じテストを実行し、追加したプラグインが読み込まれてマイグレーション済みであること、追加したテーマが見つかり、そのアセットがコンパイル済みであることも確認します。`bin/deploy` は、派生イメージをプッシュする前にこれを実行します。`bin/test-derived-image [ベースイメージ]` は、`test/derived/` の派生イメージをビルドしてテストします。1 つは GitHub Packages の gem、コミットを指定した Git のプラグイン、ディレクトリのプラグインとテーマ、プラグインの設定を含むもの、1 つは RubyGems の gem を含み、GitHub のトークンなしでビルドするものです。ほかの 2 つは、わかりやすいメッセージで失敗する必要があるもので、ベースイメージの gem の別のバージョンを必要とするプラグインと、認証情報が必要な Git の取得元です。CI では、Redmine のリリースのイメージのジョブが、ビルドしたばかりのイメージに対して実行します。
 
 <a id="edge-function-tests"></a>
 
@@ -225,7 +225,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 `bin/test-lambda` が、LocalStack 上で、イメージを Lambda として実行します (専用の Compose プロジェクト、`test/lambda/compose.yml`)。`LOCALSTACK_AUTH_TOKEN` が必要で、なければスキップします。CI では、Redmine のリリースから作るイメージのジョブで実行します。
 
 - **ライセンス:** テストには、ECR、コンテナイメージの関数、SES v2 が必要です。CI で使う Organization の Ultimate ライセンスには、これらが含まれます。トークンはあるのにライセンスにどれかが含まれないときは、`bin/test-lambda` はスキップせずに失敗します。スキップするのは、トークンがないときだけです。モックは使いません。テストが使う API は、すべて LocalStack にあります。
-- **イメージ:** LocalStack の ECR に push し、LocalStack の Lambda がそこから実行します。
+- **イメージ:** `bin/deploy` が派生イメージをプッシュするのと同じ方法で、LocalStack の ECR にプッシュします。tarball に保存し、そこから計算した digest で crane がプッシュします (`deploy/lib.sh` の `push_tarball`)。LocalStack の Lambda は、そこからその digest で実行します。
 - **シークレット:** `deploy/lib.sh` の `create_secrets` が SSM にシークレットを作成し、2 回目は変更しないこと。
 - **`redmine-task`:** `bin/deploy` と同じく、`deploy/lib.sh` の `task` で呼び出します。`db:migrate`、`redmine:load_default_data`、`SECRET_KEY_BASE` を SSM から読むこと、失敗したコマンドが失敗になること、設定のコード。
 - **`redmine-worker`:** SQS のイベントソースマッピングから実行します。タスクが `DestroyProjectJob` をキューに追加し、worker が実行し、可視性タイムアウトの後もジョブが 1 回しか実行されないことで、メッセージが削除されたことを確認します (イメージテストでは、moto のためこれを確認できません)。ジョブの通知メールは、worker が SES v2 で送信します。

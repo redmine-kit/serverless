@@ -214,7 +214,7 @@ WAF は、リクエストがオリジンに到達する前に評価されます�
 | GitHub Actions | 使うアクションを、タグではなくコミットの SHA で固定する |
 | Lambda@Edge 関数 | 依存する npm パッケージを使わない (`node:crypto` だけ) |
 | 配布するイメージとプラグイン | アダプタは、イメージを digest で参照する。プラグインの gem は、バージョンとチェックサムを `image/Gemfile.lock` で固定する ([architecture.md](architecture.md#distribution)) |
-| アダプタが追加するプラグインとテーマ | `image.plugins` と `image.themes` には、バージョンを完全に指定した gem、タグか完全なコミットハッシュを指定した Git のリポジトリ (ブランチは不可)、ディレクトリだけを指定でき、派生イメージのロックは、追加した gem が必要とする場合を除き、ベースイメージのバージョンを変えない。GitHub Packages の認証情報はビルドのシークレットで渡し、レイヤーにも `redmine.json` にも残さない。追加したコードは関数の権限で動くので、アダプタが内容を確認する。タグは付け替えられるので、Git の取得元はコミットハッシュのほうが確実に固定できる ([architecture.md](architecture.md#derived-images)) |
+| アダプタが追加するプラグインとテーマ | `image.plugins` と `image.themes` には、バージョンを完全に指定した gem、タグか完全なコミットハッシュを指定した Git のリポジトリ (ブランチは不可)、ディレクトリだけを指定でき、派生イメージでもベースイメージの gem のバージョンは変えない (別のバージョンを必要とするプラグインは、ビルドを失敗させる)。Git の取得元は HTTPS の公開リポジトリで、認証情報なしで取得する。GitHub Packages の認証情報はビルドのシークレットで渡し、レイヤーにも `redmine.json` にも残さない。追加したコードは関数の権限で動くので、アダプタが内容を確認する。タグは付け替えられるので、Git の取得元はコミットハッシュのほうが確実に固定できる ([architecture.md](architecture.md#derived-images)) |
 
 Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md) の確認を経てから行います。
 

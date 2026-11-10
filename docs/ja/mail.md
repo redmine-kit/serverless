@@ -133,7 +133,7 @@ SES は確認済みの ID 宛てのメールだけを受信するので、サブ
 
 <a id="addresses-per-project"></a>
 
-### プロジェクトごとのアドレス
+### プロジェクト別のアドレス
 
 プロジェクトごとに、Redmine のサブドメインのアドレス(`<識別子>@redmine.example.com` か別名)を持たせ、そのプロジェクトのメールを受け取り、通知を送れます。プロジェクトに属さないメールは、Redmine 全体のアドレス(`redmine@redmine.example.com`)を使います。設定ファイルの `mail.perProjectAddresses` で有効にします。無効なら、Redmine の標準と同じに受け取ります(アドレスは 1 つで、プロジェクトはサブアドレスで決める)。アドレス、別名、送信元のしくみは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/receiving.html#addresses-per-project) と [sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#senders-per-project) にあります。
 

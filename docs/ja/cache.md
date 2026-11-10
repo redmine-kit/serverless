@@ -17,7 +17,7 @@ Redmine 7.0.3 がキャッシュを使うのは、次の数か所だけです(20
 
 <a id="the-design-memory-in-each-environment"></a>
 
-## この設計: 環境ごとのメモリ
+## この設計: 環境別のメモリ
 
 | 項目 | 値 |
 | --- | --- |
@@ -52,7 +52,7 @@ Rails 8.1 の既定は `tmp/cache/` のファイルですが、Lambda では `/t
 
 | 選択肢 | 内容 | 月の費用(東京、730 時間) |
 | --- | --- | --- |
-| 環境ごとのメモリ(この設計) | `:memory_store` | 0 ドル |
+| 環境別のメモリ(この設計) | `:memory_store` | 0 ドル |
 | ElastiCache Serverless for Valkey | マネージドで、大きさは自動。置いたデータの量(1 つのキャッシュで最低 100 MB)と、ElastiCache Processing Unit(ECPU。単純な読み書きは 1 KB ごとに 1 ECPU)で課金 | データ: 0.1 GB × 1 GB 時間あたり 0.101 ドル = 7.37 ドル。ECPU: 100 万あたり 0.0027 ドルで、たとえば 1,000 万なら 0.03 ドル。合わせて約 7.4 ドル |
 | ElastiCache for Valkey の `cache.t4g.micro` のノード 1 台 | レプリカなしのノード(0.5 GiB) | 1 時間 0.02 ドル = 14.60 ドル |
 

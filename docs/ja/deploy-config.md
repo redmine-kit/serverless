@@ -31,7 +31,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 
 <a id="shared-base-and-per-instance-resources"></a>
 
-## 共有の土台と、インスタンスごとのもの
+## 共有の土台と、インスタンス別のもの
 
 同じアカウントに複数のインスタンスを立てるときに、まとめて 1 つにできるものは、共有の土台(CloudFormation のスタック `redmine-shared`)に置きます。
 
@@ -41,7 +41,7 @@ Redmine を 1 つ立てるごとに、設定のファイルを 1 つ書き、同
 | 共有の土台(us-east-1) | Lambda@Edge の関数 `redmine-body-hash`(スタック `redmine-shared-edge`) | Lambda@Edge の関数は us-east-1 に作る決まり。同じコードを、インスタンスのあいだで使い回す([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge)) |
 | 共有の土台 | VPC、プライベートのサブネット、S3 のゲートウェイのエンドポイント、VPC のエンドポイントか NAT インスタンス(`network.shared`) | エンドポイントと NAT インスタンスには月の決まった費用がかかるので、インスタンスのあいだで分け合う([rds.md](rds.md#routes-out-of-the-vpc)) |
 | 共有の土台 | SES の受信のルールのセット | 有効なルールのセットは、リージョンに 1 つだけ。インスタンスごとに、セットの中にルールを足す([mail.md](mail.md#receipt-rules)) |
-| インスタンスごと | Lambda の関数、RDS のインスタンス、セキュリティグループ、S3 のバケット、SQS のキュー、CloudFront、DNS のレコード、SES の ID、SSM のパラメーター、アラーム | インスタンスのデータと権限を、ほかのインスタンスと混ぜない |
+| インスタンス別 | Lambda の関数、RDS のインスタンス、セキュリティグループ、S3 のバケット、SQS のキュー、CloudFront、DNS のレコード、SES の ID、SSM のパラメーター、アラーム | インスタンスのデータと権限を、ほかのインスタンスと混ぜない |
 
 Redmine を 1 つだけ立てるときは、共有の土台とインスタンスを 1 つずつ立てます。手順は同じです。
 

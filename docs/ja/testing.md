@@ -121,7 +121,7 @@ REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
 
 ### 実行方法
 
-`bin/test-core` は、イメージの Dockerfile の `core-test` ステージで実行します。このステージは、イメージと同じ Redmine のソース、`config/` のファイル、`Gemfile.lock` に、テスト用の gem、ImageMagick、Subversion クライアントを追加したものです。Redmine の `master` は、クライアントがインストールされているリポジトリの種類だけを有効にし ([#43209](https://www.redmine.org/issues/43209))、Redmine のテストのフィクスチャのリポジトリは Subversion です。イメージ自体には SCM のクライアントはありません。テストは、イメージのプラグイン (`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`、`redmine_serverless_ssm`) をインストールした状態で実行します。データベースは `bin/test-services` の PostgreSQL で、プロセッサー数と同じ数のワーカーで並列に実行します (数は `PARALLEL_WORKERS` で変更できます)。
+`bin/test-core` は、イメージの Dockerfile の `core-test` ステージで実行します。このステージは、イメージと同じ Redmine のソース、`config/` のファイル、`Gemfile.lock` に、テスト用の gem、ImageMagick と、イメージと同じ Subversion と Git のクライアントを追加したものです。Redmine の `master` は、クライアントがインストールされているリポジトリの種類だけを有効にします ([#43209](https://www.redmine.org/issues/43209))。Redmine のテストのフィクスチャのリポジトリは Subversion で、Git がないとスキップされるテストもあります。テストは、イメージのプラグイン (`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`、`redmine_serverless_ssm`) をインストールした状態で実行します。データベースは `bin/test-services` の PostgreSQL で、プロセッサー数と同じ数のワーカーで並列に実行します (数は `PARALLEL_WORKERS` で変更できます)。
 
 イメージは、Lambda のファイルシステムが読み取り専用なので、migration の後に `db/schema.rb` を書き出しません。しかし並列テストはこのファイルを読むので、`bin/test-core` が、Redmine とプラグインの migration (デプロイと同じく `redmine:plugins:migrate` も) の後、テストの前に書き出します。SCM リポジトリや LDAP サーバーが必要なテストは、このステージで用意しないので、Redmine がスキップします。
 

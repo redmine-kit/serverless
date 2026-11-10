@@ -60,11 +60,13 @@ FROM scratch AS lockfile
 COPY --from=lock /var/task/redmine/Gemfile.lock /
 
 # Redmine's own tests (bin/test-core): Redmine with this image's
-# configuration and gems, plus the test group. The Subversion client is for
-# the tests only: Redmine master enables a repository type only when its
-# client is installed (#43209), and the fixtures' repositories are Subversion.
+# configuration and gems, plus the test group. The Subversion and Git
+# clients are there as in the image (here as whole packages): Redmine master
+# enables a repository type only when its client is installed (#43209), the
+# fixtures' repositories are Subversion, and some tests are skipped when Git
+# is unavailable.
 FROM source AS core-test
-RUN dnf install -y ImageMagick ghostscript urw-base35-fonts subversion && dnf clean all
+RUN dnf install -y ImageMagick ghostscript urw-base35-fonts subversion git-core && dnf clean all
 COPY image/Gemfile.lock ./
 COPY test/core/database.yml config/database.yml
 # A branch resolves its gems afresh (see the source stage).

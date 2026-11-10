@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Tests of derived images (docs/testing.md#derived-images), on top of a base
+# image built here (bin/build-image) or published:
+#   - test/derived: a gem from GitHub Packages, a plugin from Git at a commit,
+#     a plugin and a theme from directories; built and put through the image
+#     tests with the checks of what it adds
+#   - test/derived/rubygems: a plugin with a gem from RubyGems, built without
+#     a GitHub token, and put through the image tests
+#   - test/derived/drift: a plugin that asks for another version of a gem of
+#     the base image; the build fails and says so
+#   - test/derived/private-git: a Git entry that needs credentials; the build
+#     fails and says so
+#   bin/test-derived-image [base image]   # default: serverless:test
+set -euo pipefail
+cd "$(dirname "$0")/.."
+base="${1:-serverless:test}"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+echo "== test/derived"
+bin/build-derived-image test/derived/redmine.json "$base" serverless-derived:test
+bin/test-image serverless-derived:test test/derived/redmine.json
+
+echo "== test/derived/rubygems, without a GitHub token"
+BUNDLE_RUBYGEMS__PKG__GITHUB__COM='' \
+  bin/build-derived-image test/derived/rubygems/redmine.json "$base" serverless-derived:rubygems
+bin/test-image serverless-derived:rubygems test/derived/rubygems/redmine.json
+
+failures=0
+# The build fails, and its output has the message.
+fails_with() { # <config> <message>
+  if bin/build-derived-image "$1" "$base" serverless-derived:failing >"$tmp/output" 2>&1; then
+    echo "FAILED: $1 was built" >&2
+    failures=$((failures + 1))
+  elif ! grep -qF "$2" "$tmp/output"; then
+    tail -n 20 "$tmp/output" >&2
+    echo "FAILED: $1 did not say: $2" >&2
+    failures=$((failures + 1))
+  else
+    echo "ok: $1 fails: $2"
+  fi
+}
+echo "== Builds that fail"
+fails_with test/derived/drift/redmine.json "need other versions of gems in the base image"
+fails_with test/derived/private-git/redmine.json "A Git entry must be a public HTTPS repository"
+docker rmi serverless-derived:failing >/dev/null 2>&1 || true
+((failures == 0))

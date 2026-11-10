@@ -109,13 +109,11 @@ jobs:
           persist-credentials: false
       - run: bin/build-image
       - run: bin/test-image
-      # A derived image with the plugins and themes of test/derived, as
-      # bin/deploy builds it from image.plugins and image.themes, on the
+      # Derived images with the plugins and themes of test/derived, as
+      # bin/deploy builds them from image.plugins and image.themes, on the
       # release only.
       - if: matrix.redmine != 'master'
-        run: |
-          bin/build-derived-image test/derived/redmine.json serverless:test serverless-derived:test
-          bin/test-image serverless-derived:test test/derived/redmine.json
+        run: bin/test-derived-image serverless:test
       # The functions as Lambda on LocalStack, with the release only. Its
       # LocalStack takes the same port as the image tests' one, which stops
       # first.

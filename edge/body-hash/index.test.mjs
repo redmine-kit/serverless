@@ -69,26 +69,6 @@ test('the other parts of the request are kept', async () => {
   assert.equal(request.headers.host[0].value, 'example.com');
 });
 
-const s3 = (method, uri, headers = {}) => ({
-  Records: [{ cf: { request: { method, uri, headers, origin: { s3: { domainName: 'b.s3.amazonaws.com' } } } } }],
-});
-
-test('an upload to S3 gets the checksum from its key', async () => {
-  const bytes = randomBytes(64);
-  const hex = sha256(bytes);
-  const request = await handler(s3('PUT', `/tmp/incoming/0f8fad5b-d9cb-469f-a165-70867728950e.${hex}`));
-  assert.equal(request.headers['x-amz-checksum-sha256'][0].value, Buffer.from(hex, 'hex').toString('base64'));
-  assert.equal(request.headers['x-amz-content-sha256'], undefined, 'origin access control hashes S3 requests');
-});
-
-test('other requests to S3 get no header', async () => {
-  for (const [method, uri] of [['GET', '/tmp/thumbnails/d_1_100.thumb'], ['PUT', '/tmp/incoming/no-checksum'],
-    ['PUT', '/tmp/bulk/z.zip'], ['GET', '/files/2026/11/a.txt']]) {
-    const request = await handler(s3(method, uri));
-    assert.deepEqual(request.headers, {}, `${method} ${uri}`);
-  }
-});
-
 test('the template carries the same source', () => {
   const source = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
   const template = readFileSync(new URL('../../infra/shared-edge.yaml', import.meta.url), 'utf8');

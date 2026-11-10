@@ -18,11 +18,10 @@ const event = (querystring = {}, statusCode = 200) => ({
   response: { statusCode, headers: { 'content-type': { value: 'application/octet-stream' } } },
 });
 
-test('every response gets the sandbox CSP and nosniff', () => {
+test('every response gets the sandbox CSP', () => {
   for (const status of [200, 403, 404]) {
     const { headers } = handler(event({}, status));
     assert.equal(headers['content-security-policy'].value, CSP);
-    assert.equal(headers['x-content-type-options'].value, 'nosniff');
   }
 });
 

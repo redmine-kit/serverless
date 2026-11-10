@@ -988,17 +988,18 @@ Resources:
       Name: !Sub ${InstanceName}-attachment-headers
       AutoPublish: true
       FunctionConfig:
-        Comment: Sandbox CSP, nosniff and the file name and type of attachments
+        Comment: Sandbox CSP and the file name and type of attachments
         Runtime: cloudfront-js-2.0
       # edge/attachment-headers/index.js; its tests check that this is the same.
       FunctionCode: |
           // redmine-attachment-headers: CloudFront Function (cloudfront-js-2.0) on the
           // viewer response of the attachments' behaviors (/files/* and /tmp/*).
           // Attachments are served from Redmine's origin, so they get the sandbox CSP
-          // that Redmine's AttachmentsController sets, and nosniff. The file name and
-          // type come from the signed URL's response-content-disposition and
-          // response-content-type, which are not forwarded to S3: with the signature
-          // in the same query string, S3 would refuse the request.
+          // that Redmine's AttachmentsController sets; nosniff comes from the managed
+          // SecurityHeadersPolicy. The file name and type come from the signed URL's
+          // response-content-disposition and response-content-type, which are not
+          // forwarded to S3: with the signature in the same query string, S3 would
+          // refuse the request.
           var CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
           var OVERRIDES = { 'response-content-disposition': 'content-disposition', 'response-content-type': 'content-type' };
 
@@ -1006,7 +1007,6 @@ Resources:
             var response = event.response;
             var query = event.request.querystring;
             response.headers['content-security-policy'] = { value: CSP };
-            response.headers['x-content-type-options'] = { value: 'nosniff' };
             if (response.statusCode !== 200 && response.statusCode !== 206 && response.statusCode !== 304) {
               return response;
             }
@@ -1127,9 +1127,9 @@ Resources:
           # Attachments' files: signed GETs. Managed policies only, as the Free
           # plan allows: CachingDisabled, which forwards no query string to S3
           # (S3 refuses a request whose query string holds the signature next to
-          # origin access control's), and SecurityHeadersPolicy. The function
-          # adds the sandbox CSP and nosniff, and the file name and type from
-          # the signed URL.
+          # origin access control's), and SecurityHeadersPolicy, which adds
+          # nosniff. The function adds the sandbox CSP, and the file name and
+          # type from the signed URL.
           - PathPattern: /files/*
             TargetOriginId: attachments
             ViewerProtocolPolicy: redirect-to-https
@@ -1146,9 +1146,8 @@ Resources:
           # One behavior keeps the distribution within the 5 behaviors of the
           # Free plan; the bucket policy lets CloudFront only read thumbnails
           # and zips and only write uploads. The same policies and headers as
-          # /files/*. On uploads, incoming-size checks the size, and body-hash
-          # gives S3 the checksum that the upload's key ends with, since no
-          # managed policy forwards the browser's checksum header alone.
+          # /files/*. On uploads, incoming-size checks the size; S3 computes
+          # the SHA256 when Redmine copies the upload to files/.
           - PathPattern: /tmp/*
             TargetOriginId: attachments
             ViewerProtocolPolicy: https-only
@@ -1162,10 +1161,6 @@ Resources:
                 FunctionARN: !GetAtt IncomingSize.FunctionMetadata.FunctionARN
               - EventType: viewer-response
                 FunctionARN: !GetAtt AttachmentHeaders.FunctionMetadata.FunctionARN
-            LambdaFunctionAssociations:
-              - EventType: origin-request
-                IncludeBody: false
-                LambdaFunctionARN: !Ref BodyHashFunctionArn
           # Compiled assets (CachingOptimized).
           - PathPattern: /assets/*
             TargetOriginId: assets

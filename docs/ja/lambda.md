@@ -15,7 +15,7 @@ Redmine (Rails と Puma) を、Lambda Event Functions で実行するための�
 | アーキテクチャ | arm64 | x86 より実行時間の単価が安い (ap-northeast-1 で 1 GB 秒あたり 0.0000133334 ドルと 0.0000166667 ドル) |
 | メモリ | 2,048 MB | CPU はメモリに比例して割り当てられる。Rails の起動とサムネイルの生成を速くする。実測で見直す |
 | タイムアウト | 60 秒 (`redmine-web`)、900 秒 (`redmine-worker`、`redmine-task`) | CloudFront のオリジンの応答タイムアウトに合わせる (下記) |
-| `/tmp` | 512 MB (デフォルト。追加料金なし) | 256 MB までの添付ファイルのキャッシュ ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache))、PDF の出力。登録時に Lambda がファイル全体を読まず (SHA256 は S3 が確認する)、ダウンロードも Lambda を経由しないので、デフォルトで足りる |
+| `/tmp` | 512 MB (デフォルト。追加料金なし) | 256 MB までの添付ファイルのキャッシュ ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#the-tmp-cache))、PDF の出力。登録時に Lambda がファイル全体を読まず (SHA256 は S3 が確認する)、ダウンロードも Lambda を経由しないので、デフォルトで足りる |
 | 予約された同時実行 | 10 (`redmine-web`) | 負荷と費用の上限にする |
 | VPC | VPC のプライベートサブネット (2 つの AZ) | RDS には VPC 内からしか接続できない。S3 にはゲートウェイエンドポイントで、SES、SSM、SQS には VPC エンドポイントか NAT インスタンスで接続する ([rds.md](rds.md#routes-out-of-the-vpc)) |
 
@@ -106,8 +106,8 @@ ENTRYPOINT ["/var/task/bin/start"]
 | --- | --- | --- |
 | 配置場所 | `/var/task/redmine` | Lambda のベースイメージは、関数のコードを `/var/task` (`LAMBDA_TASK_ROOT`) に置く |
 | `config/database.yml` | ビルド時に追加する。`adapter:` はリテラルで `postgresql` と書く。接続先、データベース名、ユーザー名、パスワードは、環境変数から ERB で読む (`REDMINE_DB_HOST`、`REDMINE_DB_NAME`、`REDMINE_DB_USERNAME`、`REDMINE_DB_PASSWORD`)。TLS は、イメージ内の RDS の CA 証明書バンドルで `verify-full` にする (`sslrootcert: /var/task/rds-global-bundle.pem`) | Redmine の `Gemfile` は、`config/database.yml` の `adapter:` の値で、インストールするデータベースの gem を決める。`adapter:` の値を ERB にすると、Gemfile も ERB を評価するので、リテラルで書いておく方が確実。RDS for PostgreSQL なので、`pg` gem を使う |
-| `Gemfile.local` | `puma` (Redmine はテスト用のグループにしか含めていない) と、GitHub Packages のプラグインの gem。Bundler が早い段階で読み込む (その `boot/` のファイル) `redmine_serverless_ssm`、`redmine_serverless`、`redmine_serverless_sqs`、`redmine_serverless_ses` と、`require: false` の `redmine_serverless_s3` ([architecture.md](architecture.md#distribution)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem (`redmine_serverless_sqs` の `aws-activejob-sqs`、`redmine_serverless_ses` の `aws-actionmailer-ses`、`redmine_serverless_s3` の `aws-sdk-s3` など) は、そのプラグインの gemspec の依存関係にする |
-| 独自のプラグイン | `redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`、`redmine_serverless_sqs`、`redmine_serverless_ssm`。どれも GitHub Packages の gem で、インストールしたディレクトリを、アセットのビルド前に `plugins/` にリンクし、プラグインのスクリプトがマニフェストに含まれるようにする | 拡張は独自のプラグインにする ([architecture.md](architecture.md#the-plugins)) |
+| `Gemfile.local` | `puma` (Redmine はテスト用のグループにしか含めていない) と、GitHub Packages のプラグインの gem。Bundler が早い段階で読み込む (その `boot/` のファイル) `redmine_aws_ssm`、`redmine_aws_lambda`、`redmine_aws_sqs`、`redmine_aws_ses` と、`require: false` の `redmine_aws` (どのプラグインも必要とする) と `redmine_aws_s3` ([architecture.md](architecture.md#distribution)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem (`redmine_aws_sqs` の `aws-activejob-sqs`、`redmine_aws_ses` の `aws-actionmailer-ses`、`redmine_aws_s3` の `aws-sdk-s3` など) は、そのプラグインの gemspec の依存関係にする |
+| 独自のプラグイン | `redmine_aws`、`redmine_aws_lambda`、`redmine_aws_s3`、`redmine_aws_ses`、`redmine_aws_sqs`、`redmine_aws_ssm`。どれも GitHub Packages の gem で、インストールしたディレクトリを、アセットのビルド前に `plugins/` にリンクし、プラグインのスクリプトがマニフェストに含まれるようにする | 拡張は独自のプラグインにする ([architecture.md](architecture.md#the-plugins)) |
 | gem | ビルド時に `vendor/bundle` にインストールし、実行時にはインストールしない (`BUNDLE_DEPLOYMENT`、`BUNDLE_WITHOUT=development:test`) | 実行時には書き込めない |
 | ファイルのアクセス権限 | どのユーザーからも読めるようにする | Lambda は、デフォルトの権限の少ないユーザーで実行する。このユーザーが、実行に必要なすべてのファイルを読める必要がある |
 | `HOME` | `/tmp` | Bundler、ImageMagick、Pandoc がホームディレクトリに書き込むことがある (推測) |
@@ -149,7 +149,7 @@ Lambda Web Adapter は、AWS が公開している拡張機能です。Lambda �
 
 起動にかかる時間は、まだ計測していません。Rails の読み込み、データベースへの接続、イメージの取得が含まれ、最初に計測する項目です。初期化は 10 秒までで、超えると、Lambda は最初の呼び出し時に、関数のタイムアウトまでの時間で初期化をやり直します。`AWS_LWA_ASYNC_INIT=true` にすると、Lambda Web Adapter が 9.8 秒で初期化を完了したことにし、最初のリクエストの中で Puma の起動を待ち続けます。
 
-1 つの環境は 1 件ずつしか処理しないので、1 つの画面が同時に多くのリクエストを送ると、その数だけ環境が起動します。添付ファイルとサムネイルを S3 から直接読み込ませるのは、このためでもあります ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#thumbnails))。
+1 つの環境は 1 件ずつしか処理しないので、1 つの画面が同時に多くのリクエストを送ると、その数だけ環境が起動します。添付ファイルとサムネイルを S3 から直接読み込ませるのは、このためでもあります ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#thumbnails))。
 
 <a id="keeping-environments-warm"></a>
 
@@ -176,7 +176,7 @@ Event Functions で書き込めるのは `/tmp` だけです。Redmine が実行
 | `public/assets/` | CSS と JavaScript | ビルド時に書き出す (下記) |
 | `config/` | 設定ファイル | ビルド時に追加する。値は環境変数から読む |
 
-イメージの `tmp` は `/tmp/redmine` へのシンボリックリンクにし、起動スクリプトが `/tmp/redmine` を作成します。`Import#filepath` が `Rails.root/tmp/imports` に固定されているので、この構成にしています。アセットの書き出しが `tmp/` を使うことがあるので、リンクを作成するのは書き出しのあとです。添付ファイル、サムネイル、インポートファイルと S3 とのやり取りは [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html) にあります。
+イメージの `tmp` は `/tmp/redmine` へのシンボリックリンクにし、起動スクリプトが `/tmp/redmine` を作成します。`Import#filepath` が `Rails.root/tmp/imports` に固定されているので、この構成にしています。アセットの書き出しが `tmp/` を使うことがあるので、リンクを作成するのは書き出しのあとです。添付ファイル、サムネイル、インポートファイルと S3 とのやり取りは [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html) にあります。
 
 Redmine は、起動時にアセットが古いと判断すると `public/assets` に書き出します (`config.assets.redmine_detect_update`)。この設計ではビルド時にアセットを書き出し、この確認は無効にします。書き出したアセットは S3 から配信します (下の「アセットの配信」)。
 
@@ -190,14 +190,14 @@ Redmine は、起動時にアセットが古いと判断すると `public/assets
 
 ### パラメーター
 
-プラグインの [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/ja/) が、Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`/<instance>/env/` 直下のパラメーターを、すべて環境変数に読み込みます。読み込み方とタイミング、読み込まないものは、プラグインの資料にあります。パラメーターを追加すれば、コードを変更せずに環境変数が増えます。下の表は、インスタンス名が `redmine` の場合の例です。
+プラグインの [Redmine AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/ja/) が、Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`/<instance>/env/` 直下のパラメーターを、すべて環境変数に読み込みます。読み込み方とタイミング、読み込まないものは、プラグインの資料にあります。パラメーターを追加すれば、コードを変更せずに環境変数が増えます。下の表は、インスタンス名が `redmine` の場合の例です。
 
 | パラメーター | タイプ | 内容 | 書き込み元 |
 | --- | --- | --- | --- |
 | `/redmine/env/REDMINE_DB_HOST` | String | RDS のエンドポイント (`<インスタンスの ID>.<ランダムな文字>.ap-northeast-1.rds.amazonaws.com`)。シークレットではないが、Redmine の設定をまとめて読むためにここに置く | インスタンスのスタック |
 | `/redmine/env/REDMINE_DB_PASSWORD` | SecureString | データベースユーザーのパスワード ([rds.md](rds.md#settings)) | 初回の `bin/deploy` ([deploy-config.md](deploy-config.md#secrets)) |
 | `/redmine/env/SECRET_KEY_BASE` | SecureString | Rails のシークレットキー | 同上 |
-| `/redmine/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL の秘密鍵 ([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/ja/setup.html#configuration)) | 同上 |
+| `/redmine/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL の秘密鍵 ([Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/setup.html#configuration)) | 同上 |
 
 インスタンスのスタックが、3 つの関数に環境変数 `REDMINE_SSM_PATH=/<instance>/env/` を渡し、実行ロールには、そのパスだけに対する `ssm:GetParametersByPath` を許可します ([iam.md](iam.md#permissions-common-to-the-three-functions))。十分早く読み込まれるように、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から追加します。イメージテストでは、データベースのホストを SSM (moto) だけに置いても、`db:migrate`、web の画面、worker のジョブが成功するので、`config/database.yml` より前に読み込めていることが分かります (2026-11-09。[testing.md](testing.md#image-tests))。
 
@@ -223,13 +223,13 @@ Rails の設定は、どこに書くかで有効になるかどうかが変わ�
 | 項目 | 説明 | 値 | 設定場所 |
 | --- | --- | --- | --- |
 | `config.cache_store` | Rails 8.1 のデフォルトは `tmp/cache/` のファイル。`production.rb` は設定していない。キャッシュするデータ、調整、共有キャッシュは [cache.md](cache.md)、セッションは [session.md](session.md) | `:memory_store` (環境ごと、上限 64 MB) | `additional_environment.rb` |
-| `config.active_job.queue_adapter` | デフォルトの `:async` は、環境が停止するとジョブが失われる (下記)。`production.rb` は設定していない | `:inline`。`REDMINE_JOBS_QUEUE_URL` がある場合 (Lambda 上)、`redmine_serverless_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン |
+| `config.active_job.queue_adapter` | デフォルトの `:async` は、環境が停止するとジョブが失われる (下記)。`production.rb` は設定していない | `:inline`。`REDMINE_JOBS_QUEUE_URL` がある場合 (Lambda 上)、`redmine_aws_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン |
 | `config.active_record.dump_schema_after_migration` | migration 後の `db/schema.rb` の書き出しを無効にする。`production.rb` ではコメントアウトされている | `false` | `additional_environment.rb` |
 | `config.hosts` | Rails が受け付けるホスト名。Rails は `Host` と `X-Forwarded-Host` の両方をこれと照合する (下の「ホストとスキーム」) | Redmine のドメインだけ (`REDMINE_HOST`)。関数 URL のホスト名は入れない | `additional_environment.rb` |
 | `config.filter_redirect` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と記録させる ([security.md](security.md#logs)) | CloudFront のドメインの `/files/` と `/tmp/` の下の URL | `additional_environment.rb` |
-| `config.action_mailer.raise_delivery_errors` | `production.rb` が `false` にしている。送信エラーでジョブを失敗させ、再試行できるようにする ([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/ja/sending.html#raising-errors)) | `redmine-worker` でだけ `true` | プラグイン `redmine_serverless_ses` |
-| `config.assets.redmine_detect_update` | `production.rb` が `true` にしている | `false` | プラグイン `redmine_serverless` ([その README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda)) |
-| `attachments_storage_path` | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache) | `/tmp/redmine/files` | `configuration.yml` |
+| `config.action_mailer.raise_delivery_errors` | `production.rb` が `false` にしている。送信エラーでジョブを失敗させ、再試行できるようにする ([sending.md](https://redmine-kit.github.io/redmine_aws_ses/ja/sending.html#raising-errors)) | `redmine-worker` でだけ `true` | プラグイン `redmine_aws_ses` |
+| `config.assets.redmine_detect_update` | `production.rb` が `true` にしている | `false` | プラグイン `redmine_aws_lambda` ([その README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#running-on-lambda)) |
+| `attachments_storage_path` | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#the-tmp-cache) | `/tmp/redmine/files` | `configuration.yml` |
 | `email_delivery` | [mail.md](mail.md) | `:ses_v2` (SES の API) | `configuration.yml` |
 | `webhook_blocklist` | webhook を、内部のアドレスや、メタデータサービスに使われるアドレス範囲に送らせない ([ai.md](ai.md#event-notifications-redmines-standard-webhooks))。VPC エンドポイント構成では、すべてのアドレスにする ([rds.md](rds.md)) | プライベートアドレス (`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`fc00::/7`)、ループバックアドレス (`127.0.0.0/8`、`::1/128`)、リンクローカルアドレス (`169.254.0.0/16`、`fe80::/10`) | `configuration.yml` |
 
@@ -250,7 +250,7 @@ Rails の設定は、どこに書くかで有効になるかどうかが変わ�
 | 項目 | 説明 | 値 |
 | --- | --- | --- |
 | ホスト名とパス、プロトコル | メール本文の URL に使う | Redmine のドメイン、HTTPS |
-| 一括ダウンロードの合計ファイルサイズの上限 (`bulk_download_max_size`) | zip は S3 の一時ファイルにして返すので、6 MB の制限を受けない ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#downloading-all-attachments))。生成時間が 60 秒に収まるかを計測する | Redmine のデフォルト (100 MB) のまま |
+| 一括ダウンロードの合計ファイルサイズの上限 (`bulk_download_max_size`) | zip は S3 の一時ファイルにして返すので、6 MB の制限を受けない ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#downloading-all-attachments))。生成時間が 60 秒に収まるかを計測する | Redmine のデフォルト (100 MB) のまま |
 | 管理者のパスワード | 初期の管理者は `admin`、パスワードも `admin` | 初期データの投入後すぐに変更する |
 | 認証が必要 (`login_required`) | Redmine を、ログインしていないユーザーに公開しない。Redmine の標準の `/robots.txt` も、検索エンジンにすべてを拒否する (`Disallow: /`) ようになる | 有効を推奨 |
 
@@ -282,7 +282,7 @@ sequenceDiagram
 | キュー | 標準キュー 1 つ (`redmine-jobs`)。デッドレターキュー (`redmine-jobs-dlq`) を設定し、3 回受信して失敗したメッセージを移動する |
 | ジョブ用の関数 | `redmine-worker`。`redmine-web` と同じイメージで、`REDMINE_ROLE=worker`。Puma は起動しない |
 | ハンドラー | gem のハンドラー (`redmine/config/environment.Aws::ActiveJob::SQS::LambdaHandler.job_handler`)。プラグインが、失敗を記録するためにラップする。Rails を読み込んでから、メッセージごとにジョブを実行し、成功したメッセージを削除する。gem は、イベントの ARN から組み立てたキューの URL で、メッセージを自分で削除する |
-| プラグイン | `redmine_serverless_sqs` が、キューアダプターを設定し (`REDMINE_JOBS_QUEUE_URL` がある場合だけ)、Redmine のキューを `redmine-jobs` に向け、Redmine とプラグインのジョブクラスだけを実行させ、最後に失敗したジョブを記録し、「ジョブ」画面を追加する ([プラグインの資料](https://redmine-kit.github.io/redmine_serverless_sqs/ja/)) |
+| プラグイン | `redmine_aws_sqs` が、キューアダプターを設定し (`REDMINE_JOBS_QUEUE_URL` がある場合だけ)、Redmine のキューを `redmine-jobs` に向け、Redmine とプラグインのジョブクラスだけを実行させ、最後に失敗したジョブを記録し、「ジョブ」画面を追加する ([プラグインの資料](https://redmine-kit.github.io/redmine_aws_sqs/ja/)) |
 | バッチサイズ | 1。ハンドラーは、途中のジョブが失敗すると例外で終了するので、1 件ずつにして、失敗したものだけが再試行されるようにする |
 | 可視性タイムアウト | 関数のタイムアウト (900 秒) より長くする |
 
@@ -294,7 +294,7 @@ sequenceDiagram
 
 #### 再試行と重複
 
-ジョブが失敗すると、SQS は可視性タイムアウトのあとでメッセージを再配信します。3 回失敗したらデッドレターキューに移動し、件数をアラームで通知します。プラグインは最後の受信でジョブを記録するので、管理画面から再送信できます ([admin.md](https://redmine-kit.github.io/redmine_serverless_sqs/ja/admin.html#jobs))。
+ジョブが失敗すると、SQS は可視性タイムアウトのあとでメッセージを再配信します。3 回失敗したらデッドレターキューに移動し、件数をアラームで通知します。プラグインは最後の受信でジョブを記録するので、管理画面から再送信できます ([admin.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/admin.html#jobs))。
 
 標準キューは、同じメッセージを 2 回配信することもあります。そのため通知メールがまれに 2 通配信されますが、この規模では許容します。gem は 15 分までの遅延実行の指定に対応していますが、Redmine 本体は使っていません。
 
@@ -354,7 +354,7 @@ flowchart LR
 - **本文のハッシュ:** 関数 URL は、署名のない本文 (`UNSIGNED-PAYLOAD`) を受け付けないので、PUT と POST では、本文の SHA256 を `x-amz-content-sha256` に入れて送る必要があります (CloudFront のドキュメント)。ブラウザーで表示する Redmine の画面のフォームは、このヘッダーを付けません。そこで、オリジンリクエストで実行される Lambda@Edge 関数 `redmine-body-hash` が、本文からハッシュを計算して追加します。そのあとで、OAC がリクエストに署名します。
 - **CloudFront Functions では実装できない:** CloudFront Functions のリクエストのデータには、本文が含まれません (メソッド、URI、クエリ文字列、ヘッダー、Cookie だけ)。本文を読めるのは Lambda@Edge だけです。
 - **`Host`:** 関数 URL には、ビューワーの `Host` を転送しません (オリジンリクエストポリシーは `AllViewerExceptHostHeader`)。OAC は関数 URL のホスト名で署名します。Redmine のドメインとスキームは、オリジンのカスタムヘッダー `X-Forwarded-Host` と `X-Forwarded-Proto` で渡します (下の「ホストとスキーム」)。
-- **キャッシュ:** デフォルトのキャッシュビヘイビア (関数 URL) はキャッシュしません (`CachingDisabled`)。`/assets/*` は S3 から配信し、キャッシュします (下の「アセットの配信」)。添付ファイルは、`/files/*` と `/tmp/*` (サムネイル、zip、アップロード) のビヘイビアを使い、OAC で添付ファイル用のバケットに転送し、署名付き URL を必須にします ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download))。これらもキャッシュしません (`CachingDisabled`)。署名付き URL のファイル名と種類をキャッシュキーに含める、マネージドキャッシュポリシーがないためです (下記)。Redmine 7.1 のファビコンの `/favicons/*` は、関数 URL に転送し、キャッシュします (下の「ファビコン」)。
+- **キャッシュ:** デフォルトのキャッシュビヘイビア (関数 URL) はキャッシュしません (`CachingDisabled`)。`/assets/*` は S3 から配信し、キャッシュします (下の「アセットの配信」)。添付ファイルは、`/files/*` と `/tmp/*` (サムネイル、zip、アップロード) のビヘイビアを使い、OAC で添付ファイル用のバケットに転送し、署名付き URL を必須にします ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#download))。これらもキャッシュしません (`CachingDisabled`)。署名付き URL のファイル名と種類をキャッシュキーに含める、マネージドキャッシュポリシーがないためです (下記)。Redmine 7.1 のファビコンの `/favicons/*` は、関数 URL に転送し、キャッシュします (下の「ファビコン」)。
 - **オリジンの応答タイムアウト:** CloudFront のデフォルトは 30 秒で、1〜120 秒に設定できます。60 秒にして、関数のタイムアウトと合わせます。
 
 <a id="host-and-scheme"></a>
@@ -369,7 +369,7 @@ CloudFront は、関数 URL 自身のホスト名を `Host` として関数 URL 
 | `X-Forwarded-Proto` | `https` | スキーム。`Secure` の Cookie ([session.md](session.md#the-secure-attribute-of-the-session-cookie)) と URL の `https://`。CloudFront はビューワーの `X-Forwarded-Proto` を削除するので (CloudFront のドキュメント)、このヘッダーがなければ、スキームは関数 URL が追加するものに左右される |
 
 - **ビューワーが送るヘッダー:** ビューワーのリクエストに、オリジンカスタムヘッダーと同じ名前のヘッダーがあれば、CloudFront はオリジンに送る前にその値を上書きします (CloudFront のドキュメント、2026-11-10 に確認)。ビューワーは、これらのヘッダーで、Redmine から見えるホストやスキームを選べません。どちらのヘッダーも、CloudFront が追加できないヘッダーの一覧には入っていません。
-- **Rails は `Host` も照合する:** Rails のホストの認可 (`ActionDispatch::HostAuthorization`) は、`Host` が `config.hosts` にないとき、または `X-Forwarded-Host` があってそれが `config.hosts` にないときに、リクエストを 403 でブロックします (Rails 8.1.4 の `blocked_hosts`)。`config.hosts` はドメインだけなので、`Host` が関数 URL のホスト名のままだと、CloudFront を通るリクエストがすべてブロックされます。Lambda では、`redmine_serverless` (0.2.0 以降) の Rack のミドルウェアが、ホストの認可より前に、`X-Forwarded-Host` の最後の値を `Host` に入れます ([README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda))。これで Rails は、ドメインだけで照合し、URL を生成します。
+- **Rails は `Host` も照合する:** Rails のホストの認可 (`ActionDispatch::HostAuthorization`) は、`Host` が `config.hosts` にないとき、または `X-Forwarded-Host` があってそれが `config.hosts` にないときに、リクエストを 403 でブロックします (Rails 8.1.4 の `blocked_hosts`)。`config.hosts` はドメインだけなので、`Host` が関数 URL のホスト名のままだと、CloudFront を通るリクエストがすべてブロックされます。Lambda では、`redmine_aws_lambda` の Rack のミドルウェアが、ホストの認可より前に、`X-Forwarded-Host` の最後の値を `Host` に入れます ([README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#running-on-lambda))。これで Rails は、ドメインだけで照合し、URL を生成します。
 - **関数 URL のホスト名は受け付けない:** `config.hosts` に入っていません。`X-Forwarded-Host` がないリクエスト、ほかのホストや関数 URL のホスト名が入ったリクエストは、Rails が 403 を返します。関数 URL への直接のリクエストは、関数の呼び出し前に IAM 認証で拒否されます (上記)。ホストの認可は、CloudFront を通らずに Redmine に届いたリクエストに対する 2 つ目の確認です。
 - **`Forwarded` ヘッダー:** `AllViewerExceptHostHeader` は、標準の `Forwarded` を含め、ビューワーのほかのヘッダーを転送します。Rails はホストを `X-Forwarded-Host` と `Host` からだけ取るので、`Forwarded` でホストは変わりません。Rack はスキームを `X-Forwarded-Proto` より先に `Forwarded` から読むので (Rack 3.2.8 の `forwarded_priority`)、`Forwarded: proto=http` を送ったビューワーは、自分のリクエストだけを HTTP に見せることになります。そのリクエストにはセッション Cookie が付かず、ログインできません。
 - **CSRF 対策:** Redmine は Rails のオリジンの確認を有効にしていません (Redmine は `load_defaults` を呼ばないので、`forgery_protection_origin_check` は `false` のまま。Rails 8.1.4)。CSRF 対策はセッションのトークンを確認し、ホストは関係しません。
@@ -396,7 +396,7 @@ CloudFront は、関数 URL 自身のホスト名を `Host` として関数 URL 
 
 この関数があるので、CloudFront を経由して Redmine に転送されるリクエスト本文は 1 MB までになります。画面からの添付ファイルは S3 に直接送るので、この制限を受けません。制限を受けるものは、下の[「6 MB の制限」](#the-6-mb-limit)にまとめました。
 
-この関数はオリジンリクエストで実行されるので、キャッシュしない画面のリクエストごとに実行されます。添付ファイルのビヘイビアには関連付けません。アップロードの SHA256 は、Redmine がコピーするときに S3 が計算します ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload))。ap-northeast-1 では 100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルで (料金表)、月 5 万件なら 0.1 ドル未満です。CloudFront の定額料金プランでも使え、料金はプランとは別にかかります (AWS のブログ、2026-03-24)。ログは、関数が実行されたエッジロケーションに近いリージョンの CloudWatch Logs に出力されます (`/aws/lambda/us-east-1.redmine-body-hash`)。
+この関数はオリジンリクエストで実行されるので、キャッシュしない画面のリクエストごとに実行されます。添付ファイルのビヘイビアには関連付けません。アップロードの SHA256 は、Redmine がコピーするときに S3 が計算します ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#upload))。ap-northeast-1 では 100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルで (料金表)、月 5 万件なら 0.1 ドル未満です。CloudFront の定額料金プランでも使え、料金はプランとは別にかかります (AWS のブログ、2026-03-24)。ログは、関数が実行されたエッジロケーションに近いリージョンの CloudWatch Logs に出力されます (`/aws/lambda/us-east-1.redmine-body-hash`)。
 
 Lambda@Edge で本文のハッシュを追加してから OAC が署名する構成は、公式のドキュメントには記載されていません。動作したという実践の記録はあります (クラスメソッドの記事、2024-07-29。公式の情報ではありません)。最初に試して確認します。
 
@@ -404,7 +404,7 @@ Lambda@Edge で本文のハッシュを追加してから OAC が署名する構
 
 ### Lambda Web Adapter の `/events`
 
-関数 URL を経由せずに関数を呼び出すイベント (業務時間のウォームアップなど) は、Lambda Web Adapter が `/events` への POST として Puma に渡します (`AWS_LWA_PASS_THROUGH_PATH`)。プラグイン `redmine_serverless` が、データベースにアクセスせずに 204 を返します ([その README](https://redmine-kit.github.io/redmine_serverless/ja/#running-on-lambda))。CloudFront から `/events` に来たリクエストにも、同じく 204 を返すだけです。
+関数 URL を経由せずに関数を呼び出すイベント (業務時間のウォームアップなど) は、Lambda Web Adapter が `/events` への POST として Puma に渡します (`AWS_LWA_PASS_THROUGH_PATH`)。プラグイン `redmine_aws_lambda` が、データベースにアクセスせずに 204 を返します ([その README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#running-on-lambda))。CloudFront から `/events` に来たリクエストにも、同じく 204 を返すだけです。
 
 <a id="serving-assets"></a>
 
@@ -474,13 +474,13 @@ CloudFront は、定額料金プランの無料プラン (月 0 ドル) を使�
 
 エラーページ (`CustomErrorResponses`)、HTTP/3、IPv6、ACM 証明書は、表のプランの機能にはありません。AWS アカウントが AWS 無料利用枠 (Free Tier) を使っていないことも条件です。表では確認できない事項: AWS マネージドルールグループ 1 つがルール 1 つと数えられるか、AWS マネージドルールグループにスコープダウンステートメント (scope-down) を設定できるか ([security.md](security.md#to-verify))。
 
-ディストリビューションのキャッシュビヘイビアは、デフォルトのものと `/files/*`、`/tmp/*`、`/assets/*`、`/favicons/*` の 5 つです。無料プランは 5 つまで (2026-11-10 に確認) なので、デフォルトのキャッシュビヘイビアを数に含めても含めなくても収まります。デフォルトのものを数に含めるなら、もう追加する余地はありません。5 つを超えていないことは、デプロイのテストで確認します。サムネイル、zip、アップロードが `/tmp/*` を共有するのは、このためです。S3 のキーは Redmine 自身の `tmp/` に合わせています ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#bucket-layout))。
+ディストリビューションのキャッシュビヘイビアは、デフォルトのものと `/files/*`、`/tmp/*`、`/assets/*`、`/favicons/*` の 5 つです。無料プランは 5 つまで (2026-11-10 に確認) なので、デフォルトのキャッシュビヘイビアを数に含めても含めなくても収まります。デフォルトのものを数に含めるなら、もう追加する余地はありません。5 つを超えていないことは、デプロイのテストで確認します。サムネイル、zip、アップロードが `/tmp/*` を共有するのは、このためです。S3 のキーは Redmine 自身の `tmp/` に合わせています ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#bucket-layout))。
 
 <a id="repositories"></a>
 
 ## リポジトリ
 
-イメージには、Subversion のクライアント (`svn`) と Git のクライアント (`git`) があります。Lambda では、プラグイン `redmine_serverless` が、「管理 › 設定 › リポジトリ」の「使用するバージョン管理システム」で、この 2 つだけを有効にできるようにします。ほかの種類は、クライアントがイメージにないので無効のままです ([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。これは `redmine_serverless` の次のバージョンからです。今のイメージにある 0.1.0 は、設定を空に固定するので、新しいバージョンがイメージに入るまで、Lambda ではリポジトリを使用できません。
+イメージには、Subversion のクライアント (`svn`) と Git のクライアント (`git`) があります。Lambda では、プラグイン `redmine_aws_lambda` が、「管理 › 設定 › リポジトリ」の「使用するバージョン管理システム」で、この 2 つだけを有効にできるようにします。ほかの種類は、クライアントがイメージにないので無効のままです ([admin.md](https://redmine-kit.github.io/redmine_aws_lambda/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
 
 コマンドは、ビルドステージでインストールした Amazon Linux のパッケージ `subversion` と `git-core` のものです。イメージには、コマンド (`svn`、`git` と、イメージテストがリポジトリの作成に使う `svnadmin`) と、それがリンクする共有ライブラリのうちイメージにないもの (Subversion のライブラリ、APR、serf など。`git` には不要) だけをコピーします。パッケージそのものをインストールすると、`git-core` が `openssh-clients` を必要とし、それが systemd、PAM なども追加するので、約 176 MB 増えます。Redmine が実行するのはコマンドだけで、Git の組み込みコマンド (Redmine 7.0.3 では `branch`、`tag`、`ls-tree`、`log`、`diff`、`show`、`blame`) だけを使います。そのため、`/usr/libexec/git-core` にある Git のヘルパー (HTTPS のリモートなどに使う) はコピーしません。Redmine は、リモートの Git のリポジトリから取得しません。
 
@@ -506,7 +506,7 @@ Redmine は、ファイルと差分を毎回リポジトリから読み、コミ
 | 機能 | 理由 |
 | --- | --- |
 | Git のリポジトリ | Redmine はローカルのディスクから読むが、Lambda の `/tmp` は実行環境が停止すると失われる。保存先は未決定 ([リポジトリ](#repositories))。Subversion のリポジトリは使用できる。GitHub などとの連携は、このプロジェクトでは扱わず、ローカルのリポジトリを置き換える別のプラグインとして、別途検討する |
-| 受信メール用の Web サービス | メールは SES で受信する。設定はプラグイン `redmine_serverless` が無効に固定する ([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda)) |
+| 受信メール用の Web サービス | メールは SES で受信する。設定はプラグイン `redmine_aws_lambda` が無効に固定する ([admin.md](https://redmine-kit.github.io/redmine_aws_lambda/ja/admin.html#redmine-settings-that-cannot-work-on-lambda)) |
 | 6 MB を超えるレスポンス、1 MB を超えるリクエスト本文 | 下記 |
 
 <a id="the-6-mb-limit"></a>
@@ -515,10 +515,10 @@ Redmine は、ファイルと差分を毎回リポジトリから読み、コミ
 
 Event Functions の同期呼び出しは、リクエストとレスポンスがそれぞれ 6 MB までです。関数 URL は、画像などのバイナリの本文を base64 にエンコードしてイベントに含めるので、実際に送れるファイルは約 4.5 MB です (推測)。さらに、CloudFront を経由するリクエスト本文は、本文のハッシュを追加する Lambda@Edge が読める 1 MB までになります (上の「本文のハッシュを追加する関数」)。
 
-- **添付ファイル:** アップロードもダウンロードも Lambda を経由せず、CloudFront を通してブラウザーと S3 がやり取りします ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html))。REST API の `POST /uploads.json` は Lambda を経由するので、1 MB までです。大きなファイルは、CloudFront を経由するアップロード (`/s3_uploads/presign`、`/s3_uploads/complete`。API キーと OAuth でも使える) で送ります ([ai.md](ai.md))。
-- **アバター (Redmine 7.1):** アバターのフォームも、同じ方法で画像を CloudFront 経由で S3 に送るので、数 MB の写真も使えます。Redmine は S3 から画像を読み、Redmine 自身のフォームで登録します。JavaScript がなければ、フォームがファイルを Redmine に送るので 1 MB までです。アバターは、Redmine が小さなサムネイルで返します ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#avatars))。
+- **添付ファイル:** アップロードもダウンロードも Lambda を経由せず、CloudFront を通してブラウザーと S3 がやり取りします ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html))。REST API の `POST /uploads.json` は Lambda を経由するので、1 MB までです。大きなファイルは、CloudFront を経由するアップロード (`/s3_uploads/presign`、`/s3_uploads/complete`。API キーと OAuth でも使える) で送ります ([ai.md](ai.md))。
+- **アバター (Redmine 7.1):** アバターのフォームも、同じ方法で画像を CloudFront 経由で S3 に送るので、数 MB の写真も使えます。Redmine は S3 から画像を読み、Redmine 自身のフォームで登録します。JavaScript がなければ、フォームがファイルを Redmine に送るので 1 MB までです。アバターは、Redmine が小さなサムネイルで返します ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#avatars))。
 - **CSV のインポート:** インポートファイルは、画面のフォームで Lambda に送るので、1 MB までです。大きな CSV は、分割してインポートします。
-- **添付ファイルの一括ダウンロード (zip):** S3 の一時ファイルにして、CloudFront の署名付き URL にリダイレクトします ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#downloading-all-attachments))。
+- **添付ファイルの一括ダウンロード (zip):** S3 の一時ファイルにして、CloudFront の署名付き URL にリダイレクトします ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#downloading-all-attachments))。
 - **エクスポート (CSV、PDF、wiki の HTML など):** Redmine から、そのまま返します。チケットの CSV と PDF は、デフォルトで 500 件まで (`issues_export_limit`) です。作業時間、ユーザー、プロジェクトなどの CSV には件数の上限がありませんが、この規模なら 6 MB に達しない見込みです。達した場合は、フィルター (期間など) で対象を絞り込んでエクスポートします。
 - **画面と API:** 通常の画面と API の応答は、6 MB を超えない見込みです。一覧の 1 ページの件数は、デフォルトで 25、50、100 から選ぶ方式で (`per_page_options`)、REST API は 1 回に返す件数を 100 までに制限しています (`ApplicationController`)。さらに、応答を圧縮します (上の `AWS_LWA_ENABLE_COMPRESSION`)。万一 6 MB を超えると失敗します。
 

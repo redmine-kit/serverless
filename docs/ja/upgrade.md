@@ -68,7 +68,7 @@ Redmine の migration は、RDS for PostgreSQL では標準のまま通ります
 | バージョン | バージョンアップの前と後のバージョン、リリース日、Rails と Ruby のバージョンの変更 |
 | 増えた migration | ファイル名と、分類の結果 |
 | 試験の結果 | PostgreSQL で通ったか、所要時間、変更したテーブルの行数 |
-| プラグインへの影響 | 元のコードが変わった差し替え (`redmine_serverless`、`redmine_serverless_s3`、`redmine_serverless_ses`) と、その修正 |
+| プラグインへの影響 | 元のコードが変わった差し替え (`redmine_aws_lambda`、`redmine_aws_s3`、`redmine_aws_ses`) と、その修正 |
 | メンテナンス時間 | 本番を停止する時間の見積もり |
 | 本番での結果 | バージョンアップした日、実際の所要時間、発生した問題 |
 

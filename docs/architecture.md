@@ -69,7 +69,7 @@ flowchart LR
 | Item | Decision | Reason | Details |
 | --- | --- | --- | --- |
 | Redmine | 7.0.3 (latest stable version). No external plugins, default theme | As requested | [lambda.md](lambda.md) |
-| Extensions | The project's own plugins: `redmine_serverless` (running on Lambda), `redmine_serverless_s3` (attachments in S3), `redmine_serverless_ses` (mail through SES), `redmine_serverless_sqs` (jobs on SQS) and `redmine_serverless_ssm` (settings and secrets from SSM Parameter Store) | Redmine's standard extension mechanism; Redmine's own files are not modified | "The plugins" below |
+| Extensions | The project's own plugins: `redmine_aws` (shared by the others: the "AWS" administration menu and the AWS clients), `redmine_aws_lambda` (running on Lambda), `redmine_aws_s3` (attachments in S3), `redmine_aws_ses` (mail through SES), `redmine_aws_sqs` (jobs on SQS) and `redmine_aws_ssm` (settings and secrets from SSM Parameter Store) | Redmine's standard extension mechanism; Redmine's own files are not modified | "The plugins" below |
 | Runtime | Event Functions, container image, arm64 | Can run Ruby. Web Functions support only Node.js (see below) | [lambda.md](lambda.md) |
 | Image | Lambda's Ruby base image (`public.ecr.aws/lambda/ruby:4.0`) with Redmine, dependencies such as ImageMagick, the Subversion and Git clients ([lambda.md](lambda.md#repositories)), and Lambda Web Adapter | Same OS and Ruby as Lambda, built to run on Lambda. The HTTP server (Puma) can be used as is | [lambda.md](lambda.md#choosing-the-base) |
 | Three functions | `redmine-web` (pages), `redmine-worker` (jobs), `redmine-task` (rake and mail import). The same image, switched by the environment variable `REDMINE_ROLE`. Only `redmine-web` starts Puma | One build, and the same code runs everywhere | [tasks.md](tasks.md#how-one-image-runs-everything) |
@@ -77,12 +77,12 @@ flowchart LR
 | Assets | CloudFront routes `/assets/*` to S3 | Bypasses Lambda, reducing cold-start waits and concurrent requests | [lambda.md](lambda.md#serving-assets) |
 | Database | RDS for PostgreSQL (db.t4g.micro, Single-AZ) in the private subnets of a VPC, with no public access. The password is in SSM Parameter Store. Redmine's standard migrations run as they are | Redmine supports PostgreSQL as it is, so no adapter or migration changes are needed. The cost is predictable | [rds.md](rds.md) |
 | Settings and secrets | Stored in SSM Parameter Store (`/<instance>/env/`) and read at startup | No secrets in Lambda environment variables. Settings are added by adding parameters | [lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store) |
-| Administration pages | The state of mail sending and receiving, jobs, S3 attachments and AWS connections can be checked and operated under one "Serverless" item of Redmine's administration menu, which all the plugins share | Checking state and actions such as resending can be done without opening the AWS console | [admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html#the-serverless-menu) |
+| Administration pages | The state of mail sending and receiving, jobs, S3 attachments and AWS connections can be checked and operated under one "AWS" item of Redmine's administration menu, which all the plugins share | Checking state and actions such as resending can be done without opening the AWS console | [admin.md](https://redmine-kit.github.io/redmine_aws/admin.html#the-aws-menu) |
 | IAM | A separate execution role per function, with resources narrowed by ARN. No access keys | The web function does not have permissions for rake or mail receiving | [iam.md](iam.md) |
 | Security | Only CloudFront is reachable from outside. AWS WAF (the five rules of the flat-rate Free plan), two-factor authentication, secure default settings, retention periods for logs and records | Assets to protect, possible incidents, remaining risks and incident procedures are gathered in one place | [security.md](security.md) |
-| Attachments | Read and written through the S3 API, following the approach of a Redmine S3 plugin | S3 can be the only storage. Files are shared across Lambda environments | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html) |
-| Upload | Browser → CloudFront → S3 by PUT, with a CloudFront signed URL and a SHA256 that S3 checks | Lambda requests are limited to 6 MB. Request bodies to Lambda through CloudFront are limited to 1 MB | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload) |
-| Download | All downloads redirect to a CloudFront signed URL on Redmine's domain; CloudFront reads S3 and adds the sandbox CSP | Lambda responses are limited to 6 MB. S3 cannot add the sandbox CSP | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#download) |
+| Attachments | Read and written through the S3 API, following the approach of a Redmine S3 plugin | S3 can be the only storage. Files are shared across Lambda environments | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html) |
+| Upload | Browser → CloudFront → S3 by PUT, with a CloudFront signed URL and a SHA256 that S3 checks | Lambda requests are limited to 6 MB. Request bodies to Lambda through CloudFront are limited to 1 MB | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#upload) |
+| Download | All downloads redirect to a CloudFront signed URL on Redmine's domain; CloudFront reads S3 and adds the sandbox CSP | Lambda responses are limited to 6 MB. S3 cannot add the sandbox CSP | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#download) |
 | Background jobs | ActiveJob enqueues to SQS with AWS's official gem `aws-activejob-sqs`, and `redmine-worker` runs the jobs | No custom code needed. Retries and a dead-letter queue are available. Page requests do not wait for jobs | [lambda.md](lambda.md#background-jobs) |
 | Mail sending | Sent through the SES API using a Rails ActionMailer delivery method (`:ses_v2` from `aws-actionmailer-ses`). `redmine-worker` sends | Standard Rails mechanism; no custom code needed | [mail.md](mail.md#sending) |
 | Domain and DNS | Web and mail use the same host name (a subdomain for Redmine). The web uses an alias-type record pointing to CloudFront, with MX on the same name. If the parent domain's DNS cannot hold these, the subdomain is delegated to Route 53 | URLs and mail addresses match. CNAME and MX cannot be on the same name | [mail.md](mail.md#receiving-domain) |
@@ -99,7 +99,7 @@ flowchart LR
 Web Functions are a new kind of Lambda that runs an HTTP server listening on a port as is. They are not used for Redmine, for these reasons.
 
 - **Runtime:** Only `nodejs24.x` is supported. Ruby runtimes and container images are not. Starting a bundled Ruby as a child process from a Node.js entry point is conceivable, but it is a setup not covered by the official documentation.
-- **`/tmp`:** Fixed at 512 MB. This limits the size available for the attachment cache ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache)).
+- **`/tmp`:** Fixed at 512 MB. This limits the size available for the attachment cache ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#the-tmp-cache)).
 - **Constant cost:** Memory is billed while the environment exists (including between requests). Keeping 2 GB on for a month costs about 22 USD.
 
 Lambda Managed Instances (Event Functions that handle multiple requests in one environment) are not used either: Ruby is not among the supported languages, and at least three environments keep running.
@@ -121,7 +121,7 @@ One environment handles only one request at a time. When concurrent requests inc
 - **Download:** Redmine checks permissions, then redirects to a CloudFront signed URL under `/files/`. CloudFront reads the object from S3 through OAC and adds Redmine's sandbox CSP.
 - **Server-side processing:** Processing that needs a local file, such as thumbnails and previews of Office files, fetches the file from S3 into the `/tmp` cache.
 
-Details are in [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html).
+Details are in [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html).
 
 ### Email
 
@@ -136,13 +136,14 @@ Extensions for Lambda and AWS are the project's own plugins, built with Redmine'
 
 | Plugin | What it does | Enabled when | Documentation |
 | --- | --- | --- | --- |
-| [`redmine_serverless`](https://github.com/redmine-kit/redmine_serverless) | Running on Lambda: the Rack middleware for Lambda Web Adapter's `/events`, the setting that stops automatic asset compilation, Redmine settings that cannot work on Lambda fixed to disabled, the "Status and connections" administration page | `REDMINE_ROLE` exists | [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/) |
-| [`redmine_serverless_s3`](https://github.com/redmine-kit/redmine_serverless_s3) | Attachments in S3: storage, uploads through CloudFront to S3, redirects to CloudFront signed URLs with the sandbox CSP, the `/tmp` cache, the "Attachments in S3" administration page | S3 bucket settings exist | [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/) |
-| [`redmine_serverless_ses`](https://github.com/redmine-kit/redmine_serverless_ses) | Mail through SES: retries of sending, importing received mail, addresses per project, the mail administration pages | SES settings exist | [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/) |
-| [`redmine_serverless_sqs`](https://github.com/redmine-kit/redmine_serverless_sqs) | Jobs on SQS: the settings of `aws-activejob-sqs` (queues and the job classes it may run), records of jobs that fail for the last time, the "Jobs" administration page | `REDMINE_JOBS_QUEUE_URL` is set | [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/) |
-| [`redmine_serverless_ssm`](https://github.com/redmine-kit/redmine_serverless_ssm) | Settings and secrets: reads the parameters under `REDMINE_SSM_PATH` into environment variables before Rails reads `config/database.yml` and `SECRET_KEY_BASE`. It is also a gem, added by path in `image/Gemfile.local`, so that it runs that early | `REDMINE_SSM_PATH` is set | [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/) |
+| [`redmine_aws`](https://github.com/redmine-kit/redmine_aws) | Shared by the other plugins, which require it: the "AWS" item of the administration menu and its tabs, the "Status" tab with the connection test, the shared settings of the AWS clients | Always | [Redmine AWS](https://redmine-kit.github.io/redmine_aws/) |
+| [`redmine_aws_lambda`](https://github.com/redmine-kit/redmine_aws_lambda) | Running on Lambda: the Rack middleware for Lambda Web Adapter's `/events`, the setting that stops automatic asset compilation, Redmine settings that cannot work on Lambda fixed to disabled, the Lambda sections of the "Status" tab | `REDMINE_ROLE` exists | [Redmine AWS Lambda](https://redmine-kit.github.io/redmine_aws_lambda/) |
+| [`redmine_aws_s3`](https://github.com/redmine-kit/redmine_aws_s3) | Attachments in S3: storage, uploads through CloudFront to S3, redirects to CloudFront signed URLs with the sandbox CSP, the `/tmp` cache, the "Attachments in S3" administration page | S3 bucket settings exist | [Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/) |
+| [`redmine_aws_ses`](https://github.com/redmine-kit/redmine_aws_ses) | Mail through SES: retries of sending, importing received mail, addresses per project, the mail administration pages | SES settings exist | [Redmine AWS SES](https://redmine-kit.github.io/redmine_aws_ses/) |
+| [`redmine_aws_sqs`](https://github.com/redmine-kit/redmine_aws_sqs) | Jobs on SQS: the settings of `aws-activejob-sqs` (queues and the job classes it may run), records of jobs that fail for the last time, the "Jobs" administration page | `REDMINE_JOBS_QUEUE_URL` is set | [Redmine AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/) |
+| [`redmine_aws_ssm`](https://github.com/redmine-kit/redmine_aws_ssm) | Settings and secrets: reads the parameters under `REDMINE_SSM_PATH` into environment variables before Rails reads `config/database.yml` and `SECRET_KEY_BASE`. It is also a gem, added by path in `image/Gemfile.local`, so that it runs that early | `REDMINE_SSM_PATH` is set | [Redmine AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/) |
 
-S3 attachments, mail through SES, jobs on SQS and the SSM settings also work outside Lambda; jobs then run with the gem's poller instead of a Lambda event source. Separate plugins let a Redmine on an ordinary server use one of them without the parts for Lambda. On Lambda, the image installs all five, because Lambda cannot write to the file system and has no mailbox.
+S3 attachments, mail through SES, jobs on SQS and the SSM settings also work outside Lambda; jobs then run with the gem's poller instead of a Lambda event source. Separate plugins let a Redmine on an ordinary server use one of them without the parts for Lambda. On Lambda, the image installs all six, because Lambda cannot write to the file system and has no mailbox.
 
 ### Features
 
@@ -155,10 +156,10 @@ The plugins are published as gems on the GitHub Packages RubyGems registry (`htt
 | What | Location | How to use |
 | --- | --- | --- |
 | Redmine image for Lambda | `ghcr.io/redmine-kit/serverless` (arm64, one architecture, no index). CI pushes it for each commit on main whose release tests pass (the `publish` job in `.github/workflows/ci.yml`, with the version read by `bin/redmine-version`). Tags: the Redmine version (`7.0.3`), the Redmine minor version (`7.0`) and `main`. Use the Redmine version: the tag moves to each new build of that version (updated gems and plugins), and `bin/deploy` uses it by default. `7.0` also follows Redmine's patch releases. Older builds stay without a tag and can be pulled by digest; the label `org.opencontainers.image.revision` holds the commit | `bin/deploy` pulls it by digest and copies it to ECR in the account where the instance is deployed ([deploy-config.md](deploy-config.md#deployment-commands)). Lambda can only use images in ECR in the same Region |
-| Plugins | The gem `redmine_serverless_x` on GitHub Packages, one per plugin, published by each repository's workflow for every version tag. It holds the plugin's run-time files | Add it in `Gemfile.local` from the GitHub Packages source, run `bundle install`, and link the installed gem into `plugins/` (each plugin's setup page) |
+| Plugins | The gem of each plugin (`redmine_aws`, `redmine_aws_<name>`) on GitHub Packages, published by each repository's workflow for every version tag. It holds the plugin's run-time files | Add it in `Gemfile.local` from the GitHub Packages source, run `bundle install`, and link the installed gem into `plugins/` (each plugin's setup page) |
 | Plugins (without the gem) | A checkout of the repository | Clone into `plugins/` |
 
-The plugins are gems so that Bundler installs them with the other gems and records each version and checksum in `image/Gemfile.lock`. A plugin update then reaches the image through the weekly gem update, like any other gem ([testing.md](testing.md#order-in-ci)). `redmine_serverless_ssm` has to be a gem anyway, because it reads SSM Parameter Store before Rails reads the configuration.
+The plugins are gems so that Bundler installs them with the other gems and records each version and checksum in `image/Gemfile.lock`. A plugin update then reaches the image through the weekly gem update, like any other gem ([testing.md](testing.md#order-in-ci)). `redmine_aws_ssm` has to be a gem anyway, because it reads SSM Parameter Store before Rails reads the configuration.
 
 Redmine 7.0.3 loads plugins only from the `plugins/` directory (`lib/redmine/plugin_loader.rb`) and has no way to load them from gems, so the image links each installed plugin gem there (`link-plugins` in `image/Dockerfile`). The gem does not contain the plugin's `Gemfile`, so Redmine's `Gemfile` does not load the plugin twice.
 
@@ -193,7 +194,7 @@ The following are not in the plugins, because they must load before plugins or t
 | `bin/rake`<br>`bin/rails` | `bin/` | Used locally against the deployed Redmine |
 | `bin/test`<br>`bin/check-migrations` | `bin/` | Used locally and in CI for tests and migration review |
 
-Mail sending (`aws-actionmailer-ses`) and jobs (`aws-activejob-sqs`) use AWS's official gems; no delivery method or queue adapter is written. The jobs' settings belong to `redmine_serverless_sqs`.
+Mail sending (`aws-actionmailer-ses`) and jobs (`aws-activejob-sqs`) use AWS's official gems; no delivery method or queue adapter is written. The jobs' settings belong to `redmine_aws_sqs`.
 
 ## Repository layout
 
@@ -224,10 +225,10 @@ Work starts with the points that decide whether it works at all. At each stage, 
 | 2 | Image (Lambda's Ruby base image, Redmine, dependencies, switching between the three roles) | Image tests (read-only, low-privilege user, startup of the three roles), Redmine's own tests |
 | 3 | Startup on Lambda (VPC, RDS, SSM, `redmine-task`, opening `redmine-web` through the function URL) | Tests for SSM loading and the task handler. Measuring startup time |
 | 4 | CloudFront and assets (domain, S3 for `/assets/*`, OAC and the Lambda@Edge `redmine-body-hash`) | Tests for `redmine-body-hash`. Checking that POST passes with OAC. The first checks after deployment |
-| 5 | Attachments (`redmine_serverless_s3`) | The plugin's unit, functional, integration and system tests. Redmine's own attachment tests pass with S3 |
-| 6 | Jobs and mail sending (SQS, `redmine-worker`, SES and the sending part of `redmine_serverless_ses`, resending) | Tests for jobs and mail sending, retry tests per error type. Checks with the mailbox simulator |
+| 5 | Attachments (`redmine_aws_s3`) | The plugin's unit, functional, integration and system tests. Redmine's own attachment tests pass with S3 |
+| 6 | Jobs and mail sending (SQS, `redmine-worker`, SES and the sending part of `redmine_aws_ses`, resending) | Tests for jobs and mail sending, retry tests per error type. Checks with the mailbox simulator |
 | 7 | Administration pages (state and connections, mail sending, jobs, S3 attachments) | Functional and system tests per page. Non-administrators cannot open them |
-| 8 | Mail receiving (MX, receipt rules, import in `redmine_serverless_ses`, the "Mail receiving" administration page) | Import tests (spoofing, spam, auto-replies). Checking real mail receiving |
+| 8 | Mail receiving (MX, receipt rules, import in `redmine_aws_ses`, the "Mail receiving" administration page) | Import tests (spoofing, spam, auto-replies). Checking real mail receiving |
 | 9 | Migration (if data from an old Redmine is moved) | The checks after deployment pass with the migrated data |
 
 ## Open questions
@@ -239,7 +240,7 @@ Work starts with the points that decide whether it works at all. At each stage, 
 | Monthly cost | The estimate in [cost.md](cost.md) | Usage measured after deployment. [cost.md](cost.md) |
 | Domain | The name of the Redmine subdomain (for example `redmine.example.com`). Keep the parent domain's DNS or delegate to Route 53 | [mail.md](mail.md#receiving-domain) |
 | CloudFront pricing plan | Flat-rate Free plan (includes WAF) / pay-per-use | Whether the account still has room for a Free plan. [lambda.md](lambda.md#flat-rate-free-plan-and-waf) |
-| Attachment size limit | Redmine's `attachment_max_size`, enforced on uploads (`/tmp/incoming/`) by the CloudFront Function on `/tmp/*`. Redmine does not read the file at registration; what limits it is what CloudFront accepts for one PUT and the time the browser takes to hash the file | Measured results. [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#upload) |
+| Attachment size limit | Redmine's `attachment_max_size`, enforced on uploads (`/tmp/incoming/`) by the CloudFront Function on `/tmp/*`. Redmine does not read the file at registration; what limits it is what CloudFront accepts for one PUT and the time the browser takes to hash the file | Measured results. [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#upload) |
 | Default project for received mail | The project used when there is no subaddress | [mail.md](mail.md#importing) |
 | Storage for Git repositories | Not chosen yet. Until then only Subversion repositories can be used | Where a bare repository is kept so that every execution environment reads it, and how it is updated. [lambda.md](lambda.md#repositories) |
 | Fetching commits | Add `redmine:fetch_changesets` to the scheduled runs / run it with `bin/rake` when needed | Whether repositories are used, and how long a fetch takes. [lambda.md](lambda.md#repositories) |

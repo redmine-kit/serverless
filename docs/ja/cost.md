@@ -46,7 +46,7 @@ CloudFront は、定額料金プランの無料プランを使えば、月 100 �
 | --- | --- | --- |
 | Provisioned Concurrency (2 GB の環境 1 つ) | 約 23 ドル | 起動待ちをなくしたいとき |
 | アダプタが有効にする AWS のセキュリティサービス (GuardDuty の脅威検出、Security Hub、Config、未使用のアクセスの分析) | それぞれ 1 ドル未満から。ページを参照 | アカウントごと ([aws-security.md](aws-security.md)) |
-| 管理画面の費用表示 (`costExplorer.enabled`) | 約 0.9〜1.2 ドル (Cost Explorer API は 1 リクエスト 0.01 ドル。プラグインの取得は 1 日 1 回の更新だけで、1 日 3 リクエスト、タグ別の内訳ありで 4 リクエスト) | アカウントの費用を Redmine で見たいとき。プラグイン `redmine_serverless_costexplorer` を追加したイメージ (派生イメージ) で ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
+| 管理画面の費用表示 (`costExplorer.enabled`) | 約 0.9〜1.2 ドル (Cost Explorer API は 1 リクエスト 0.01 ドル。プラグインの取得は 1 日 1 回の更新だけで、1 日 3 リクエスト、タグ別の内訳ありで 4 リクエスト) | アカウントの費用を Redmine で見たいとき。プラグイン `redmine_aws_costexplorer` を追加したイメージ (派生イメージ) で ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
 | 共有キャッシュ (ElastiCache Serverless for Valkey) | 約 7.4 ドル (`cache.t4g.micro` のノード 1 台なら 14.60 ドル) | 整形済みのテキストと検索結果を、環境をまたいで再利用したいとき ([cache.md](cache.md#when-a-shared-cache-is-worth-it)) |
 
 データベースと経路に追加するもの (Multi-AZ、NAT Gateway、RDS Proxy など) は、[rds.md](rds.md#cost) にあります。

@@ -15,7 +15,7 @@ AI 機能 (メールで受信したチケットの振り分け、長いチケッ
 ```mermaid
 flowchart LR
   subgraph this["このプロジェクト(Redmine)"]
-    redmine["Redmine と<br>redmine_serverless"]
+    redmine["Redmine と<br>redmine_aws_lambda"]
   end
   subgraph ai["AI のプロジェクト(別)"]
     worker["AI の処理"]
@@ -42,7 +42,7 @@ flowchart LR
 | REST API | Redmine 標準の REST API (チケット、注記、wiki、プロジェクト、添付ファイルなど) | AI 側が、内容を読み、結果を書き込む |
 | API キー | Redmine の標準。ユーザーごとのキー | ボットユーザー (下記) で使う |
 | OAuth 2 | Redmine 7.0 は、doorkeeper の gem で OAuth 2 のプロバイダーになれる (`Gemfile`、`config/initializers/doorkeeper.rb`、`oauth2_applications` の画面) | MCP サーバーなど、利用者の権限で Redmine を操作するとき |
-| 大きな添付ファイル | CloudFront を通したアップロード (`/s3_uploads/presign`、`/s3_uploads/complete`) を、API キーと OAuth でも使えるようにする | AI 側が、要約などのファイルを添付するとき。REST API の `POST /uploads.json` は 1 MB まで ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#uploads-through-lambda)) |
+| 大きな添付ファイル | CloudFront を通したアップロード (`/s3_uploads/presign`、`/s3_uploads/complete`) を、API キーと OAuth でも使えるようにする | AI 側が、要約などのファイルを添付するとき。REST API の `POST /uploads.json` は 1 MB まで ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#uploads-through-lambda)) |
 
 AI の処理が書き込むときは、専用の Redmine ユーザーを使うので、AI が書いたものはこのユーザーの注記や更新として残ります。このユーザーは管理者にはせず、ロールで、使うプロジェクトと操作 (閲覧、注記の追加など) に絞ります。API キーは、AI 側のシークレットとして、AI のプロジェクトで管理します。AI エージェントが利用者の代わりに Redmine を操作するときは、OAuth で、その利用者の権限の範囲だけを許可します。
 

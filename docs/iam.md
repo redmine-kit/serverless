@@ -56,24 +56,24 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 
 SecureString parameters are encrypted with the default SSM key (`aws/ssm`). Whether `kms:Decrypt` must be granted in IAM for this key will be checked when building it.
 
-Each row belongs to one of the plugins, and the plugin's IAM page also explains the permissions for use outside Serverless: [Redmine Serverless SQS](https://redmine-kit.github.io/redmine_serverless_sqs/iam.html) (jobs and the "Jobs" page), [Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#iam-permissions) (attachments), [Redmine Serverless SES](https://redmine-kit.github.io/redmine_serverless_ses/iam.html) (email) and [Redmine Serverless SSM](https://redmine-kit.github.io/redmine_serverless_ssm/iam.html) (settings at start-up). [Redmine Serverless](https://redmine-kit.github.io/redmine_serverless/iam.html) needs none of its own. This page puts them together per function.
+Each row belongs to one of the plugins, and the plugin's IAM page also explains the permissions for use outside Serverless: [Redmine AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/iam.html) (jobs and the "Jobs" page), [Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/setup.html#iam-permissions) (attachments), [Redmine AWS SES](https://redmine-kit.github.io/redmine_aws_ses/iam.html) (email) and [Redmine AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/iam.html) (settings at start-up). [Redmine AWS](https://redmine-kit.github.io/redmine_aws/iam.html) and [Redmine AWS Lambda](https://redmine-kit.github.io/redmine_aws_lambda/iam.html) need none of their own. This page puts them together per function.
 
 ## Execution role of `redmine-web`
 
 | Permission | Resource | Use |
 | --- | --- | --- |
-| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject` | In the attachments bucket:<br>`files/*`<br>`imports/*`<br>`tmp/*` | Storing attachments, Markdown previews and thumbnails, `HeadObject` with the checksum and copying at registration, the `/tmp` cache, deletion, temporary files for bulk download ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html)) |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject` | In the attachments bucket:<br>`files/*`<br>`imports/*`<br>`tmp/*` | Storing attachments, Markdown previews and thumbnails, `HeadObject` with the checksum and copying at registration, the `/tmp` cache, deletion, temporary files for bulk download ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html)) |
 | `s3:ListBucket` | The attachments bucket | Get 404 instead of 403 for `HeadObject` on a missing object. Delete thumbnails by prefix |
 | `sqs:SendMessage` | The job queue | Enqueuing jobs ([lambda.md](lambda.md#background-jobs)) |
 | `sqs:GetQueueAttributes` | The job queue and the dead-letter queue | The "Jobs" admin page |
-| `sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | The job dead-letter queue | Moving the dead-letter queue back to the job queue from the "Jobs" admin page, with `sqs:SendMessage` on the job queue (common to the three functions). The minimum for a redrive is in the SQS plugin's [iam.md](https://redmine-kit.github.io/redmine_serverless_sqs/iam.html#permissions) |
+| `sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | The job dead-letter queue | Moving the dead-letter queue back to the job queue from the "Jobs" admin page, with `sqs:SendMessage` on the job queue (common to the three functions). The minimum for a redrive is in the SQS plugin's [iam.md](https://redmine-kit.github.io/redmine_aws_sqs/iam.html#permissions) |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Redmine's standard test email (sent within a page request) |
 | `ses:GetEmailIdentity` | The SES identity of the sender domain | The "Email sending" admin tab |
-| `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_serverless_ses/admin.html#sending-email)) |
+| `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/admin.html#sending-email)) |
 
 Email is sent by passing the full message (raw) to SES v2 `SendEmail`. The examples in the AWS SES documentation allow both `ses:SendEmail` and `ses:SendRawEmail` as sending permissions, and this design follows them. Whether `ses:SendRawEmail` is required for raw sending with v2 has not been checked yet.
 
-Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([Redmine Serverless S3](https://redmine-kit.github.io/redmine_serverless_s3/iam.html)). CloudFront reaches the bucket through OAC, which the bucket policy allows ("Resource-based policies" below).
+Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/iam.html)). CloudFront reaches the bucket through OAC, which the bucket policy allows ("Resource-based policies" below).
 
 ## Execution role of `redmine-worker`
 
@@ -82,7 +82,7 @@ Browsers do not use this role. Uploads and downloads go through CloudFront with 
 | `sqs:ReceiveMessage`<br>`sqs:DeleteMessage`<br>`sqs:GetQueueAttributes`<br>`sqs:ChangeMessageVisibility` | The job queue | Receiving jobs through the event source mapping. The gem's handler deletes messages that succeeded |
 | `sqs:SendMessage` | The job queue | Retries within jobs (`retry_on`) and jobs enqueued by jobs |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Notification email ([mail.md](mail.md#sending)). Sent as the full message (raw) |
-| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting attachments when deleting a project, reconciliation ([admin.md](https://redmine-kit.github.io/redmine_serverless_s3/admin.html#attachments-in-s3)) |
+| `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting attachments when deleting a project, reconciliation ([admin.md](https://redmine-kit.github.io/redmine_aws_s3/admin.html#attachments-in-s3)) |
 | `s3:GetObject`<br>`s3:DeleteObject` | In the mail bucket:<br>`inbound/*`<br>`processed/*` | Re-importing email from the admin pages |
 | `s3:PutObject` | `processed/*` in the mail bucket | Same as above |
 
@@ -99,7 +99,7 @@ Browsers do not use this role. Uploads and downloads go through CloudFront with 
 
 ## Cost Explorer (only with `costExplorer.enabled`)
 
-For an image that adds the plugin [Redmine Serverless Cost Explorer](https://redmine-kit.github.io/redmine_serverless_costexplorer/) (a derived image; Serverless's image does not include it), the plugin reads the account's costs. The policy `costexplorer` gives `redmine-task` (the daily refresh, the plugin's only call) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`. The two actions take a billing view as their resource (the AWS service reference, checked 2026-11-10) and the plugin uses the primary billing view; whether the policy can be narrowed to its ARN is unverified. `redmine-web` and `redmine-worker` do not call Cost Explorer. The boundary `redmine-boundary` allows these two actions.
+For an image that adds the plugin [Redmine AWS Cost Explorer](https://redmine-kit.github.io/redmine_aws_costexplorer/) (a derived image; Serverless's image does not include it), the plugin reads the account's costs. The policy `costexplorer` gives `redmine-task` (the daily refresh, the plugin's only call) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`. The two actions take a billing view as their resource (the AWS service reference, checked 2026-11-10) and the plugin uses the primary billing view; whether the policy can be narrowed to its ARN is unverified. `redmine-web` and `redmine-worker` do not call Cost Explorer. The boundary `redmine-boundary` allows these two actions.
 
 ## Resource-based policies
 

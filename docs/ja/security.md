@@ -37,9 +37,9 @@ Serverless のセキュリティ設計です。保護対象、脅威、層ごと
 | パスワードの総当たり攻撃、使い回しのパスワード | 二要素認証 (管理者は必須)、パスワードのポリシー、WAF によるログインのレート制限 | 下の「Redmine の設定」「AWS WAF」 |
 | 関数 URL を直接呼び出される | 関数 URL は IAM 認証で、OAC の署名がないと関数が呼び出されない | [lambda.md](lambda.md#cloudfront-and-function-urls) |
 | 外部からデータベースに接続される | RDS はパブリックアクセスのないプライベートサブネットに置く。セキュリティグループは関数からの接続だけを許可する。パスワードは SSM と RDS にだけ保存する | [rds.md](rds.md#security) |
-| 権限のないユーザーに添付ファイルを読まれる | Redmine が権限を確認してから、有効期限 5 分の CloudFront 署名付き URL を発行する。バケットは公開せず、OAC を通した CloudFront からのアクセスだけを許可する | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
+| 権限のないユーザーに添付ファイルを読まれる | Redmine が権限を確認してから、有効期限 5 分の CloudFront 署名付き URL を発行する。バケットは公開せず、OAC を通した CloudFront からのアクセスだけを許可する | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#download) |
 | 署名付き URL が漏えいする | 有効期限は 5 分。ログに記録しない (下の「ログ」) | 下の「ログ」 |
-| 添付ファイルで悪意のあるコードを実行される (HTML、SVG) | 添付ファイルは、Redmine の標準と同じく Redmine のオリジンから、CloudFront のビヘイビア `/files/*` と `/tmp/*` (サムネイルと zip) を通して返され、Redmine が付けるのと同じ `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` と `X-Content-Type-Options: nosniff` が付く。sandbox の文書は不透明なオリジンになり、スクリプトも実行されないので、Redmine の Cookie を読むことも、Redmine を呼び出すこともできない。PDF 以外は、ダウンロードとして返す (`Content-Disposition: attachment`。Redmine の標準と同じ)。デプロイ後の確認で、ヘッダーを確認する ([testing.md](testing.md#checks-after-deployment)) | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download) |
+| 添付ファイルで悪意のあるコードを実行される (HTML、SVG) | 添付ファイルは、Redmine の標準と同じく Redmine のオリジンから、CloudFront のビヘイビア `/files/*` と `/tmp/*` (サムネイルと zip) を通して返され、Redmine が付けるのと同じ `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` と `X-Content-Type-Options: nosniff` が付く。sandbox の文書は不透明なオリジンになり、スクリプトも実行されないので、Redmine の Cookie を読むことも、Redmine を呼び出すこともできない。PDF 以外は、ダウンロードとして返す (`Content-Disposition: attachment`。Redmine の標準と同じ)。デプロイ後の確認で、ヘッダーを確認する ([testing.md](testing.md#checks-after-deployment)) | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#download) |
 | 送信者を偽装したメールで、チケットを作成される | DMARC に合格しないメール、迷惑メール、ウイルスを含むメールを破棄する。登録されていないアドレスからのメールを受け付けない | [mail.md](mail.md#spoofing-and-spam) |
 | webhook で、内部のアドレスにリクエストを送信させられる (SSRF) | `webhook_blocklist` で、プライベート、ループバック、リンクローカルのアドレスを拒否する | [lambda.md](lambda.md#rails-and-redmine-settings) |
 | 依存する gem やイメージに悪意のあるコードが混入する | digest と SHA256 で固定する、依存関係の脆弱性スキャン、GitHub Actions を SHA で固定する | 下の「サプライチェーン」 |
@@ -55,11 +55,11 @@ Serverless のセキュリティ設計です。保護対象、脅威、層ごと
 | --- | --- |
 | HTTPS | ビューワーには HTTPS だけを許可し、HTTP は HTTPS にリダイレクトする。TLS の最小バージョンは、CloudFront のセキュリティポリシー `TLSv1.2_2021` |
 | レスポンスヘッダー | すべてのビヘイビアに、CloudFront の AWS マネージドのレスポンスヘッダーポリシー `SecurityHeadersPolicy` (ID `67f7725c-6f97-4210-82d7-5512b31e9d03`) を設定する。`Strict-Transport-Security: max-age=31536000`、`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-XSS-Protection: 1; mode=block` が付く。Redmine は `force_ssl` を有効にしていないので (`config/environments/production.rb`)、HSTS は CloudFront で付ける |
-| 添付ファイル | ビヘイビア `/files/*` (添付ファイルの GET) と `/tmp/*` (サムネイルと zip の GET、`/tmp/incoming/` へのアップロードの PUT) は、OAC で添付ファイル用バケットに転送し、CloudFront 署名付き URL を必須にする。どちらにも、`SecurityHeadersPolicy` が `nosniff` を付け、ビューワーレスポンスの CloudFront Functions (`<instance>-attachment-headers`) が、sandbox の CSP と、署名付き URL のファイル名と種類を付ける ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#download)) |
+| 添付ファイル | ビヘイビア `/files/*` (添付ファイルの GET) と `/tmp/*` (サムネイルと zip の GET、`/tmp/incoming/` へのアップロードの PUT) は、OAC で添付ファイル用バケットに転送し、CloudFront 署名付き URL を必須にする。どちらにも、`SecurityHeadersPolicy` が `nosniff` を付け、ビューワーレスポンスの CloudFront Functions (`<instance>-attachment-headers`) が、sandbox の CSP と、署名付き URL のファイル名と種類を付ける ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#download)) |
 | 関数 URL | OAC の署名がないリクエストは、関数が呼び出される前に拒否される ([lambda.md](lambda.md#cloudfront-and-function-urls)) |
-| ホストとスキーム | CloudFront は、ドメインを `X-Forwarded-Host` で、`https` を `X-Forwarded-Proto` で渡す。どちらもオリジンカスタムヘッダーで、ビューワーが送った同じ名前のヘッダーを上書きする。Rails はドメインだけを受け付け (`config.hosts`)、Lambda では `redmine_serverless` が `X-Forwarded-Host` を `Host` にするので、関数 URL のホスト名は受け付けない。ヘッダーがないリクエストやほかのホストのリクエストは 403 になる ([lambda.md](lambda.md#host-and-scheme)) |
+| ホストとスキーム | CloudFront は、ドメインを `X-Forwarded-Host` で、`https` を `X-Forwarded-Proto` で渡す。どちらもオリジンカスタムヘッダーで、ビューワーが送った同じ名前のヘッダーを上書きする。Rails はドメインだけを受け付け (`config.hosts`)、Lambda では `redmine_aws_lambda` が `X-Forwarded-Host` を `Host` にするので、関数 URL のホスト名は受け付けない。ヘッダーがないリクエストやほかのホストのリクエストは 403 になる ([lambda.md](lambda.md#host-and-scheme)) |
 | キャッシュするレスポンス | CloudFront がキャッシュするのは、`/assets/*` (S3 のコンパイル済みのアセット) と `/favicons/*` (Redmine 7.1 のファビコン。Redmine が誰にでも public、immutable で返すもの) だけ。`/favicons/*` は Cookie を Redmine に転送せず、CloudFront がレスポンスから `Set-Cookie` を削除するので、キャッシュしたレスポンスにセッションは入らない。Redmine の画面、アバター (Redmine 7.1)、添付ファイルは CloudFront でキャッシュしない ([lambda.md](lambda.md#the-favicon)) |
-| リクエスト本文 | Redmine のビヘイビアでは 1 MB まで。超えると Lambda@Edge が 413 を返す。`/tmp/incoming/` へのアップロードは、Lambda ではなく S3 に到達し、アップロードの上限を超える本文は CloudFront Functions が拒否する ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#upload)) |
+| リクエスト本文 | Redmine のビヘイビアでは 1 MB まで。超えると Lambda@Edge が 413 を返す。`/tmp/incoming/` へのアップロードは、Lambda ではなく S3 に到達し、アップロードの上限を超える本文は CloudFront Functions が拒否する ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#upload)) |
 
 ディストリビューションは、どのプランでも AWS マネージドのポリシー (キャッシュ、オリジンリクエスト、レスポンスヘッダー) だけを使い、添付ファイルのヘッダーは CloudFront Functions で付けます ([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。無料プランとプロプランで使えるのは、マネージドポリシーだけです。Content Security Policy などを独自に定義するポリシーはビジネスプランからで、この設計では使いません。
 
@@ -107,7 +107,7 @@ Redmine には、ログインの失敗回数でアカウントをロックする
 
 Common Rule Set を最初はカウントだけにするのは、Redmine の正当なリクエストをブロックするルールがあるためです。`SizeRestrictions_BODY` (本文が 8 KB を超えるとブロック) は、wiki やチケットの長い本文をブロックし、`CrossSiteScripting_BODY` などは、wiki に書いたコード例をブロックすることがあります。最初の 2 週間ほどはルールグループ全体をカウントだけにし、ブロックされるはずだったリクエストをダッシュボードで確認して、該当したルールだけをカウントのまま残し、ほかはブロックにします。
 
-Redmine 7.1 のファビコン (PNG または ICO で 32 KB まで) は、設定のフォームで Lambda に送ります。`SizeRestrictions_BODY` は 8 KB を超えるフォームに一致しますが、カウントするだけです。最初のカウントの期間も、ブロックに変えたあとも、`waf.commonRuleSetCountOnly` のルール (デフォルトは `SizeRestrictions_BODY`。[deploy-config.md](deploy-config.md)) としてカウントのままです。Common Rule Set のほかの本文のルールが画像のバイト列に一致するかは確認していません。ブロックされるはずだったリクエストに、設定のフォームがないかを確認します。Redmine 7.1 のアバターは `/tmp/incoming/` に送るので、このルールグループの検査の対象外です ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#avatars))。
+Redmine 7.1 のファビコン (PNG または ICO で 32 KB まで) は、設定のフォームで Lambda に送ります。`SizeRestrictions_BODY` は 8 KB を超えるフォームに一致しますが、カウントするだけです。最初のカウントの期間も、ブロックに変えたあとも、`waf.commonRuleSetCountOnly` のルール (デフォルトは `SizeRestrictions_BODY`。[deploy-config.md](deploy-config.md)) としてカウントのままです。Common Rule Set のほかの本文のルールが画像のバイト列に一致するかは確認していません。ブロックされるはずだったリクエストに、設定のフォームがないかを確認します。Redmine 7.1 のアバターは `/tmp/incoming/` に送るので、このルールグループの検査の対象外です ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#avatars))。
 
 国によるブロックは無料プランでも使えますが、出張先などから使うユーザーがいるので、デフォルトでは使いません。使う場合は、ルールが 5 つを超えないように全体のレート制限と入れ替えます。無料プランで WAF がリクエストをブロックすると、WAF のデフォルトの 403 を返します。
 
@@ -144,7 +144,7 @@ WAF は、リクエストがオリジンに到達する前に評価されます�
 | JSONPを有効にする (`jsonp_enabled`) | 無効 | 別のオリジンから API のレスポンスを読ませない |
 | 禁止する拡張子 (`attachment_extensions_denied`) | 実行可能ファイル (`exe`、`bat` など) を、アダプタが決める | 添付ファイルで有害なファイルを配布させない |
 
-デプロイしたらすぐに、初期の管理者 (`admin`、パスワードも `admin`) のパスワードを変更し、二要素認証を設定します。このアカウントを使わない場合は、別の管理者を作成してからロックします。Lambda で使えない設定 (リポジトリと受信メールの Web サービス) は、プラグインが無効に固定します ([admin.md](https://redmine-kit.github.io/redmine_serverless/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
+デプロイしたらすぐに、初期の管理者 (`admin`、パスワードも `admin`) のパスワードを変更し、二要素認証を設定します。このアカウントを使わない場合は、別の管理者を作成してからロックします。Lambda で使えない設定 (リポジトリと受信メールの Web サービス) は、プラグインが無効に固定します ([admin.md](https://redmine-kit.github.io/redmine_aws_lambda/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
 
 <a id="aws-accounts-and-permissions"></a>
 
@@ -180,8 +180,8 @@ WAF は、リクエストがオリジンに到達する前に評価されます�
 | CloudWatch Logs (Lambda@Edge の `redmine-body-hash`) | 90 日 | Lambda@Edge は、実行されたリージョンごとに、ロググループを自動で作成する。CloudFormation では先に作成できないので、`bin/deploy` が、すべてのリージョンのロググループに保持設定を適用する (作成されたあとのものにも、デプロイのたびに適用し直す) | `logs.retentionDays` |
 | CloudWatch Logs (Session Manager。NAT インスタンス構成だけ) | 90 日 | ロググループの保持設定 | `logs.retentionDays` |
 | CloudTrail (管理イベント) | 1 年 (案) | 証跡を保存する S3 バケットのライフサイクル。アカウントの規定があれば、それに従う。CloudTrail のイベント履歴 (90 日) は、AWS が決めている | アカウントの基盤で決める (この設計の対象外) |
-| 受信したメールの記録 (`serverless_received_mails`) | 90 日 | 毎日の定期 rake で削除する ([tasks.md](tasks.md#scheduled-runs)) | `retention.recordsDays` |
-| 失敗したジョブの記録 (`serverless_job_failures`) | 90 日 | 同上 | `retention.recordsDays` |
+| 受信したメールの記録 (`aws_ses_received_mails`) | 90 日 | 毎日の定期 rake で削除する ([tasks.md](tasks.md#scheduled-runs)) | `retention.recordsDays` |
+| 失敗したジョブの記録 (`aws_sqs_job_failures`) | 90 日 | 同上 | `retention.recordsDays` |
 | 取り込んだメール (`processed/`) | 30 日 | S3 ライフサイクル | `retention.mailDays` |
 | 取り込まなかったメール (`inbound/` に残ったもの。破棄したもの、失敗したもの) | 30 日 | S3 ライフサイクル。取り込みのやり直しは、この期間内に行う | `retention.mailDays` |
 | SQS のデッドレターキュー | 14 日 | SQS のメッセージ保持期間 (SQS の上限) | — |
@@ -235,7 +235,7 @@ Redmine の更新と、gem とイメージの更新は、[upgrade.md](upgrade.md
 | NAT インスタンスを経由する外部への通信 | NAT インスタンス構成では、関数がインターネットにアクセスできる | 侵害されないことに注力する (上の対策)。外部への通信を止める必要があれば、VPC エンドポイント構成にする ([rds.md](rds.md#which-to-choose)) |
 | リポジトリの URL | 「リポジトリの管理」の権限を持つユーザーが、関数が `svn` で読む URL (と `git` が読むパス) を設定する。webhook の `webhook_blocklist` のような拒否リストは、Redmine にない | 「リポジトリの管理」は信頼できるロールにだけ与える。関数が接続できるのは VPC のルートが許す範囲だけで、VPC エンドポイントの構成ではインターネット上のサーバーに接続できない ([lambda.md](lambda.md#repositories)) |
 | データベースパスワード | 一時的な認証情報と違い、パスワードは自動では失効しない | SSM (SecureString) と RDS にだけ保存し、RDS には VPC 内からしか接続できない。インシデントの発生時は変更する (下記) |
-| 添付ファイルのウイルス | Redmine は添付ファイルをスキャンしない | `tmp/incoming/` と `imports/` に GuardDuty Malware Protection for S3 を使い、`REDMINE_S3_MALWARE_SCAN=true` にする。プラグインは、問題がないと判定されたファイルだけを使う ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#malware-scan)、費用も) |
+| 添付ファイルのウイルス | Redmine は添付ファイルをスキャンしない | `tmp/incoming/` と `imports/` に GuardDuty Malware Protection for S3 を使い、`REDMINE_S3_MALWARE_SCAN=true` にする。プラグインは、問題がないと判定されたファイルだけを使う ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#malware-scan)、費用も) |
 | CloudFront と WAF のログがない | 定額料金プランの無料プランに、ログが含まれない | Lambda のログと、セキュリティダッシュボードで確認する |
 
 <a id="incidents"></a>

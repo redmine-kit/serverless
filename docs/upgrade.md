@@ -58,7 +58,7 @@ For each version, write `docs/upgrades/<version>.md` and add it to the list in `
 | Version | The versions before and after, the release date, and changes in the Rails and Ruby versions |
 | New migrations | File names and the sorting result |
 | Test results | Whether they passed on PostgreSQL, the time taken, and the row counts of the tables they changed |
-| Effect on the plugins | Replaced code whose original code changed (in `redmine_serverless`, `redmine_serverless_s3` and `redmine_serverless_ses`), and what was fixed |
+| Effect on the plugins | Replaced code whose original code changed (in `redmine_aws_lambda`, `redmine_aws_s3` and `redmine_aws_ses`), and what was fixed |
 | Maintenance window | Estimated downtime in production |
 | Production results | Upgrade date, actual time taken, and problems that occurred |
 

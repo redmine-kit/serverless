@@ -43,7 +43,7 @@ GuardDuty は、CloudTrail の管理イベント、VPC フローログ、DNS ロ
 
 ## Malware Protection for S3
 
-インスタンスのスタックが、添付ファイル用バケットに Amazon GuardDuty Malware Protection のプランを作成します。Redmine は、ファイルを使う前にスキャン結果を待ちます。待ち方とユーザーに表示される内容は、S3 プラグインの資料にあります ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#malware-scan))。
+インスタンスのスタックが、添付ファイル用バケットに Amazon GuardDuty Malware Protection のプランを作成します。Redmine は、ファイルを使う前にスキャン結果を待ちます。待ち方とユーザーに表示される内容は、S3 プラグインの資料にあります ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#malware-scan))。
 
 プランは、`tmp/incoming/` (CloudFront と Lambda を経由したアップロード) と `imports/` (CSV インポートのファイル) の下の新しいオブジェクトをスキャンします。`files/` には、問題がないと判定されたオブジェクトのコピーしか置かないので、再スキャンはしません。再スキャンすると費用が 2 倍になります。受信したメールも GuardDuty ではスキャンしません。SES が受信したメールをスキャンしてウイルスの判定結果を付け、判定が `PASS` のメールだけを取り込みます ([mail.md](mail.md))。
 

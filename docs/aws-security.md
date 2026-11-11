@@ -37,7 +37,7 @@ GuardDuty analyzes CloudTrail management events, VPC flow logs and DNS logs, and
 
 ## Malware Protection for S3
 
-The instance stack creates an Amazon GuardDuty Malware Protection plan for the attachment bucket. Redmine waits for the result before using a file; how it waits and what users see is in the S3 plugin's documentation ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#malware-scan)).
+The instance stack creates an Amazon GuardDuty Malware Protection plan for the attachment bucket. Redmine waits for the result before using a file; how it waits and what users see is in the S3 plugin's documentation ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#malware-scan)).
 
 The plan scans new objects under `tmp/incoming/` (uploads through CloudFront and through Lambda) and `imports/` (CSV import files). `files/` holds only copies of objects that were found clean, so it is not scanned again; scanning it would double the cost. Received mail is not scanned by GuardDuty either: SES scans it and gives its virus verdict, and only mail with `PASS` is imported ([mail.md](mail.md)).
 

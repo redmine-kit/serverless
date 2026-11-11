@@ -13,7 +13,7 @@ The specifications on this page were checked against the Redmine 7.0.3 source as
 ```mermaid
 flowchart LR
   subgraph this["This project (Redmine)"]
-    redmine["Redmine and<br>redmine_serverless"]
+    redmine["Redmine and<br>redmine_aws_lambda"]
   end
   subgraph ai["AI project (separate)"]
     worker["AI<br>processing"]
@@ -36,7 +36,7 @@ flowchart LR
 | REST API | Redmine's standard REST API (issues, notes, wiki, projects, attachments, etc.) | The AI side reads content and writes results |
 | API key | Redmine standard. One key per user | Used by the bot user (below) |
 | OAuth 2 | Redmine 7.0 can act as an OAuth 2 provider with the doorkeeper gem (`Gemfile`, `config/initializers/doorkeeper.rb`, the `oauth2_applications` pages) | When an MCP server or similar operates Redmine with a user's permissions |
-| Large attachments | Make uploads through CloudFront (`/s3_uploads/presign`, `/s3_uploads/complete`) available with API keys and OAuth too | When the AI side attaches files such as summaries. `POST /uploads.json` in the REST API is limited to 1 MB ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#uploads-through-lambda)) |
+| Large attachments | Make uploads through CloudFront (`/s3_uploads/presign`, `/s3_uploads/complete`) available with API keys and OAuth too | When the AI side attaches files such as summaries. `POST /uploads.json` in the REST API is limited to 1 MB ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#uploads-through-lambda)) |
 
 When AI processing writes, it uses a dedicated Redmine user, so what the AI writes stays as notes and updates by this user. The user is not an administrator; its role limits it to the projects and actions it needs (reading, adding notes and so on). Its API key is managed as a secret on the AI side, in the AI project. When an AI agent operates Redmine on behalf of a person, OAuth allows only what that person's permissions allow.
 

@@ -21,7 +21,7 @@ bin/rake redmine:attachments:prune
 bin/rake -T
 
 # 受信したメールを取り込み直す(S3 に残っているメールの ID)
-bin/rake redmine_serverless_ses:receive_mail MESSAGE_ID=<メッセージ ID>
+bin/rake redmine_aws_ses:receive_mail MESSAGE_ID=<メッセージ ID>
 
 # rails runner(1 行のコード)
 bin/rails runner 'puts User.count'
@@ -63,7 +63,7 @@ sequenceDiagram
   H-->>C: 終了コード、出力の末尾
 ```
 
-`redmine-worker` と `redmine-task` は、実行の方式が違うので関数を分けます。`redmine-worker` は、ジョブを速く実行するために Rails を読み込んだまま使います。`redmine-task` は、rake ごとに新しい子プロセスで実行し、前のタスクの状態を残しません。そのハンドラーは Rails を読み込まず、受け取った内容を確認して子プロセスを起動するだけで、Rails の処理は子プロセスの rake の中で行います。メールの取得も、プラグイン `redmine_serverless_ses` の rake タスクです ([mail.md](mail.md#receiving))。
+`redmine-worker` と `redmine-task` は、実行の方式が違うので関数を分けます。`redmine-worker` は、ジョブを速く実行するために Rails を読み込んだまま使います。`redmine-task` は、rake ごとに新しい子プロセスで実行し、前のタスクの状態を残しません。そのハンドラーは Rails を読み込まず、受け取った内容を確認して子プロセスを起動するだけで、Rails の処理は子プロセスの rake の中で行います。メールの取得も、プラグイン `redmine_aws_ses` の rake タスクです ([mail.md](mail.md#receiving))。
 
 Lambda は、`/opt/extensions` にあるファイルをすべて拡張機能として起動します。Lambda Web Adapter は、拡張機能として登録したうえで Lambda とのやり取り (Runtime API) も自分で行うので、`redmine-task` でも起動するとハンドラーと競合します。そこで、`/opt/extensions/lambda-adapter` を小さなシェルスクリプトにし、実際の Lambda Web Adapter は `/opt/lambda-web-adapter/` に置きます。スクリプトは、`REDMINE_ROLE=web` のときだけ実際の Lambda Web Adapter を起動します。
 
@@ -77,7 +77,7 @@ Lambda は、`/opt/extensions` にあるファイルをすべて拡張機能と�
 | --- | --- | --- |
 | `bin/rake`、デプロイ | `{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}` | rake を実行する |
 | `bin/rails` | `{"command": "runner", "args": ["puts User.count"]}` | `rails runner` を実行する |
-| `bin/rake` | `{"command": "rake", "args": ["redmine_serverless_ses:receive_mail"], "env": {"MESSAGE_ID": "<メッセージ ID>"}}` | S3 のメールを取り込む ([mail.md](mail.md#receiving)) |
+| `bin/rake` | `{"command": "rake", "args": ["redmine_aws_ses:receive_mail"], "env": {"MESSAGE_ID": "<メッセージ ID>"}}` | S3 のメールを取り込む ([mail.md](mail.md#receiving)) |
 | SES の受信ルール | SES イベント (`Records[0].ses`) | 同上。イベントから、メッセージ ID (`mail.messageId` → `MESSAGE_ID`)、宛先 (`receipt.recipients` → `SES_RECIPIENTS`。カンマ区切り)、判定 (`receipt.spamVerdict.status`、`virusVerdict`、`dmarcVerdict`、`spfVerdict`、`dkimVerdict` → `SES_SPAM_VERDICT`、`SES_VIRUS_VERDICT`、`SES_DMARC_VERDICT`、`SES_SPF_VERDICT`、`SES_DKIM_VERDICT`。`receipt.dmarcPolicy` → `SES_DMARC_POLICY`) を取得する。形式が正しくない値は設定しない。コマンドのイベントでは、これらの変数を渡せない ([mail.md](mail.md#spoofing-and-spam)) |
 | EventBridge Scheduler | `{"command": "rake", "args": ["redmine:attachments:prune"]}` | 定期タスク (下記) |
 
@@ -108,7 +108,7 @@ migration から `redmine-web` の更新までの間は、古いコードが新�
 
 Rails は、`db:migrate` の後に `db/schema.rb` を書き出します (`ActiveRecord.dump_schema_after_migration` のデフォルトは `true`)。Redmine の `production.rb` はこの設定をコメントアウトしたままなので、Lambda では書き込みに失敗します。`additional_environment.rb` で `false` にします。
 
-`redmine:attachments:move_to_subdirectories` など、`files/` の下のファイルを移動するタスクは、S3 のファイルを移動しないので使いません。`redmine:attachments:update_digests` など、添付ファイルを読むタスクは、`/tmp` のキャッシュの仕組み ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/ja/attachments.html#the-tmp-cache)) で S3 から取得して読みます。
+`redmine:attachments:move_to_subdirectories` など、`files/` の下のファイルを移動するタスクは、S3 のファイルを移動しないので使いません。`redmine:attachments:update_digests` など、添付ファイルを読むタスクは、`/tmp` のキャッシュの仕組み ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#the-tmp-cache)) で S3 から取得して読みます。
 
 <a id="scheduled-runs"></a>
 
@@ -120,8 +120,8 @@ EventBridge Scheduler から、上の形式の入力で `redmine-task` を呼び
 | --- | --- |
 | `redmine:attachments:prune` | 毎日 |
 | `redmine:send_reminders` (期日の通知) | 使う場合は、平日の朝 |
-| `redmine_serverless_costexplorer:refresh` (プラグインを追加したイメージ、つまり派生イメージで。管理画面のために、Cost Explorer からアカウントの費用を取得する) | 毎日。`costExplorer.enabled` のときだけ ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
-| `redmine_serverless_sqs:prune_records[<日数>]` と `redmine_serverless_ses:prune_records[<日数>]` (プラグインの記録のうち、保持期間 `retention.recordsDays` より古いものを削除する。失敗したジョブと受信したメール。[security.md](security.md#retention-periods)) | 毎日 |
+| `redmine_aws_costexplorer:refresh` (プラグインを追加したイメージ、つまり派生イメージで。管理画面のために、Cost Explorer からアカウントの費用を取得する) | 毎日。`costExplorer.enabled` のときだけ ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
+| `redmine_aws_sqs:prune_records[<日数>]` と `redmine_aws_ses:prune_records[<日数>]` (プラグインの記録のうち、保持期間 `retention.recordsDays` より古いものを削除する。失敗したジョブと受信したメール。[security.md](security.md#retention-periods)) | 毎日 |
 
 <a id="stopping-unused-functions"></a>
 

@@ -19,7 +19,7 @@ bin/rake redmine:attachments:prune
 bin/rake -T
 
 # re-import received email (the ID of an email still in S3)
-bin/rake redmine_serverless_ses:receive_mail MESSAGE_ID=<message ID>
+bin/rake redmine_aws_ses:receive_mail MESSAGE_ID=<message ID>
 
 # rails runner (one line of code)
 bin/rails runner 'puts User.count'
@@ -59,7 +59,7 @@ sequenceDiagram
   H-->>C: Exit code, end of output
 ```
 
-`redmine-worker` and `redmine-task` are separate functions because they run differently. `redmine-worker` keeps Rails loaded so that jobs run fast. `redmine-task` runs each rake task in a new child process and keeps no state from the previous task. Its handler does not load Rails: it only checks what it received and starts the child process, and the Rails work happens inside that rake process. Importing email is also a rake task, in the plugin `redmine_serverless_ses` ([mail.md](mail.md#receiving)).
+`redmine-worker` and `redmine-task` are separate functions because they run differently. `redmine-worker` keeps Rails loaded so that jobs run fast. `redmine-task` runs each rake task in a new child process and keeps no state from the previous task. Its handler does not load Rails: it only checks what it received and starts the child process, and the Rails work happens inside that rake process. Importing email is also a rake task, in the plugin `redmine_aws_ses` ([mail.md](mail.md#receiving)).
 
 Lambda starts every file in `/opt/extensions` as an extension. Lambda Web Adapter registers as an extension and also talks to Lambda (the Runtime API) itself, so if it started in `redmine-task` too, it would conflict with the handler. Therefore `/opt/extensions/lambda-adapter` is a small shell script, and the real Lambda Web Adapter is in `/opt/lambda-web-adapter/`. The script starts the real one only when `REDMINE_ROLE=web`.
 
@@ -71,7 +71,7 @@ In `redmine-task`, the script instead registers as an extension that receives no
 | --- | --- | --- |
 | `bin/rake`, deployment | `{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}` | Run rake |
 | `bin/rails` | `{"command": "runner", "args": ["puts User.count"]}` | Run `rails runner` |
-| `bin/rake` | `{"command": "rake", "args": ["redmine_serverless_ses:receive_mail"], "env": {"MESSAGE_ID": "<message ID>"}}` | Import email from S3 ([mail.md](mail.md#receiving)) |
+| `bin/rake` | `{"command": "rake", "args": ["redmine_aws_ses:receive_mail"], "env": {"MESSAGE_ID": "<message ID>"}}` | Import email from S3 ([mail.md](mail.md#receiving)) |
 | SES receipt rule | SES event (`Records[0].ses`) | Same as above. From the event: the message ID (`mail.messageId` → `MESSAGE_ID`), the recipients (`receipt.recipients` → `SES_RECIPIENTS`, comma-separated) and the verdicts (`receipt.spamVerdict.status`, `virusVerdict`, `dmarcVerdict`, `spfVerdict`, `dkimVerdict` → `SES_SPAM_VERDICT`, `SES_VIRUS_VERDICT`, `SES_DMARC_VERDICT`, `SES_SPF_VERDICT`, `SES_DKIM_VERDICT`; `receipt.dmarcPolicy` → `SES_DMARC_POLICY`). Values that are not well formed are left out. A command event cannot pass these variables ([mail.md](mail.md#spoofing-and-spam)) |
 | EventBridge Scheduler | `{"command": "rake", "args": ["redmine:attachments:prune"]}` | Scheduled tasks (below) |
 
@@ -96,7 +96,7 @@ Between the migration and the update of `redmine-web`, old code runs against the
 
 Rails writes `db/schema.rb` after `db:migrate` (the default of `ActiveRecord.dump_schema_after_migration` is `true`), and Redmine's `production.rb` leaves this setting commented out, so the write fails on Lambda. `additional_environment.rb` sets it to `false`.
 
-Tasks that move files under `files/`, such as `redmine:attachments:move_to_subdirectories`, do not move files in S3, so they are not used. Tasks that read attachments, such as `redmine:attachments:update_digests`, fetch them from S3 and read them through the `/tmp` cache ([attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#the-tmp-cache)).
+Tasks that move files under `files/`, such as `redmine:attachments:move_to_subdirectories`, do not move files in S3, so they are not used. Tasks that read attachments, such as `redmine:attachments:update_digests`, fetch them from S3 and read them through the `/tmp` cache ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#the-tmp-cache)).
 
 ## Scheduled runs
 
@@ -106,8 +106,8 @@ EventBridge Scheduler invokes `redmine-task` with input in the form above.
 | --- | --- |
 | `redmine:attachments:prune` | Daily |
 | `redmine:send_reminders` (due date reminders) | If used, weekday mornings |
-| `redmine_serverless_costexplorer:refresh` (in an image that adds the plugin, a derived image: the account's costs from Cost Explorer, for the administration pages) | Daily, only with `costExplorer.enabled` ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
-| `redmine_serverless_sqs:prune_records[<days>]` and `redmine_serverless_ses:prune_records[<days>]` (delete the plugins' records older than the retention period, `retention.recordsDays`: failed jobs and received email; [security.md](security.md#retention-periods)) | Daily |
+| `redmine_aws_costexplorer:refresh` (in an image that adds the plugin, a derived image: the account's costs from Cost Explorer, for the administration pages) | Daily, only with `costExplorer.enabled` ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
+| `redmine_aws_sqs:prune_records[<days>]` and `redmine_aws_ses:prune_records[<days>]` (delete the plugins' records older than the retention period, `retention.recordsDays`: failed jobs and received email; [security.md](security.md#retention-periods)) | Daily |
 
 ## Stopping unused functions
 

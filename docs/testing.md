@@ -8,7 +8,7 @@ The specifications in this document were checked against official information as
 
 The tests follow four rules:
 
-- Every piece of replaced code has tests: at least one for each row of the table in [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html#replaced-code), changed in the same commit as the table.
+- Every piece of replaced code has tests: at least one for each row of the table in [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#replaced-code), changed in the same commit as the table.
 - The tests use Redmine's standard test framework. Redmine has unit, functional, integration and system (Capybara and Selenium) tests built on Rails Minitest and mocha; the plugins' tests are written the same way and run with `rake redmine:plugins:test`.
 - Tests do not connect to real AWS. They use AWS SDK response stubs (`stub_responses`), and moto (Apache-2.0) and LocalStack, which reproduce AWS APIs locally ("Which substitute to use" below).
 - What cannot be reproduced locally, such as Lambda, CloudFront and SES receiving, is checked after deployment.
@@ -36,10 +36,10 @@ Until `bin/test` is put together, the stages built so far are separate scripts: 
 
 ### Working on a plugin at the same time
 
-The image installs the plugins as gems from GitHub Packages at the versions in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)). With `REDMINE_SERVERLESS_DIR`, `REDMINE_SERVERLESS_SSM_DIR` or `REDMINE_SERVERLESS_S3_DIR` set to a checkout of the plugin, the scripts that build the image replace the installed gem with its working tree (`bin/lib/plugin.sh`). For example, to test the image with a checkout of the SSM plugin next to this repository:
+The image installs the plugins as gems from GitHub Packages at the versions in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)). With `REDMINE_AWS_DIR`, `REDMINE_AWS_LAMBDA_DIR`, `REDMINE_AWS_SSM_DIR`, `REDMINE_AWS_SQS_DIR`, `REDMINE_AWS_SES_DIR` or `REDMINE_AWS_S3_DIR` set to a checkout of the plugin, the scripts that build the image replace the installed gem with its working tree (`bin/lib/plugin.sh`). For example, to test the image with a checkout of the SSM plugin next to this repository:
 
 ```sh
-REDMINE_SERVERLESS_SSM_DIR=../redmine_serverless_ssm bin/test-image
+REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 ```
 
 The scripts take Bundler's credential for GitHub Packages from the `gh` login, or from `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (CI sets it from `GITHUB_TOKEN`).
@@ -63,29 +63,33 @@ The scripts take Bundler's credential for GitHub Packages from the `gh` login, o
 
 ## Plugin tests
 
-Tests are written per feature of the plugins: `redmine_serverless` for running on Lambda ([features](https://redmine-kit.github.io/redmine_serverless/#features)), `redmine_serverless_s3` for attachments in S3 ([documentation](https://redmine-kit.github.io/redmine_serverless_s3/)) and `redmine_serverless_ses` for sending and receiving email through SES ([documentation](https://redmine-kit.github.io/redmine_serverless_ses/)). Each plugin runs its own tests. They also check that Redmine behaves as standard when a feature's enabling conditions are not met.
+Tests are written per feature of the plugins: `redmine_aws` for the shared "AWS" menu and AWS clients ([features](https://redmine-kit.github.io/redmine_aws/#features)), `redmine_aws_lambda` for running on Lambda ([features](https://redmine-kit.github.io/redmine_aws_lambda/#features)), `redmine_aws_s3` for attachments in S3 ([documentation](https://redmine-kit.github.io/redmine_aws_s3/)) and `redmine_aws_ses` for sending and receiving email through SES ([documentation](https://redmine-kit.github.io/redmine_aws_ses/)). Each plugin runs its own tests. They also check that Redmine behaves as standard when a feature's enabling conditions are not met.
 
-### Attachments in S3 (`redmine_serverless_s3`)
+### Attachments in S3 (`redmine_aws_s3`)
 
-The plugin tests every piece of replaced code and every call to AWS in its own repository and CI: stubs for each S3 answer, moto for the requests, GuardDuty's tags set by the tests, and CloudFront signed URLs verified with the public key. What the tests check, and what they cannot reproduce locally (CloudFront, GuardDuty, S3 rejecting a checksum that does not match), is in its [setup.md](https://redmine-kit.github.io/redmine_serverless_s3/setup.html#what-the-tests-check). Serverless checks the deployed behaviors after deployment (below).
+The plugin tests every piece of replaced code and every call to AWS in its own repository and CI: stubs for each S3 answer, moto for the requests, GuardDuty's tags set by the tests, and CloudFront signed URLs verified with the public key. What the tests check, and what they cannot reproduce locally (CloudFront, GuardDuty, S3 rejecting a checksum that does not match), is in its [setup.md](https://redmine-kit.github.io/redmine_aws_s3/setup.html#what-the-tests-check). Serverless checks the deployed behaviors after deployment (below).
 
-### Running on Lambda (`redmine_serverless`)
+### The AWS menu (`redmine_aws`)
 
-The plugin tests `/events`, the asset setting, the fixed settings and its administration pages in its own repository and CI, with Redmine's full test suite ([its README](https://redmine-kit.github.io/redmine_serverless/#tests)).
+The plugin tests the "AWS" menu, the "Status" tab and the settings of the AWS clients in its own repository and CI, with Redmine's full test suite ([its README](https://redmine-kit.github.io/redmine_aws/#tests)).
 
-### Email (`redmine_serverless_ses`)
+### Running on Lambda (`redmine_aws_lambda`)
 
-The plugin tests sending through SES v2, each SES error, the import from the mail bucket with SES-event verdicts and recipients, the project addresses and the pages in its own repository and CI, against LocalStack (or moto without its token) ([sending.md](https://redmine-kit.github.io/redmine_serverless_ses/sending.html#tests), [receiving.md](https://redmine-kit.github.io/redmine_serverless_ses/receiving.html#tests)).
+The plugin tests `/events`, the forwarded host, the asset setting, the fixed settings and its sections of the "Status" tab in its own repository and CI, with Redmine's full test suite ([its README](https://redmine-kit.github.io/redmine_aws_lambda/#tests)).
 
-### Jobs (`redmine_serverless_sqs`)
+### Email (`redmine_aws_ses`)
 
-The plugin tests the jobs on SQS through `aws-activejob-sqs`, the allowlist, the failure records, resending and moving the dead-letter queue back in its own repository and CI, against LocalStack (or moto without its token) ([setup.md](https://redmine-kit.github.io/redmine_serverless_sqs/setup.html#tests)).
+The plugin tests sending through SES v2, each SES error, the import from the mail bucket with SES-event verdicts and recipients, the project addresses and the pages in its own repository and CI, against LocalStack (or moto without its token) ([sending.md](https://redmine-kit.github.io/redmine_aws_ses/sending.html#tests), [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/receiving.html#tests)).
+
+### Jobs (`redmine_aws_sqs`)
+
+The plugin tests the jobs on SQS through `aws-activejob-sqs`, the allowlist, the failure records, resending and moving the dead-letter queue back in its own repository and CI, against LocalStack (or moto without its token) ([setup.md](https://redmine-kit.github.io/redmine_aws_sqs/setup.html#tests)).
 
 ### Settings and code outside the plugins
 
 | Target | What to check | Tools |
 | --- | --- | --- |
-| SSM loading (`redmine_serverless_ssm`) | Reads everything under `/<instance>/env/`, continuing past 10 entries, and decrypts SecureString. Does not overwrite existing environment variables. Skips names that cannot be environment variables and deeper paths. Fails when SSM cannot be reached. In the image tests, the three roles read the database host, its password and `SECRET_KEY_BASE` only from SSM, which checks that the reading comes before `config/database.yml` | Minitest, moto (the plugin's `test/loader_test.rb`, `bin/test-image`) |
+| SSM loading (`redmine_aws_ssm`) | Reads everything under `/<instance>/env/`, continuing past 10 entries, and decrypts SecureString. Does not overwrite existing environment variables. Skips names that cannot be environment variables and deeper paths. Fails when SSM cannot be reached. In the image tests, the three roles read the database host, its password and `SECRET_KEY_BASE` only from SSM, which checks that the reading comes before `config/database.yml` | Minitest, moto (the plugin's `test/loader_test.rb`, `bin/test-image`) |
 | Task handler | Accepts only the defined `command` and `env`. Recognizes SES events and passes their message ID, recipients and verdicts, leaving out values that are not well formed; a command event cannot pass the SES variables. Returns the child process's exit code and the end of its output. Does not cut Japanese text in the middle of a character | Minitest |
 | Extension script | Depending on `REDMINE_ROLE`, starts the real Lambda Web Adapter or registers as an extension that does nothing | ShellCheck, image tests |
 | Webhooks | Not sent to destinations in the `webhook_blocklist` ranges (private, link-local). An error at the destination fails the job, and it is redelivered | Minitest, moto |
@@ -97,7 +101,7 @@ The plugins replace Redmine code with `prepend`. Redmine's tests check that Redm
 
 ### How they run
 
-`bin/test-core` runs them in the `core-test` stage of the image's Dockerfile, which has the same Redmine source, `config/` files and `Gemfile.lock` as the image, plus the test gems, ImageMagick and the Subversion and Git clients, as in the image. Redmine's `master` enables a repository type only when its client is installed ([#43209](https://www.redmine.org/issues/43209)), the repositories of Redmine's test fixtures are Subversion ones, and some tests are skipped when Git is unavailable. The tests run with the plugins of the image installed: `redmine_serverless`, `redmine_serverless_s3`, `redmine_serverless_ses`, `redmine_serverless_sqs` and `redmine_serverless_ssm`. The database is the PostgreSQL of `bin/test-services`, and the tests run in parallel with one worker per processor (`PARALLEL_WORKERS` changes the number).
+`bin/test-core` runs them in the `core-test` stage of the image's Dockerfile, which has the same Redmine source, `config/` files and `Gemfile.lock` as the image, plus the test gems, ImageMagick and the Subversion and Git clients, as in the image. Redmine's `master` enables a repository type only when its client is installed ([#43209](https://www.redmine.org/issues/43209)), the repositories of Redmine's test fixtures are Subversion ones, and some tests are skipped when Git is unavailable. The tests run with the plugins of the image installed: `redmine_aws`, `redmine_aws_lambda`, `redmine_aws_s3`, `redmine_aws_ses`, `redmine_aws_sqs` and `redmine_aws_ssm`. The database is the PostgreSQL of `bin/test-services`, and the tests run in parallel with one worker per processor (`PARALLEL_WORKERS` changes the number).
 
 The image does not write `db/schema.rb` after migrations, because the file system on Lambda is read-only, but parallel tests load that file. So `bin/test-core` writes it before the tests, after Redmine's and the plugins' migrations (`redmine:plugins:migrate`, as the deployment runs). Redmine skips the tests that need SCM repositories or an LDAP server, which this stage does not set up.
 
@@ -109,7 +113,7 @@ Tests that fail because of a gem, not because of this image, are listed in `test
 
 When their enabling conditions are not met (no S3 bucket settings, no `REDMINE_ROLE`, no SES settings), the plugins do not enable their replacements, so Redmine's unit, functional and integration tests must all pass with the plugins installed.
 
-With `redmine_serverless_s3` enabled, Redmine's attachment tests (`test/unit/attachment_test.rb`, `test/unit/attachment_transaction_test.rb`, `test/functional/attachments_controller_test.rb`, `test/functional/attachments_visibility_test.rb`, `test/integration/attachments_test.rb`) run on moto, except those that assume local files (that check paths on disk directly). These are excluded, with the reason written down.
+With `redmine_aws_s3` enabled, Redmine's attachment tests (`test/unit/attachment_test.rb`, `test/unit/attachment_transaction_test.rb`, `test/functional/attachments_controller_test.rb`, `test/functional/attachments_visibility_test.rb`, `test/integration/attachments_test.rb`) run on moto, except those that assume local files (that check paths on disk directly). These are excluded, with the reason written down.
 
 ### Watching the replaced code
 
@@ -131,7 +135,7 @@ For each replaced Redmine method, the SHA256 of the original code is recorded, a
 | Secrets (SSM values, `SECRET_KEY_BASE`, the database password) do not appear in the page HTML | Functional tests |
 | The state of SES, SQS and S3 is shown as given by the SDK response stubs. The pages open even when an API returns an error | Functional tests |
 | Resending, deleting, redriving the dead-letter queue and removing from the suppression list run after confirmation and are logged | Functional tests, system tests |
-| After the receiving settings change, `redmine_serverless_ses:receive_mail` uses the new settings from the next run | Functional tests |
+| After the receiving settings change, `redmine_aws_ses:receive_mail` uses the new settings from the next run | Functional tests |
 | Reconciliation is enqueued as a job, and the result is shown on the page | Functional tests, integration tests (moto) |
 
 ## System tests
@@ -154,7 +158,7 @@ Every image build is started in Docker under the same conditions as production.
 - **Conditions:** arm64, a read-only file system (`--read-only`), only `/tmp` writable (`--tmpfs /tmp`), a low-privilege user (`--user` with any non-root ID). The database is a PostgreSQL container of the same major version as RDS. AWS (SSM and SQS) is LocalStack when `LOCALSTACK_AUTH_TOKEN` is set, as in CI, and moto otherwise (pull requests from forks, or locally without a token); with a token, LocalStack must start, or the tests fail. Nothing is mocked: LocalStack and moto both have every API the tests use. The containers run on an internal Docker network that reaches only PostgreSQL and that backend, so the tests cannot reach AWS.
 - **`web`:** Requests are sent as CloudFront sends them through the function URL: the function URL's host name in `Host`, the domain in `X-Forwarded-Host` and `https` in `X-Forwarded-Proto`, with `REDMINE_HOST` set to the domain ([lambda.md](lambda.md#host-and-scheme)). Check that Puma starts, the login page returns 200 with the session cookie marked `Secure` ([session.md](session.md#the-secure-attribute-of-the-session-cookie)), Rails answers 403 without `X-Forwarded-Host` or with another host or the function URL's host name in it, redirects go to `https://` and the domain, signing in with the login form's POST works and a POST with a wrong CSRF token gets 422, the assets' `.manifest.json` exists, and nothing is written outside `/tmp` after startup. On Redmine 7.1 (master), a favicon set in the settings is served with `Cache-Control: max-age=31556952, public, immutable`, which is what the CloudFront behavior `/favicons/*` caches ([lambda.md](lambda.md#the-favicon)). The page is requested from inside the container, because Puma listens only on `127.0.0.1`. The emulator does not pass requests through Lambda Web Adapter, so that path is checked in the Lambda integration tests.
 - **`task`:** Invoke the handler with the Runtime Interface Emulator in the base image (`aws-lambda-rie`), and check that `rake db:migrate`, `redmine:load_default_data`, `rake -T` and `rails runner` work, that Redmine finds the Subversion and Git clients and reads a Subversion and a Git repository made in `/tmp` ([lambda.md](lambda.md#repositories)), that a failed task returns its exit code, and that commands and `env` names outside the allowed ones are rejected. Mail import is added with the plugin.
-- **`worker`:** Likewise with the emulator. The job is sent to the queue and received from it, and the worker gets it in an SQS-shaped event with the message's receipt handle. Check that the invocation succeeds, the job runs (a project is deleted, and its notification mail is queued in SQS), the worker deletes the message (nothing left in flight; `redmine_serverless_sqs` deletes at `REDMINE_JOBS_QUEUE_URL`, [setup.md](https://redmine-kit.github.io/redmine_serverless_sqs/setup.html)), and that a job class outside the allowlist is not run.
+- **`worker`:** Likewise with the emulator. The job is sent to the queue and received from it, and the worker gets it in an SQS-shaped event with the message's receipt handle. Check that the invocation succeeds, the job runs (a project is deleted, and its notification mail is queued in SQS), the worker deletes the message (nothing left in flight; `redmine_aws_sqs` deletes at `REDMINE_JOBS_QUEUE_URL`, [setup.md](https://redmine-kit.github.io/redmine_aws_sqs/setup.html)), and that a job class outside the allowlist is not run.
 - **Contents:** Check that ImageMagick's `convert`, Ghostscript, Pandoc (3.8.3 or later) and the Subversion and Git clients (`svn`, `git`) work, that everything in `/var/task` and `/opt` is readable by the low-privilege user, and that the compiled assets are there. The task handler's unit tests also run in the image. Whether the pushed manifest is arm64 only and not an index is checked when the image is pushed.
 - **Derived images:** `bin/test-image <image> <redmine.json>` runs the same tests on a derived image with `image.plugins` and `image.themes` ([architecture.md](architecture.md#derived-images)), and also checks that the added plugins are loaded and their migrations have run, and that the added themes are found and their assets compiled. `bin/deploy` runs it before pushing a derived image. `bin/test-derived-image [base image]` builds and tests the derived images of `test/derived/`: one with a gem from GitHub Packages, a plugin from Git at a commit, a plugin and a theme from directories and a plugin setting; one with a gem from RubyGems, built without a GitHub token; and two that must fail with a clear message, a plugin that asks for another version of a gem of the base image, and a Git entry that needs credentials. In CI, the image job of the Redmine release runs it on the image it has just built.
 

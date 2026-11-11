@@ -8,11 +8,11 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | --- | --- |
 | Understand the overall architecture, the decisions and the open questions | [architecture.md](architecture.md) |
 | Build the image and the Lambda settings | [lambda.md](lambda.md) |
-| Build storing and retrieving attachments | [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html) |
+| Build storing and retrieving attachments | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html) |
 | Create the database and the VPC | [rds.md](rds.md) |
 | Run migrations or rake | [tasks.md](tasks.md) |
 | Send and receive mail | [mail.md](mail.md) |
-| Build the administration pages | [admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html) |
+| Build the administration pages | [admin.md](https://redmine-kit.github.io/redmine_aws/admin.html) |
 | Decide permissions | [iam.md](iam.md) |
 | Learn about security protections, WAF, log retention and incident procedures | [security.md](security.md) |
 | Set up the AWS-side security settings (GuardDuty, CloudTrail, Access Analyzer and so on) | [aws-security.md](aws-security.md) |
@@ -32,11 +32,11 @@ Design documentation for Serverless. It describes a design that runs the latest 
 | --- | --- |
 | [architecture.md](architecture.md) | Overall architecture, decisions and their reasons, the project's own plugins, open questions |
 | [lambda.md](lambda.md) | Event Functions, the container image, Lambda Web Adapter, the read-only file system, SSM Parameter Store, Rails settings, jobs with SQS, CloudFront and assets |
-| [attachments.md](https://redmine-kit.github.io/redmine_serverless_s3/attachments.html) | Design based on the S3 plugins, bucket layout, uploads and downloads through CloudFront with signed URLs, the sandbox CSP, the `/tmp` cache |
+| [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html) | Design based on the S3 plugins, bucket layout, uploads and downloads through CloudFront with signed URLs, the sandbox CSP, the `/tmp` cache |
 | [rds.md](rds.md) | The database (RDS for PostgreSQL) and the VPC: settings, routes out of the VPC (VPC endpoints or a NAT instance), access through Systems Manager, cost |
 | [tasks.md](tasks.md) | How one image switches between three roles. Migrations, arbitrary rake tasks, `rails runner` and mail import in the task function |
 | [mail.md](mail.md) | Mail sent from Rails ActionMailer through the SES API, and mail received by SES and imported |
-| [admin.md](https://redmine-kit.github.io/redmine_serverless/admin.html) | Administration pages added by the plugins, as tabs under one shared "Serverless" menu item (status and connections in `redmine_serverless`; jobs in `redmine_serverless_sqs`; mail sending and receiving in `redmine_serverless_ses`; S3 attachments in `redmine_serverless_s3`) |
+| [admin.md](https://redmine-kit.github.io/redmine_aws/admin.html) | Administration pages added by the plugins, as tabs under one shared "AWS" menu item (status and the connection test in `redmine_aws`; jobs in `redmine_aws_sqs`; mail sending and receiving in `redmine_aws_ses`; S3 attachments in `redmine_aws_s3`) |
 | [iam.md](iam.md) | Execution roles, resource-based policies, the deployment role, permissions for people |
 | [security.md](security.md) | What to protect, threats and protections, the entry point and AWS WAF, Redmine settings, data protection, retention periods, logs, the supply chain, remaining risks, incidents |
 | [aws-security.md](aws-security.md) | The AWS-side security settings: what each protects, who sets it up, cost, defaults (GuardDuty and its malware scan of uploads, CloudTrail, IAM Access Analyzer, Security Hub, Config, Block Public Access, EBS encryption, the root user, budgets) |

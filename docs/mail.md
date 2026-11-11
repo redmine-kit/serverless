@@ -141,7 +141,7 @@ SES receipt rules are grouped in rule sets, and only one rule set can be active 
 
 ### Importing
 
-The receipt rule invokes `redmine-task` asynchronously with the SES event. Its handler runs the rake task `redmine_aws_ses:receive_mail` with the message ID, the envelope recipients and SES's verdicts from the event ([tasks.md](tasks.md#kinds-of-events)). The task reads the message from the mail bucket, chooses the project from the recipients, passes the message to Redmine's `MailHandler`, and moves it to `processed/`; the steps and the options are in the plugin's [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/receiving.html#importing).
+The receipt rule invokes `redmine-task` asynchronously with the SES event. Its handler runs the rake task `redmine_aws_ses:receive_mail` with the message ID, the envelope recipients, the envelope sender and SES's verdicts from the event ([tasks.md](tasks.md#kinds-of-events)). The task reads the message from the mail bucket, chooses the project from the recipients, passes the message to Redmine's `MailHandler`, and moves it to `processed/`; the steps and the options are in the plugin's [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/receiving.html#importing).
 
 Attachments in email are saved as Redmine attachments, and the plugin `redmine_aws_s3` stores them in S3 ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#uploads-through-lambda)). SES invokes Lambda asynchronously, so on failure Lambda retries up to 2 times. Events that still fail go to the failure destination (SQS), and an alarm reports the count.
 

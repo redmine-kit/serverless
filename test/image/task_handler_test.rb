@@ -23,16 +23,18 @@ class TaskHandlerTest < Minitest::Test
                  TaskHandler.parse(event)
   end
 
-  def test_ses_event_passes_the_verdicts_and_recipients
+  def test_ses_event_passes_the_verdicts_recipients_and_sender
     receipt = {
       'recipients' => ['support@redmine.example.com', 'ecookbook@redmine.example.com'],
       'spamVerdict' => { 'status' => 'PASS' }, 'virusVerdict' => { 'status' => 'PASS' },
       'spfVerdict' => { 'status' => 'PASS' }, 'dkimVerdict' => { 'status' => 'GRAY' },
       'dmarcVerdict' => { 'status' => 'FAIL' }, 'dmarcPolicy' => 'reject'
     }
-    event = { 'Records' => [{ 'ses' => { 'mail' => { 'messageId' => 'abc123' }, 'receipt' => receipt } }] }
+    mail = { 'messageId' => 'abc123', 'source' => 'forwarder@example.com' }
+    event = { 'Records' => [{ 'ses' => { 'mail' => mail, 'receipt' => receipt } }] }
     _, _, env = TaskHandler.parse(event)
-    assert_equal({ 'MESSAGE_ID' => 'abc123', 'SES_SPAM_VERDICT' => 'PASS', 'SES_VIRUS_VERDICT' => 'PASS',
+    assert_equal({ 'MESSAGE_ID' => 'abc123', 'SES_MAIL_FROM' => 'forwarder@example.com',
+                   'SES_SPAM_VERDICT' => 'PASS', 'SES_VIRUS_VERDICT' => 'PASS',
                    'SES_SPF_VERDICT' => 'PASS', 'SES_DKIM_VERDICT' => 'GRAY', 'SES_DMARC_VERDICT' => 'FAIL',
                    'SES_DMARC_POLICY' => 'REJECT',
                    'SES_RECIPIENTS' => 'support@redmine.example.com,ecookbook@redmine.example.com' }, env)
@@ -41,7 +43,8 @@ class TaskHandlerTest < Minitest::Test
   def test_ses_event_values_that_are_not_well_formed_are_left_out
     receipt = { 'recipients' => ['a@b.example', 'x,y@b.example', 'no-at', 1],
                 'spamVerdict' => { 'status' => 'PASS; rm' }, 'virusVerdict' => 'PASS' }
-    event = { 'Records' => [{ 'ses' => { 'mail' => { 'messageId' => 'abc123' }, 'receipt' => receipt } }] }
+    mail = { 'messageId' => 'abc123', 'source' => 'a@b.example, c@d.example' }
+    event = { 'Records' => [{ 'ses' => { 'mail' => mail, 'receipt' => receipt } }] }
     _, _, env = TaskHandler.parse(event)
     assert_equal({ 'MESSAGE_ID' => 'abc123', 'SES_RECIPIENTS' => 'a@b.example' }, env)
   end

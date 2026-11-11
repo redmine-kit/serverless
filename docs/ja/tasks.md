@@ -78,7 +78,7 @@ Lambda は、`/opt/extensions` にあるファイルをすべて拡張機能と�
 | `bin/rake`、デプロイ | `{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}` | rake を実行する |
 | `bin/rails` | `{"command": "runner", "args": ["puts User.count"]}` | `rails runner` を実行する |
 | `bin/rake` | `{"command": "rake", "args": ["redmine_aws_ses:receive_mail"], "env": {"MESSAGE_ID": "<メッセージ ID>"}}` | S3 のメールを取り込む ([mail.md](mail.md#receiving)) |
-| SES の受信ルール | SES イベント (`Records[0].ses`) | 同上。イベントから、メッセージ ID (`mail.messageId` → `MESSAGE_ID`)、宛先 (`receipt.recipients` → `SES_RECIPIENTS`。カンマ区切り)、判定 (`receipt.spamVerdict.status`、`virusVerdict`、`dmarcVerdict`、`spfVerdict`、`dkimVerdict` → `SES_SPAM_VERDICT`、`SES_VIRUS_VERDICT`、`SES_DMARC_VERDICT`、`SES_SPF_VERDICT`、`SES_DKIM_VERDICT`。`receipt.dmarcPolicy` → `SES_DMARC_POLICY`) を取得する。形式が正しくない値は設定しない。コマンドのイベントでは、これらの変数を渡せない ([mail.md](mail.md#spoofing-and-spam)) |
+| SES の受信ルール | SES イベント (`Records[0].ses`) | 同上。イベントから、メッセージ ID (`mail.messageId` → `MESSAGE_ID`)、宛先 (`receipt.recipients` → `SES_RECIPIENTS`。カンマ区切り)、エンベロープの送信者 (`mail.source` → `SES_MAIL_FROM`)、判定 (`receipt.spamVerdict.status`、`virusVerdict`、`dmarcVerdict`、`spfVerdict`、`dkimVerdict` → `SES_SPAM_VERDICT`、`SES_VIRUS_VERDICT`、`SES_DMARC_VERDICT`、`SES_SPF_VERDICT`、`SES_DKIM_VERDICT`。`receipt.dmarcPolicy` → `SES_DMARC_POLICY`) を取得する。形式が正しくない値は設定しない。コマンドのイベントでは、これらの変数を渡せない ([mail.md](mail.md#spoofing-and-spam)) |
 | EventBridge Scheduler | `{"command": "rake", "args": ["redmine:attachments:prune"]}` | 定期タスク (下記) |
 
 - **`command`:** `rake` と `runner` だけを受け付けます。SES イベントは、形式で判別します。

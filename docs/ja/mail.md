@@ -165,7 +165,7 @@ SES の受信ルールは受信ルールセットにまとめ、リージョン�
 
 ### 取り込み
 
-受信ルールは、SES のイベントを付けて `redmine-task` を非同期で呼び出します。そのハンドラーが、イベントのメッセージ ID、エンベロープの宛先、SES の判定結果を付けて、rake タスク `redmine_aws_ses:receive_mail` を実行します ([tasks.md](tasks.md#kinds-of-events))。タスクは、メール用バケットからメッセージを読み、宛先からプロジェクトを決め、Redmine の `MailHandler` に渡し、`processed/` に移動します。手順とオプションは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/ja/receiving.html#importing) にあります。
+受信ルールは、SES のイベントを付けて `redmine-task` を非同期で呼び出します。そのハンドラーが、イベントのメッセージ ID、エンベロープの宛先、エンベロープの送信者、SES の判定結果を付けて、rake タスク `redmine_aws_ses:receive_mail` を実行します ([tasks.md](tasks.md#kinds-of-events))。タスクは、メール用バケットからメッセージを読み、宛先からプロジェクトを決め、Redmine の `MailHandler` に渡し、`processed/` に移動します。手順とオプションは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/ja/receiving.html#importing) にあります。
 
 メールの添付ファイルは Redmine の添付ファイルとして保存し、プラグイン `redmine_aws_s3` が S3 に保存します ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#uploads-through-lambda))。SES は Lambda を非同期で呼び出すので、失敗すると Lambda が 2 回まで再試行します。それでも失敗したイベントは失敗時の送信先 (SQS) に送り、件数をアラームで通知します。
 

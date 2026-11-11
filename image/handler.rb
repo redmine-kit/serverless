@@ -41,9 +41,10 @@ module TaskHandler
   end
 
   # A receipt rule passes the received mail; it is imported from S3. The
-  # verdicts and the envelope recipients come from the event, not from the
-  # message, whose headers the sender controls (docs/mail.md#spoofing-and-spam).
-  # They are set only here: a command event cannot pass them.
+  # verdicts, the envelope recipients and the envelope sender come from the
+  # event, not from the message, whose headers the sender controls
+  # (docs/mail.md#spoofing-and-spam). They are set only here: a command event
+  # cannot pass them.
   SES_VERDICTS = {
     'spamVerdict' => 'SES_SPAM_VERDICT', 'virusVerdict' => 'SES_VIRUS_VERDICT',
     'dmarcVerdict' => 'SES_DMARC_VERDICT', 'spfVerdict' => 'SES_SPF_VERDICT', 'dkimVerdict' => 'SES_DKIM_VERDICT'
@@ -58,11 +59,15 @@ module TaskHandler
     ['rake', ['redmine_aws_ses:receive_mail'], { 'MESSAGE_ID' => message_id }.merge(ses_receipt(ses))]
   end
 
+  # The envelope sender (mail.source) lets the plugin match a registered
+  # forwarder; it is left out when it is not a single address.
   def ses_receipt(ses)
     receipt = ses['receipt'].is_a?(Hash) ? ses['receipt'] : {}
     env = ses_verdicts(receipt)
     recipients = Array(receipt['recipients']).select { |r| r.is_a?(String) && RECIPIENT.match?(r) }
     env['SES_RECIPIENTS'] = recipients.join(',') unless recipients.empty?
+    source = ses.dig('mail', 'source')
+    env['SES_MAIL_FROM'] = source if source.is_a?(String) && RECIPIENT.match?(source)
     env
   end
 

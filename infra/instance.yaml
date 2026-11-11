@@ -115,7 +115,7 @@ Parameters:
     AllowedValues: ["true", "false"]
     Description: >-
       costExplorer.enabled in redmine.json, for an image that adds the plugin
-      redmine_serverless_costexplorer (a derived image): it reads the
+      redmine_aws_costexplorer (a derived image): it reads the
       account's costs from Cost Explorer. Off by default.
   CostExplorerTagKey:
     Type: String
@@ -259,7 +259,7 @@ Resources:
         - EventBridgeConfiguration:
             EventBridgeEnabled: true
         - !Ref AWS::NoValue
-      # https://redmine-kit.github.io/redmine_serverless_s3/setup.html#the-bucket
+      # https://redmine-kit.github.io/redmine_aws_s3/setup.html#the-bucket
       LifecycleConfiguration:
         Rules:
           # Temporary objects: uploads before they become attachments, the
@@ -671,7 +671,7 @@ Resources:
                 Action: sqs:GetQueueAttributes
                 Resource: [!GetAtt JobQueue.Arn, !GetAtt JobDeadLetterQueue.Arn]
               # Moving the dead-letter queue back: AWS's minimum for a redrive
-              # (redmine_serverless_sqs docs/iam.md); SendMessage on the job
+              # (redmine_aws_sqs docs/iam.md); SendMessage on the job
               # queue is in CommonPolicy.
               - Effect: Allow
                 Action:
@@ -872,7 +872,7 @@ Resources:
       BatchSize: 1
       Enabled: true
 
-  # Cost Explorer for redmine_serverless_costexplorer (in a derived image):
+  # Cost Explorer for redmine_aws_costexplorer (in a derived image):
   # only the daily refresh in the task calls it. The actions take the billing
   # view as resource; narrowing to the primary billing view's ARN is
   # unverified, so the resource is "*".
@@ -1094,7 +1094,7 @@ Resources:
             OriginAccessControlId: !GetAtt FunctionUrlAccess.Id
             # Host is the function URL's own host name, which the function URL
             # and origin access control need. Redmine takes the domain from
-            # X-Forwarded-Host (redmine_serverless makes it the Host, and
+            # X-Forwarded-Host (redmine_aws_lambda makes it the Host, and
             # config.hosts holds only the domain) and the scheme from
             # X-Forwarded-Proto. CloudFront replaces headers of these names
             # sent by the viewer (docs/lambda.md#cloudfront-and-function-urls).
@@ -1342,7 +1342,7 @@ Resources:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: '{"command": "rake", "args": ["redmine:attachments:prune"]}'
-  # The costs of the account, daily (redmine_serverless_costexplorer; one Cost
+  # The costs of the account, daily (redmine_aws_costexplorer; one Cost
   # Explorer request costs USD 0.01).
   CostExplorerRefreshSchedule:
     Type: AWS::Scheduler::Schedule
@@ -1356,7 +1356,7 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: '{"command": "rake", "args": ["redmine_serverless_costexplorer:refresh"]}'
+        Input: '{"command": "rake", "args": ["redmine_aws_costexplorer:refresh"]}'
   SendRemindersSchedule:
     Type: AWS::Scheduler::Schedule
     Condition: SendsReminders

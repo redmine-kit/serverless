@@ -6,6 +6,6 @@ require 'chronic'
 
 Redmine::Plugin.register :redmine_derived_rubygems do
   name 'Derived image with a RubyGems gem'
-  author 'Redmine Serverless tests'
+  author 'Serverless tests'
   version '0.0.1'
 end

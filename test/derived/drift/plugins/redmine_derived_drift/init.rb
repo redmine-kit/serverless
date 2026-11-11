@@ -4,6 +4,6 @@
 # (bin/test-derived-image).
 Redmine::Plugin.register :redmine_derived_drift do
   name 'Derived image drift'
-  author 'Redmine Serverless tests'
+  author 'Serverless tests'
   version '0.0.1'
 end

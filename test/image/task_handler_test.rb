@@ -19,7 +19,7 @@ class TaskHandlerTest < Minitest::Test
 
   def test_ses_event_imports_the_message
     event = { 'Records' => [{ 'ses' => { 'mail' => { 'messageId' => 'abc123' } } }] }
-    assert_equal ['rake', ['redmine_serverless_ses:receive_mail'], { 'MESSAGE_ID' => 'abc123' }],
+    assert_equal ['rake', ['redmine_aws_ses:receive_mail'], { 'MESSAGE_ID' => 'abc123' }],
                  TaskHandler.parse(event)
   end
 
@@ -48,7 +48,7 @@ class TaskHandlerTest < Minitest::Test
 
   def test_command_events_cannot_pass_verdicts
     assert_raises(ArgumentError) do
-      TaskHandler.parse('command' => 'rake', 'args' => ['redmine_serverless_ses:receive_mail'],
+      TaskHandler.parse('command' => 'rake', 'args' => ['redmine_aws_ses:receive_mail'],
                         'env' => { 'MESSAGE_ID' => 'abc', 'SES_DMARC_VERDICT' => 'PASS' })
     end
   end

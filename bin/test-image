@@ -114,9 +114,9 @@ check "task handler" handler_tests
 ssm_tests() {
   docker run --rm --read-only --tmpfs /tmp --user 993:993 --network "$network" "${aws_env[@]}" \
     -w /var/task/redmine --entrypoint ruby "$image" \
-    -rbundler/setup -rredmine_serverless_ssm/loader plugins/redmine_serverless_ssm/test/loader_test.rb
+    -rbundler/setup -rredmine_aws_ssm/loader plugins/redmine_aws_ssm/test/loader_test.rb
 }
-check "SSM loading (redmine_serverless_ssm)" ssm_tests
+check "SSM loading (redmine_aws_ssm)" ssm_tests
 
 echo "== contents"
 check "arm64 Linux image" test "$(docker image inspect "$image" -f '{{.Os}}/{{.Architecture}}')" = linux/arm64
@@ -176,10 +176,10 @@ from_ssm() {
 }
 check "the secrets come from SSM" from_ssm
 plugins_loaded() {
-  task '{"command":"runner","args":["puts %w[redmine_serverless redmine_serverless_sqs redmine_serverless_ses redmine_serverless_s3 redmine_serverless_ssm].reject { |id| Redmine::Plugin.installed?(id) }.join(%q(,)).presence || %q(all)"]}' |
+  task '{"command":"runner","args":["puts %w[redmine_aws redmine_aws_lambda redmine_aws_sqs redmine_aws_ses redmine_aws_s3 redmine_aws_ssm].reject { |id| Redmine::Plugin.installed?(id) }.join(%q(,)).presence || %q(all)"]}' |
     tail -n 1 | grep -qx all
 }
-check "the plugins are loaded (core, SQS, SES, S3, SSM)" plugins_loaded
+check "the plugins are loaded (base, Lambda, SQS, SES, S3, SSM)" plugins_loaded
 runner_says_none() { # <Ruby expression that lists what is missing>
   local event output
   event=$(jq -nc --arg code "puts(($1).join(%q(,)).presence || %q(none))" '{command: "runner", args: [$code]}')
@@ -339,7 +339,7 @@ handle=$(sed -n 's:.*<ReceiptHandle>\([^<]*\)</ReceiptHandle>.*:\1:p' <<<"$recei
 event=$(jq -nc --arg body "$job" --arg handle "$handle" --arg account "$account" '{Records: [{messageId: "image-test", receiptHandle: $handle,
   body: $body, md5OfBody: "", messageAttributes: {}, eventSource: "aws:sqs",
   eventSourceARN: "arn:aws:sqs:us-east-1:\($account):redmine-jobs", awsRegion: "us-east-1"}]}')
-# After the job, redmine_serverless_sqs deletes the message at
+# After the job, redmine_aws_sqs deletes the message at
 # REDMINE_JOBS_QUEUE_URL (the backend here), not at the public host the gem builds
 # from the ARN. The runtime may write the job's log after the invocation
 # returns, so the log is read for a few seconds.

@@ -163,7 +163,7 @@
       }
     },
     "costExplorer": {
-      "description": "For an image that adds the plugin redmine_serverless_costexplorer (a derived image): the account's costs from Cost Explorer on the administration pages. Off by default.",
+      "description": "For an image that adds the plugin redmine_aws_costexplorer (a derived image): the account's costs from Cost Explorer on the administration pages. Off by default.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

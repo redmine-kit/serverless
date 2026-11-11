@@ -258,7 +258,7 @@ check "full.json: its own image and names, Japanese default data, no receipt rul
   grep -q 'REDMINE_LANG\":\"ja' '$full_state/calls' && ! grep -q set-active-receipt-rule-set '$full_state/calls' &&
   ! grep -q 'crane digest' '$full_state/calls'"
 check "full.json: the settings and the attachment limit" test \
-  "$(settings_of "$full_state" | jq -c '[.mode, .settings.attachment_max_size, .settings.app_title, .plugins.redmine_serverless_s3.download_url_expiry]')" == \
+  "$(settings_of "$full_state" | jq -c '[.mode, .settings.attachment_max_size, .settings.app_title, .plugins.redmine_aws_s3.download_url_expiry]')" == \
   '["enforce","51200","Team A","600"]'
 check "full.json: dns.mode external shows the records to add" grep -q "point redmine.example.org to d111111abcdef8.cloudfront.net" "$full_state/output"
 

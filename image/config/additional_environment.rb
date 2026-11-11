@@ -4,17 +4,17 @@
 # that production.rb does not set are effective here (docs/lambda.md).
 
 # Settings and secrets from SSM Parameter Store are already in ENV here: the
-# plugin redmine_serverless_ssm reads them before the configuration
+# plugin redmine_aws_ssm reads them before the configuration
 # (REDMINE_SSM_PATH).
 
 config.cache_store = :memory_store, { size: 64 * 1024 * 1024 }
-# Jobs run in the request unless redmine_serverless_sqs switches them to SQS
+# Jobs run in the request unless redmine_aws_sqs switches them to SQS
 # (when REDMINE_JOBS_QUEUE_URL is set; docs/lambda.md#background-jobs).
 config.active_job.queue_adapter = :inline
 config.active_record.dump_schema_after_migration = false
 config.hosts << ENV['REDMINE_HOST'] if ENV['REDMINE_HOST'].present?
 # Redirects to attachments' signed URLs on CloudFront (/files/ and /tmp/,
-# redmine_serverless_s3) are written to the log as [FILTERED], so that the
+# redmine_aws_s3) are written to the log as [FILTERED], so that the
 # log does not hand out working URLs (docs/security.md#logs).
 config.filter_redirect << %r{\Ahttps://[^/]+/(?:files|tmp)/}
 

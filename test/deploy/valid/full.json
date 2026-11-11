@@ -17,7 +17,7 @@
   "redmine": {
     "settings": { "app_title": "Team A", "default_language": "ja", "per_page_options": "25,50" },
     "settingsMode": "enforce",
-    "pluginSettings": { "redmine_serverless_s3": { "download_url_expiry": "600" } }
+    "pluginSettings": { "redmine_aws_s3": { "download_url_expiry": "600" } }
   },
   "costExplorer": { "enabled": true, "allocationTag": "redmine:instance" },
   "schedule": { "timezone": "Asia/Tokyo", "sendReminders": true },

@@ -4,7 +4,7 @@
 # and a stylesheet.
 Redmine::Plugin.register :redmine_derived_sample do
   name 'Derived image sample'
-  author 'Redmine Serverless tests'
+  author 'Serverless tests'
   version '0.0.1'
   settings default: { 'greeting' => '' }
 end

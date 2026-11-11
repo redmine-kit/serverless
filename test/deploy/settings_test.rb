@@ -28,14 +28,14 @@ class SettingsCodeTest < Minitest::Test
   LIB = File.expand_path('../../deploy/lib.sh', __dir__)
   STORED = {
     'app_title' => 'Old',
-    'plugin_redmine_serverless_s3' => { 'cache_size_mb' => '512', 'reconciled_at' => '2026-11-01' }
+    'plugin_redmine_aws_s3' => { 'cache_size_mb' => '512', 'reconciled_at' => '2026-11-01' }
   }.freeze
 
   def apply(mode)
     config = {
       'mode' => mode,
       'settings' => { 'app_title' => %(It's "new" `x` $(y)), 'default_language' => 'ja' },
-      'plugins' => { 'redmine_serverless_s3' => { 'download_url_expiry' => '600' } }
+      'plugins' => { 'redmine_aws_s3' => { 'download_url_expiry' => '600' } }
     }
     code, status = Open3.capture2('bash', '-c', 'source "$0"; settings_code "$1"', LIB, JSON.generate(config))
     assert status.success?
@@ -48,7 +48,7 @@ class SettingsCodeTest < Minitest::Test
     store, out = apply('initial')
     assert_equal 'Old', store['app_title']
     assert_equal 'ja', store['default_language']
-    assert_equal STORED['plugin_redmine_serverless_s3'], store['plugin_redmine_serverless_s3']
+    assert_equal STORED['plugin_redmine_aws_s3'], store['plugin_redmine_aws_s3']
     assert_equal "settings: 1 applied (initial)\n", out
   end
 
@@ -57,7 +57,7 @@ class SettingsCodeTest < Minitest::Test
     assert_equal %(It's "new" `x` $(y)), store['app_title']
     assert_equal 'ja', store['default_language']
     assert_equal({ 'cache_size_mb' => '512', 'reconciled_at' => '2026-11-01', 'download_url_expiry' => '600' },
-                 store['plugin_redmine_serverless_s3'])
+                 store['plugin_redmine_aws_s3'])
     assert_equal "settings: 3 applied (enforce)\n", out
   end
 end

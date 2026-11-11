@@ -87,14 +87,14 @@ Each instance's Lambda functions and RDS instance go into the shared private sub
 | `schedule.timezone` | | `UTC` | The time zone of the scheduled rake ([tasks.md](tasks.md#scheduled-runs)) |
 | `schedule.sendReminders` | | `false` | Whether to send the reminder mails (`redmine:send_reminders`) on weekday mornings |
 | `logs.retentionDays` | | 90 | CloudWatch Logs retention in days (including Lambda@Edge log groups) |
-| `retention.recordsDays` | | 90 | Days to keep the plugin's records (received email, failed jobs) |
+| `retention.recordsDays` | | 90 | Days to keep the plugins' records (received email, failed jobs), passed to their daily prune tasks ([tasks.md](tasks.md#scheduled-runs)) |
 | `retention.mailDays` | | 30 | Days to keep email in the mail bucket (`processed/` and `inbound/`) |
 | `retention.noncurrentVersionDays` | | 30 | Days to keep old versions of attachments |
 | `retention.backupDays` | | 7 | Days to keep RDS automated backups (up to 35). Backups up to the provisioned storage are free ([rds.md](rds.md#settings)) |
 | `alarms.snsTopicArn` | | none | SNS topic to send alarms to |
 | `tags` | | none | Tags added to every stack, and so to the resources |
 
-The schema already checks `mail.perProjectAddresses`, `mail.globalLocalPart`, `webhooks`, `cloudfront.plan` and `retention.recordsDays`, but the stacks do not use them yet. They take effect with the plugins' settings and the CloudFront plan, which come later.
+The schema already checks `mail.perProjectAddresses`, `mail.globalLocalPart`, `webhooks` and `cloudfront.plan`, but the stacks do not use them yet. They take effect with the plugins' settings and the CloudFront plan, which come later.
 
 The list of retention periods is in [security.md](security.md#retention-periods).
 

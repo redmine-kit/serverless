@@ -74,6 +74,8 @@ check "values: the hosted zone only with route53" test \
 check "values: full.json" test \
   "$(value "$full" InstanceName) $(value "$full" MalwareScan) $(value "$full" DbInstanceClass) $(value "$full" ReceiveMail) $(value "$full" ScheduleTimezone) $(value "$full" LogRetentionDays)" \
   == "team-a false db.t4g.small false Asia/Tokyo 365"
+check "values: the records' retention, 90 days by default" test \
+  "$(value "$minimal" RecordsDays) $(value "$full" RecordsDays)" == "90 60"
 check "values: Cost Explorer off by default, on in full.json" test \
   "$(value "$minimal" CostExplorerEnabled)|$(value "$minimal" CostExplorerTagKey)|$(value "$full" CostExplorerEnabled)|$(value "$full" CostExplorerTagKey)" == \
   "false||true|redmine:instance"

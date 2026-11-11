@@ -95,14 +95,14 @@ Lambda@Edge 関数のほかに、CloudFront の証明書 (ACM) も us-east-1 に
 | `schedule.timezone` | | `UTC` | 定期実行する rake のタイムゾーン ([tasks.md](tasks.md#scheduled-runs)) |
 | `schedule.sendReminders` | | `false` | 平日の朝に、期日が近いチケットのメール (`redmine:send_reminders`) を送信するか |
 | `logs.retentionDays` | | 90 | CloudWatch Logs の保持日数 (Lambda@Edge のロググループを含む) |
-| `retention.recordsDays` | | 90 | プラグインの記録 (受信したメール、失敗したジョブ) の保持日数 |
+| `retention.recordsDays` | | 90 | プラグインの記録 (受信したメール、失敗したジョブ) の保持日数。毎日の削除のタスクに渡す ([tasks.md](tasks.md#scheduled-runs)) |
 | `retention.mailDays` | | 30 | メールバケットのメール (`processed/` と `inbound/`) の保持日数 |
 | `retention.noncurrentVersionDays` | | 30 | 添付ファイルの古いバージョンの保持日数 |
 | `retention.backupDays` | | 7 | RDS の自動バックアップの保持日数 (35 まで)。割り当てたストレージのサイズまでは無料 ([rds.md](rds.md#settings)) |
 | `alarms.snsTopicArn` | | なし | アラームの通知先の SNS トピック |
 | `tags` | | なし | すべてのスタック、つまりすべてのリソースに追加するタグ |
 
-`mail.perProjectAddresses`、`mail.globalLocalPart`、`webhooks`、`cloudfront.plan`、`retention.recordsDays` は、スキーマで検証するだけで、スタックではまだ使いません。今後作るプラグインの設定と CloudFront のプランで有効になります。
+`mail.perProjectAddresses`、`mail.globalLocalPart`、`webhooks`、`cloudfront.plan` は、スキーマで検証するだけで、スタックではまだ使いません。今後作るプラグインの設定と CloudFront のプランで有効になります。
 
 保持期間の一覧は、[security.md](security.md#retention-periods) にあります。
 

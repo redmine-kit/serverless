@@ -55,6 +55,7 @@ def instance_params($image_uri; $certificate; $web_acl; $body_hash; $public_key)
     p("WorkerReservedConcurrency"; .lambda.workerReservedConcurrency // 3),
     p("LogRetentionDays"; .logs.retentionDays // 90),
     p("MailDays"; .retention.mailDays // 30),
+    p("RecordsDays"; .retention.recordsDays // 90),
     p("NoncurrentVersionDays"; .retention.noncurrentVersionDays // 30),
     p("CostExplorerEnabled"; if .costExplorer.enabled == true then "true" else "false" end),
     p("CostExplorerTagKey"; .costExplorer.allocationTag // ""),

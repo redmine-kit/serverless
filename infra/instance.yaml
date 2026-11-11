@@ -96,6 +96,13 @@ Parameters:
     Default: 30
     MinValue: 1
     Description: Days to keep email in the mail bucket (retention.mailDays).
+  RecordsDays:
+    Type: Number
+    Default: 90
+    MinValue: 1
+    Description: >-
+      Days to keep the plugins' records, failed jobs and received email
+      (retention.recordsDays).
   NoncurrentVersionDays:
     Type: Number
     Default: 30
@@ -1304,8 +1311,7 @@ Resources:
               FunctionArn: !GetAtt Task.Arn
               InvocationType: Event
 
-  # Scheduled rake (docs/tasks.md#scheduled-runs). The plugins' prune tasks
-  # are added when their code exists.
+  # Scheduled rake (docs/tasks.md#scheduled-runs).
   SchedulerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1370,6 +1376,33 @@ Resources:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: '{"command": "rake", "args": ["redmine:send_reminders"]}'
+  # The plugins' records older than retention.recordsDays, daily
+  # (docs/security.md#retention-periods): received email (redmine_aws_ses)
+  # and failed jobs (redmine_aws_sqs).
+  SesPruneRecordsSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub ${InstanceName}-ses-prune-records
+      ScheduleExpression: cron(45 3 * * ? *)
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt Task.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: !Sub '{"command": "rake", "args": ["redmine_aws_ses:prune_records[${RecordsDays}]"]}'
+  SqsPruneRecordsSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub ${InstanceName}-sqs-prune-records
+      ScheduleExpression: cron(50 3 * * ? *)
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt Task.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: !Sub '{"command": "rake", "args": ["redmine_aws_sqs:prune_records[${RecordsDays}]"]}'
 
   # Alarms (docs/security.md): jobs that used up their tries, failed tasks,
   # and errors of the functions.

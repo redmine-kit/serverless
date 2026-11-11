@@ -688,7 +688,8 @@ Resources:
                   - sqs:ReceiveMessage
                   - sqs:DeleteMessage
                 Resource: !GetAtt JobDeadLetterQueue.Arn
-              # The "Sending email" page.
+              # The email tabs: "Refresh" reads the state of SES, and
+              # removing an address from the suppression list.
               - Effect: Allow
                 Action: ses:GetEmailIdentity
                 Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${Domain}
@@ -766,6 +767,14 @@ Resources:
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !GetAtt TaskFailureQueue.Arn
+              # The scheduled refresh of the SES state for the email tabs
+              # (redmine_aws_ses:refresh).
+              - Effect: Allow
+                Action: ses:GetEmailIdentity
+                Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${Domain}
+              - Effect: Allow
+                Action: [ses:GetAccount, ses:ListSuppressedDestinations]
+                Resource: "*"
 
   Web:
     Type: AWS::Lambda::Function
@@ -1376,6 +1385,20 @@ Resources:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: '{"command": "rake", "args": ["redmine:send_reminders"]}'
+  # The state of SES and of the domain's MX record that the email tabs show
+  # (redmine_aws_ses; the pages do not call SES). Hourly, as the plugin
+  # suggests; the tabs' "Refresh" link reads it at once.
+  SesRefreshSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub ${InstanceName}-ses-refresh
+      ScheduleExpression: rate(1 hour)
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt Task.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: '{"command": "rake", "args": ["redmine_aws_ses:refresh"]}'
   # The plugins' records older than retention.recordsDays, daily
   # (docs/security.md#retention-periods): received email (redmine_aws_ses)
   # and failed jobs (redmine_aws_sqs).

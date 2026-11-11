@@ -55,7 +55,7 @@ production:
 
 Verify Redmine's subdomain as an SES identity in the Region you use (DKIM), and request production access (leaving the sandbox) in advance. Both identities and production access are per Region ([Receiving domain](#receiving-domain)).
 
-`redmine-web`, `redmine-worker` and `redmine-task` are in the VPC, so they reach the SES API through an interface endpoint for the SES API or through the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)). `redmine-web` uses the SES API for "Sending email" in the administration screen and for test email ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/admin.html#sending-email)). What the plugin calls, and the permissions it needs, are on the plugin's [setup page](https://redmine-kit.github.io/redmine_aws_ses/setup.html#network).
+`redmine-web`, `redmine-worker` and `redmine-task` are in the VPC, so they reach the SES API through an interface endpoint for the SES API or through the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)). The "Email sending" and "Email receiving" tabs of the administration pages show the state of SES that `redmine_aws_ses:refresh` stored, and do not call SES when they open: `redmine-task` reads it hourly ([tasks.md](tasks.md#scheduled-runs)), and `redmine-web` reads it again for the tabs' "Refresh" link, removes addresses from the suppression list and sends test email ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/admin.html#sending-email)). What the plugin calls, and the permissions it needs, are on the plugin's [setup page](https://redmine-kit.github.io/redmine_aws_ses/setup.html#network).
 
 ### When sending fails
 

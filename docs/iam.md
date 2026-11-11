@@ -68,8 +68,9 @@ Each row belongs to one of the plugins, and the plugin's IAM page also explains 
 | `sqs:GetQueueAttributes` | The job queue and the dead-letter queue | The "Jobs" admin page |
 | `sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | The job dead-letter queue | Moving the dead-letter queue back to the job queue from the "Jobs" admin page, with `sqs:SendMessage` on the job queue (common to the three functions). The minimum for a redrive is in the SQS plugin's [iam.md](https://redmine-kit.github.io/redmine_aws_sqs/iam.html#permissions) |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Redmine's standard test email (sent within a page request) |
-| `ses:GetEmailIdentity` | The SES identity of the sender domain | The "Email sending" admin tab |
-| `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/admin.html#sending-email)) |
+| `ses:GetEmailIdentity` | The SES identity of the sender domain | The "Refresh" link of the "Email sending" and "Email receiving" admin tabs, which reads the state of SES again. Opening the tabs does not call SES: they show the state that the hourly refresh stored ([tasks.md](tasks.md#scheduled-runs)) |
+| `ses:GetAccount`<br>`ses:ListSuppressedDestinations` | `*` (cannot be scoped) | Same as above ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/admin.html#sending-email)) |
+| `ses:DeleteSuppressedDestination` | `*` (cannot be scoped) | The "Remove" button of the suppression list on the "Email sending" tab |
 
 Email is sent by passing the full message (raw) to SES v2 `SendEmail`. The examples in the AWS SES documentation allow both `ses:SendEmail` and `ses:SendRawEmail` as sending permissions, and this design follows them. Whether `ses:SendRawEmail` is required for raw sending with v2 has not been checked yet.
 
@@ -94,6 +95,8 @@ Browsers do not use this role. Uploads and downloads go through CloudFront with 
 | `s3:PutObject` | `processed/*` in the mail bucket | Moving imported email |
 | `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting unattached attachments (`redmine:attachments:prune`), storing attachments from email |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Email from rake tasks (due date reminders, etc.) |
+| `ses:GetEmailIdentity` | The SES identity of the sender domain | The hourly refresh of the state of SES that the email tabs show (`redmine_aws_ses:refresh`, [tasks.md](tasks.md#scheduled-runs)) |
+| `ses:GetAccount`<br>`ses:ListSuppressedDestinations` | `*` (cannot be scoped) | Same as above |
 | `sqs:SendMessage` | The job queue | Jobs enqueued within rake |
 | `sqs:SendMessage` | The failure destination queue (`redmine-task-failures`) | The destination for failed asynchronous invocations from SES. Lambda sends to destinations with the execution role's permissions |
 

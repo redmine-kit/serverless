@@ -65,7 +65,7 @@ production:
 
 Redmine のサブドメインを、使用するリージョンの SES の ID として検証し (DKIM)、本番稼働 (サンドボックスの解除) を事前に申請します。SES の ID と本番稼働は、どちらもリージョンごとです ([受信ドメイン](#receiving-domain))。
 
-`redmine-web`、`redmine-worker`、`redmine-task` は VPC 内にあるので、SES の API 用のインターフェイスエンドポイントか NAT インスタンスを経由して SES の API に接続します ([rds.md](rds.md#routes-out-of-the-vpc))。`redmine-web` は、管理画面の「メールの送信」とテストメールで SES の API を使います ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/ja/admin.html#sending-email))。プラグインが呼び出す API と必要な権限は、プラグインの[導入のページ](https://redmine-kit.github.io/redmine_aws_ses/ja/setup.html#network)にあります。
+`redmine-web`、`redmine-worker`、`redmine-task` は VPC 内にあるので、SES の API 用のインターフェイスエンドポイントか NAT インスタンスを経由して SES の API に接続します ([rds.md](rds.md#routes-out-of-the-vpc))。管理画面の「メール送信」と「メール受信」のタブは、`redmine_aws_ses:refresh` が保存した SES の状態を表示し、開いたときには SES を呼び出しません。`redmine-task` が 1 時間ごとに読み込み ([tasks.md](tasks.md#scheduled-runs))、`redmine-web` は、タブの「最新の情報に更新」のリンクでの読み込み直し、サプレッションリストからの削除、テストメールで SES の API を使います ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/ja/admin.html#sending-email))。プラグインが呼び出す API と必要な権限は、プラグインの[導入のページ](https://redmine-kit.github.io/redmine_aws_ses/ja/setup.html#network)にあります。
 
 <a id="when-sending-fails"></a>
 

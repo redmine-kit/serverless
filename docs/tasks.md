@@ -108,6 +108,7 @@ EventBridge Scheduler invokes `redmine-task` with input in the form above.
 | `redmine:send_reminders` (due date reminders) | If used, weekday mornings |
 | `redmine_aws_costexplorer:refresh` (in an image that adds the plugin, a derived image: the account's costs from Cost Explorer, for the administration pages) | Daily, only with `costExplorer.enabled` ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
 | `redmine_aws_sqs:prune_records[<days>]` and `redmine_aws_ses:prune_records[<days>]` (delete the plugins' records older than the retention period, `retention.recordsDays`: failed jobs and received email; [security.md](security.md#retention-periods)) | Daily |
+| `redmine_aws_ses:refresh` (reads the state of SES and the domain's MX record that the email tabs show; the pages do not call SES, and their "Refresh" link reads it at once) | Hourly |
 
 ## Stopping unused functions
 

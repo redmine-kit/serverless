@@ -122,6 +122,7 @@ EventBridge Scheduler から、上の形式の入力で `redmine-task` を呼び
 | `redmine:send_reminders` (期日の通知) | 使う場合は、平日の朝 |
 | `redmine_aws_costexplorer:refresh` (プラグインを追加したイメージ、つまり派生イメージで。管理画面のために、Cost Explorer からアカウントの費用を取得する) | 毎日。`costExplorer.enabled` のときだけ ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
 | `redmine_aws_sqs:prune_records[<日数>]` と `redmine_aws_ses:prune_records[<日数>]` (プラグインの記録のうち、保持期間 `retention.recordsDays` より古いものを削除する。失敗したジョブと受信したメール。[security.md](security.md#retention-periods)) | 毎日 |
+| `redmine_aws_ses:refresh` (メールのタブに表示する SES の状態とドメインの MX レコードを読み込む。画面は SES を呼び出さず、「最新の情報に更新」のリンクですぐに読み込める) | 1 時間ごと |
 
 <a id="stopping-unused-functions"></a>
 

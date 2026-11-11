@@ -76,8 +76,9 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 | `sqs:GetQueueAttributes` | ジョブキューとデッドレターキュー | 管理画面の「ジョブ」 |
 | `sqs:GetQueueUrl`<br>`sqs:StartMessageMoveTask`<br>`sqs:ListMessageMoveTasks`<br>`sqs:ReceiveMessage`<br>`sqs:DeleteMessage` | ジョブのデッドレターキュー | 管理画面の「ジョブ」から、デッドレターキューのメッセージをジョブキューに戻す。ジョブキューへの `sqs:SendMessage` (3 つの関数に共通) も使う。戻すのに必要な最小限の権限は、SQS プラグインの [iam.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/iam.html#permissions) にある |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元ドメインの SES ID | Redmine 標準のテストメール (画面へのリクエストの処理中に送信する) |
-| `ses:GetEmailIdentity` | 送信元ドメインの SES ID | 管理画面の「メール送信」 |
-| `ses:GetAccount`<br>`ses:ListSuppressedDestinations`<br>`ses:DeleteSuppressedDestination` | `*` (対象を絞り込めない) | 同上 ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/ja/admin.html#sending-email)) |
+| `ses:GetEmailIdentity` | 送信元ドメインの SES ID | 管理画面の「メール送信」と「メール受信」のタブの「最新の情報に更新」のリンク。SES の状態を読み込み直す。タブを開いても SES は呼び出さず、1 時間ごとの更新で保存した状態を表示する ([tasks.md](tasks.md#scheduled-runs)) |
+| `ses:GetAccount`<br>`ses:ListSuppressedDestinations` | `*` (対象を絞り込めない) | 同上 ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/ja/admin.html#sending-email)) |
+| `ses:DeleteSuppressedDestination` | `*` (対象を絞り込めない) | 「メール送信」のタブのサプレッションリストの「削除」のボタン |
 
 メールは、SES v2 の `SendEmail` に raw 形式で全文を渡して送信します。SES のドキュメントの例は、送信の権限として `ses:SendEmail` と `ses:SendRawEmail` の両方を許可しているので、この設計もそれに合わせます。v2 の raw 形式の送信に `ses:SendRawEmail` が必須かは、まだ確認していません。
 
@@ -106,6 +107,8 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 | `s3:PutObject` | メール用バケットの `processed/*` | 取り込んだメールの移動 |
 | `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | 添付ファイル用バケット (`redmine-web` と同じ範囲) | 未添付の添付ファイルの削除 (`redmine:attachments:prune`)、メールの添付ファイルの保存 |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元ドメインの SES ID | rake タスクのメール (期日通知など) |
+| `ses:GetEmailIdentity` | 送信元ドメインの SES ID | メールのタブに表示する SES の状態の、1 時間ごとの更新 (`redmine_aws_ses:refresh`、[tasks.md](tasks.md#scheduled-runs)) |
+| `ses:GetAccount`<br>`ses:ListSuppressedDestinations` | `*` (対象を絞り込めない) | 同上 |
 | `sqs:SendMessage` | ジョブキュー | rake の中で投入されるジョブ |
 | `sqs:SendMessage` | 失敗時の送信先キュー (`redmine-task-failures`) | SES からの非同期呼び出しが失敗したときの送信先。Lambda の送信先へは、実行ロールの権限で送信する |
 

@@ -172,7 +172,7 @@ During an incident, make sure nothing is deleted by these periods until the inve
 
 ## Logs
 
-- **Do not log signed URLs:** Rails writes the redirect target URL to the log. If the signed URL for an attachment download is in the log, anyone who can read the log can read the attachment until it expires. Add the paths `/files/`, `/thumbnails/` and `/tmp/bulk/` to the Rails setting `config.filter_redirect` so the log shows `[FILTERED]` ([lambda.md](lambda.md#rails-and-redmine-settings)).
+- **Do not log signed URLs:** Rails writes the redirect target URL to the log. If the signed URL for an attachment download is in the log, anyone who can read the log can read the attachment until it expires. Redirects to URLs under `/files/` and `/tmp/` on Redmine's domain (attachments, thumbnails, bulk-download zips) are added to the Rails setting `config.filter_redirect`, so the log shows `[FILTERED]` ([lambda.md](lambda.md#rails-and-redmine-settings)).
 - **Filter parameters:** Redmine filters the `password`, `salt`, `twofa_totp_key` and `key` parameters in logs (`filter_parameters` in `config/application.rb`). Secret parameters on pages the plugin adds are filtered the same way.
 - **IP addresses:** Because requests pass through CloudFront, Redmine receives the user's IP address in `X-Forwarded-For`. Whether Rails' `remote_ip` returns the user's IP address rather than CloudFront's (trusted proxy settings) is checked when building.
 - **Limit who can read:** Only operators have permission to read logs ([iam.md](iam.md#permissions-of-people)).

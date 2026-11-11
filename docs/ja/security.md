@@ -200,7 +200,7 @@ WAF は、リクエストがオリジンに到達する前に評価されます�
 
 ## ログ
 
-- **署名付き URL を記録しない:** Rails は、リダイレクト先の URL をログに書き込みます。添付ファイルのダウンロードの署名付き URL がログに残ると、ログを読める人が、有効期限のあいだ添付ファイルを読めます。Rails の設定 `config.filter_redirect` にパス `/files/`、`/thumbnails/`、`/tmp/bulk/` を指定し、ログには `[FILTERED]` と書き込ませます ([lambda.md](lambda.md#rails-and-redmine-settings))。
+- **署名付き URL を記録しない:** Rails は、リダイレクト先の URL をログに書き込みます。添付ファイルのダウンロードの署名付き URL がログに残ると、ログを読める人が、有効期限のあいだ添付ファイルを読めます。Redmine のドメインの `/files/` と `/tmp/` の下の URL (添付ファイル、サムネイル、一括ダウンロードの zip) へのリダイレクトを Rails の設定 `config.filter_redirect` に指定し、ログには `[FILTERED]` と書き込ませます ([lambda.md](lambda.md#rails-and-redmine-settings))。
 - **パラメーターをマスクする:** Redmine は、`password`、`salt`、`twofa_totp_key`、`key` のパラメーターを、ログでマスクします (`config/application.rb` の `filter_parameters`)。プラグインが追加する画面のパラメーターも、機密性のあるものは同じくマスクします。
 - **IP アドレス:** CloudFront を経由するので、Redmine には `X-Forwarded-For` でユーザーの IP アドレスが渡されます。Rails の `remote_ip` が、CloudFront の IP アドレスではなくユーザーの IP アドレスを返すか (信頼するプロキシの設定) は、構築時に確認します。
 - **閲覧者を限定する:** ログを読む権限は、運用担当者だけに付与します ([iam.md](iam.md#permissions-of-people))。

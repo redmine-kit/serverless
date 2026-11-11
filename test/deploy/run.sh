@@ -4,6 +4,7 @@
 #   - the JSON Schema against valid and invalid configurations
 #   - the stack parameters of deploy/params.jq against the templates
 #   - the cache behaviors of the distribution (behaviors.py)
+#   - the environment of the functions (functions.py)
 #   - deploy.sh against fake aws, crane and curl (test/deploy/fake), which
 #     record every call: the order of the steps, --dry-run, --code-only,
 #     failures, and that no secret reaches a command line or the output
@@ -93,6 +94,11 @@ echo "== CloudFront behaviors"
 behaviors_problems=$(python3.13 test/deploy/behaviors.py infra/instance.yaml 2>&1)
 check "the behaviors fit the Free plan and /favicons/* is cached without cookies" test -z "$behaviors_problems"
 [[ -z "$behaviors_problems" ]] || echo "$behaviors_problems"
+
+echo "== Functions"
+functions_problems=$(python3.13 test/deploy/functions.py infra/instance.yaml 2>&1)
+check "the three functions get their image in REDMINE_IMAGE" test -z "$functions_problems"
+[[ -z "$functions_problems" ]] || echo "$functions_problems"
 
 echo "== Settings code"
 # shellcheck source=deploy/lib.sh

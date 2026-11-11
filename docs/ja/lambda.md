@@ -201,7 +201,7 @@ Redmine は、起動時にアセットが古いと判断すると `public/assets
 
 インスタンスのスタックが、3 つの関数に環境変数 `REDMINE_SSM_PATH=/<instance>/env/` を渡し、実行ロールには、そのパスだけに対する `ssm:GetParametersByPath` を許可します ([iam.md](iam.md#permissions-common-to-the-three-functions))。十分早く読み込まれるように、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から追加します。イメージテストでは、データベースのホストを SSM (moto) だけに置いても、`db:migrate`、web の画面、worker のジョブが成功するので、`config/database.yml` より前に読み込めていることが分かります (2026-11-09。[testing.md](testing.md#image-tests))。
 
-秘密でない設定 (バケット名、ドメイン、リージョン、データベース名、データベースのユーザー名) は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME` (デフォルトは `redmine`)、`REDMINE_DB_USERNAME` (デフォルトは `redmine`)、`REDMINE_JOBS_QUEUE_URL` (ジョブキュー)、`REDMINE_HOST` (ドメイン) として読みます。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE` (デフォルトは `verify-full`) は、ローカルのテストでだけ変更します。
+秘密でない設定 (バケット名、ドメイン、リージョン、データベース名、データベースのユーザー名) は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME` (デフォルトは `redmine`)、`REDMINE_DB_USERNAME` (デフォルトは `redmine`)、`REDMINE_JOBS_QUEUE_URL` (ジョブキュー)、`REDMINE_HOST` (ドメイン) として読みます。`REDMINE_IMAGE` は、関数が動かすイメージの digest 付きの URI で、`redmine_aws_lambda` が「ステータス」のタブに表示します。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE` (デフォルトは `verify-full`) は、ローカルのテストでだけ変更します。
 
 SecureString は AWS マネージドキー (`aws/ssm`) で暗号化します。このキーで実行ロールに `kms:Decrypt` が必要かは、構築時に確認します。実行環境は起動時に 1 回だけパラメーターを読むので、値を変更したら、関数の設定を更新して新しい環境を起動させます。
 

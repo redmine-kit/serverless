@@ -804,6 +804,8 @@ Resources:
       Environment:
         Variables:
           REDMINE_ROLE: web
+          # The image the function runs, for the Status tab (redmine_aws_lambda).
+          REDMINE_IMAGE: !Ref ImageUri
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
           REDMINE_DB_USERNAME: redmine
@@ -867,6 +869,8 @@ Resources:
       Environment:
         Variables:
           REDMINE_ROLE: worker
+          # The image the function runs, for the Status tab (redmine_aws_lambda).
+          REDMINE_IMAGE: !Ref ImageUri
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
           REDMINE_DB_USERNAME: redmine
@@ -932,6 +936,8 @@ Resources:
       Environment:
         Variables:
           REDMINE_ROLE: task
+          # The image the function runs, for the Status tab (redmine_aws_lambda).
+          REDMINE_IMAGE: !Ref ImageUri
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
           REDMINE_DB_USERNAME: redmine

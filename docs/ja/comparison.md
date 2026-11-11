@@ -59,7 +59,7 @@ Lambda は使った分だけですが、データベースと VPC 外への経�
 | 起動待ち | 使われていない時間のあとの最初の画面で、起動を待つ ([lambda.md](lambda.md#waiting-for-start-up)) | ない |
 | 負荷が増えた場合 | Lambda が環境を増やす。RDS はインスタンスクラスを変えてスケールアップする | サーバーのサイズを見直す |
 | Redmine の更新 | イメージを再ビルドし、タスク用の関数で migration を実行する ([tasks.md](tasks.md)) | サーバーで Redmine を入れ替え、migration を実行する |
-| 独自のコード | 独自のプラグイン (Lambda での実行、S3 の添付ファイル、SES でのメール) を、Redmine の更新に合わせてメンテナンスする ([upgrade.md](upgrade.md)) | 不要 (Redmine の標準のまま動く) |
+| 独自のコード | 独自のプラグイン (共通の AWS メニューと AWS クライアント、Lambda での実行、S3 の添付ファイル、SES でのメール、SQS でのジョブ、SSM の設定、派生イメージでは Cost Explorer) を、Redmine の更新に合わせてメンテナンスする ([upgrade.md](upgrade.md)) | 不要 (Redmine の標準のまま動く) |
 
 <a id="which-to-choose"></a>
 

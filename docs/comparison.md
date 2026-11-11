@@ -51,7 +51,7 @@ The function URL uses IAM authentication and accepts only requests signed by Clo
 | Waiting for start-up | The first page after an idle period waits for start-up ([lambda.md](lambda.md#waiting-for-start-up)) | None |
 | When load increases | Lambda adds environments. RDS is resized by changing the instance class | Resize the server |
 | Redmine updates | Rebuild the image and run migrations in the task function ([tasks.md](tasks.md)) | Replace Redmine on the server and run migrations |
-| Own code | Keep the project's own plugins (running on Lambda, S3 attachments, mail through SES) in step with Redmine updates ([upgrade.md](upgrade.md)) | Not needed (standard Redmine runs as is) |
+| Own code | Keep the project's own plugins (the shared AWS menu and AWS clients, running on Lambda, S3 attachments, mail through SES, jobs on SQS, settings from SSM, and Cost Explorer in a derived image) in step with Redmine updates ([upgrade.md](upgrade.md)) | Not needed (standard Redmine runs as is) |
 
 ## Which to choose
 

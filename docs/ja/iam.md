@@ -94,7 +94,8 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 | `sqs:SendMessage` | ジョブキュー | ジョブ内の再試行 (`retry_on`) と、ジョブから投入するジョブ |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元ドメインの SES ID | 通知メール ([mail.md](mail.md#sending))。raw 形式で送信する |
 | `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | 添付ファイル用バケット (`redmine-web` と同じ範囲) | プロジェクトの削除に伴う添付ファイルの削除、整合性チェック ([admin.md](https://redmine-kit.github.io/redmine_aws_s3/ja/admin.html#attachments-in-s3)) |
-| `s3:GetObject`<br>`s3:DeleteObject` | メール用バケットの<br>`inbound/*`<br>`processed/*` | 管理画面からのメールの再取り込み |
+| `s3:GetObject` | メール用バケットの<br>`inbound/*`<br>`processed/*` | 管理画面からのメールの再取り込み |
+| `s3:DeleteObject` | メール用バケットの `inbound/*` | 同上。削除するのは、メッセージを `inbound/` から `processed/` に移動するときだけ |
 | `s3:PutObject` | メール用バケットの `processed/*` | 同上 |
 
 <a id="execution-role-of-redmine-task"></a>

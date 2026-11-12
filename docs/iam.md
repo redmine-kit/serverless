@@ -84,7 +84,8 @@ Browsers do not use this role. Uploads and downloads go through CloudFront with 
 | `sqs:SendMessage` | The job queue | Retries within jobs (`retry_on`) and jobs enqueued by jobs |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Notification email ([mail.md](mail.md#sending)). Sent as the full message (raw) |
 | `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting attachments when deleting a project, reconciliation ([admin.md](https://redmine-kit.github.io/redmine_aws_s3/admin.html#attachments-in-s3)) |
-| `s3:GetObject`<br>`s3:DeleteObject` | In the mail bucket:<br>`inbound/*`<br>`processed/*` | Re-importing email from the admin pages |
+| `s3:GetObject` | In the mail bucket:<br>`inbound/*`<br>`processed/*` | Re-importing email from the admin pages |
+| `s3:DeleteObject` | `inbound/*` in the mail bucket | Same as above. Only moving a message from `inbound/` to `processed/` deletes |
 | `s3:PutObject` | `processed/*` in the mail bucket | Same as above |
 
 ## Execution role of `redmine-task`

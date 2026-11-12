@@ -724,10 +724,14 @@ Resources:
               - Effect: Allow
                 Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes, sqs:ChangeMessageVisibility]
                 Resource: !GetAtt JobQueue.Arn
-              # Re-importing email from the administration pages.
+              # Re-importing email from the administration pages: the message is
+              # in inbound/ or processed/, and only a move from inbound/ deletes.
               - Effect: Allow
-                Action: [s3:GetObject, s3:DeleteObject]
+                Action: s3:GetObject
                 Resource: [!Sub "${MailBucket.Arn}/inbound/*", !Sub "${MailBucket.Arn}/processed/*"]
+              - Effect: Allow
+                Action: s3:DeleteObject
+                Resource: !Sub ${MailBucket.Arn}/inbound/*
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub ${MailBucket.Arn}/processed/*

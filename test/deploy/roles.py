@@ -1,8 +1,9 @@
 """Checks the mail bucket permissions of the roles in infra/instance.yaml that
 import email: redmine-task (received email and re-imports with
 redmine_aws_ses:receive_mail MESSAGE_ID=…) and redmine-worker ("Fetch again"
-on the "Email receiving" tab) read both inbound/ and processed/, where
-redmine_aws_ses looks for a message. Prints each problem; prints nothing when
+on the "Email receiving" tab). They read both inbound/ and processed/, where
+redmine_aws_ses looks for a message, write processed/ and delete in inbound/
+only (MailBucket#move_to_processed), and nothing more. Prints each problem; prints nothing when
 the template matches. Run by test/deploy/run.sh with python3.13 of the tools
 image, whose ruamel.yaml reads the CloudFormation tags."""
 import sys
@@ -29,12 +30,20 @@ def allowed(role, action):
     return resources
 
 
+# The prefixes of the mail bucket that each action must be allowed on, exactly.
+EXPECTED = {
+    's3:GetObject': {'inbound', 'processed'},
+    's3:PutObject': {'processed'},
+    's3:DeleteObject': {'inbound'},
+}
+
 for role in ('TaskRole', 'WorkerRole'):
-    resources = allowed(role, 's3:GetObject')
-    for prefix in ('inbound', 'processed'):
-        resource = f'${{MailBucket.Arn}}/{prefix}/*'
-        if resource not in resources:
-            problems.append(f'{role}: s3:GetObject is not allowed on {resource}')
+    for action, prefixes in EXPECTED.items():
+        expected = {f'${{MailBucket.Arn}}/{prefix}/*' for prefix in prefixes}
+        actual = {resource for resource in allowed(role, action)
+                  if isinstance(resource, str) and resource.startswith('${MailBucket.Arn}')}
+        if actual != expected:
+            problems.append(f'{role}: {action} is allowed on {sorted(actual)}, not {sorted(expected)}')
 
 for problem in problems:
     print(problem)

@@ -103,7 +103,7 @@ check "the three functions get their image in REDMINE_IMAGE" test -z "$functions
 
 echo "== Roles"
 roles_problems=$(python3.13 test/deploy/roles.py infra/instance.yaml 2>&1)
-check "the task and the worker read email in inbound/ and processed/" test -z "$roles_problems"
+check "the task and the worker have exactly the mail bucket access they use" test -z "$roles_problems"
 [[ -z "$roles_problems" ]] || echo "$roles_problems"
 
 echo "== Settings code"

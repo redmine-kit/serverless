@@ -373,7 +373,7 @@ CloudFront は、関数 URL 自身のホスト名を `Host` として関数 URL 
 - **関数 URL のホスト名は受け付けない:** `config.hosts` に入っていません。`X-Forwarded-Host` がないリクエスト、ほかのホストや関数 URL のホスト名が入ったリクエストは、Rails が 403 を返します。関数 URL への直接のリクエストは、関数の呼び出し前に IAM 認証で拒否されます (上記)。ホストの認可は、CloudFront を通らずに Redmine に届いたリクエストに対する 2 つ目の確認です。
 - **`Forwarded` ヘッダー:** `AllViewerExceptHostHeader` は、標準の `Forwarded` を含め、ビューワーのほかのヘッダーを転送します。Rails はホストを `X-Forwarded-Host` と `Host` からだけ取るので、`Forwarded` でホストは変わりません。Rack はスキームを `X-Forwarded-Proto` より先に `Forwarded` から読むので (Rack 3.2.8 の `forwarded_priority`)、`Forwarded: proto=http` を送ったビューワーは、自分のリクエストだけを HTTP に見せることになります。そのリクエストにはセッション Cookie が付かず、ログインできません。
 - **CSRF 対策:** Redmine は Rails のオリジンの確認を有効にしていません (Redmine は `load_defaults` を呼ばないので、`forgery_protection_origin_check` は `false` のまま。Rails 8.1.4)。CSRF 対策はセッションのトークンを確認し、ホストは関係しません。
-- **メール:** メールの URL は、リクエストから作りません。Redmine は、設定「ホスト名とパス」と「プロトコル」(管理 › 設定 › 全般。`Mailer.default_url_options`) から作り、これらは `redmine.settings` で設定します ([deploy-config.md](deploy-config.md))。
+- **メール:** メールの URL は、リクエストから作りません。Redmine は、設定「ホスト名とパス」と「プロトコル」(「管理」›「設定」›「全般」。`Mailer.default_url_options`) から作り、これらは `redmine.settings` で設定します ([deploy-config.md](deploy-config.md))。
 - **テスト:** デプロイテストは、テンプレートのオリジンにある 2 つのヘッダーを確認します。イメージテストは、CloudFront と同じ形のリクエスト (`Host` に関数 URL のホスト名、`X-Forwarded-Host` にドメイン) を送り、200 になること、ヘッダーがないときとほかのホストのときに 403 になること、リダイレクト先がドメインになること、フォームの POST でログインできること、CSRF トークンが違えば 422 になることを確認します ([testing.md](testing.md))。
 
 <a id="function-that-adds-the-body-hash-lambdaedge"></a>

@@ -159,7 +159,7 @@ Lambda と AWS のための拡張機能は、Redmine 標準の拡張の仕組み
 | [`redmine_aws_s3`](https://github.com/redmine-kit/redmine_aws_s3) | S3 の添付ファイル。保存、CloudFront 経由の S3 へのアップロード、sandbox の CSP を付ける CloudFront 署名付き URL へのリダイレクト、`/tmp` のキャッシュ、管理画面の「S3」のタブ | S3 バケットの設定がある | [Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/) |
 | [`redmine_aws_ses`](https://github.com/redmine-kit/redmine_aws_ses) | SES でのメール。送信の再試行、受信したメールの取り込み、プロジェクト別のアドレス、メールの管理画面 | SES の設定がある | [Redmine AWS SES](https://redmine-kit.github.io/redmine_aws_ses/ja/) |
 | [`redmine_aws_sqs`](https://github.com/redmine-kit/redmine_aws_sqs) | SQS でのジョブ。`aws-activejob-sqs` の設定 (キューと、実行を許可するジョブクラス)、最後に失敗したジョブの記録、管理画面の「ジョブ」 | `REDMINE_JOBS_QUEUE_URL` がある | [Redmine AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/ja/) |
-| [`redmine_aws_ssm`](https://github.com/redmine-kit/redmine_aws_ssm) | 設定とシークレット。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読み込む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。そのタイミングで動作するように gem でもあり、`image/Gemfile.local` でパスを指定して追加する | `REDMINE_SSM_PATH` がある | [Redmine AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/ja/) |
+| [`redmine_aws_ssm`](https://github.com/redmine-kit/redmine_aws_ssm) | 設定とシークレット。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読み込む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。そのタイミングで動作するように、Rails の起動前に Bundler が gem を読み込む (GitHub Packages の gem で、`image/Gemfile.local` に記載する。[下記](#distribution)) | `REDMINE_SSM_PATH` がある | [Redmine AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/ja/) |
 
 S3 の添付ファイル、SES でのメール、SQS でのジョブ、SSM の設定は、Lambda 以外でも動作します。その場合、ジョブは Lambda のイベントソースの代わりに gem のポーラーで実行します。プラグインを分けておくと、一般的なサーバー上の Redmine でも、Lambda 向けの部分なしで必要なものだけを使えます。Lambda ではファイルシステムに書き込めず、メールの受信箱もないので、イメージには 6 つともインストールします。
 

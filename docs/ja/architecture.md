@@ -95,7 +95,7 @@ flowchart LR
 | メール受信 | SES で受信して S3 に保存し、`redmine-task` が Redmine の `MailHandler` で取り込む。アドレスはプロジェクトごと (`<識別子>@<サブドメイン>`) と全体用。DMARC に失敗したメールは破棄する | ap-northeast-1 の SES で受信できる。差出人を偽ったメールを取り込まない | [mail.md](mail.md#receiving) |
 | migration と rake | `redmine-task` で、ローカルのコマンドから任意の rake と `rails runner` を実行する | 本番と同じイメージと設定で動く。`rake db:migrate` と `redmine:plugins:migrate` を、RDS に対してそのまま実行する | [tasks.md](tasks.md) |
 | Redmine の更新 | 新しいバージョンが出たら、追加された migration を分類し、試験用データベース (PostgreSQL) で実行し、プラグインによる置き換えへの影響を確認してからバージョンアップする。結果はバージョンごとに記録する | バージョンアップ後に不具合に気づく事態を防ぐ | [upgrade.md](upgrade.md) |
-| テスト | 置き換えた処理ごとにテストを書き、Redmine 本体のテストも通す。ローカルでは AWS を moto と LocalStack で、データベースを PostgreSQL コンテナで代替する。デプロイのたびに実際の AWS で確認する | 置き換えた処理が Redmine の更新で壊れたときに気づける | [testing.md](testing.md) |
+| テスト | 置き換えた処理ごとにテストを書き、Redmine 本体のテストも通す。ローカルでは AWS を AWS Emulator、moto、LocalStack で、データベースを PostgreSQL コンテナで代替する。デプロイのたびに実際の AWS で確認する | 置き換えた処理が Redmine の更新で壊れたときに気づける | [testing.md](testing.md) |
 | ネットワーク | VPC を 1 つ作成し、2 つの AZ にプライベートサブネットを置く。Lambda と RDS はプライベートサブネットに配置する。AWS サービスには、VPC エンドポイントか NAT インスタンスで接続する。どちらにするかは、設定ファイルの `network.mode` で選ぶ | RDS には VPC 内からしかアクセスできない。エンドポイントは運用が不要で、インターネットへの出口がない。NAT インスタンスは費用が安く、webhook も送信できる | [rds.md](rds.md#routes-out-of-the-vpc) |
 | AI 機能 | 別のプロジェクトに分ける。AI 側とは、Redmine 標準の REST API、OAuth、webhook で連携する | AI サービスや費用の判断を、Redmine の基盤から切り離す | [ai.md](ai.md) |
 | リージョン | ap-northeast-1。ほかのリージョンでも、エンドポイント名と単価を読み替えれば同じ | 日本のユーザーに近い。単価もこのリージョンで見積もる | — |
@@ -251,7 +251,7 @@ serverless/
 
 | 段階 | 作るもの | 同じ段階で書くテスト |
 | --- | --- | --- |
-| 1 | CI 基盤 (静的解析、PostgreSQL、moto、LocalStack のコンテナ) | RuboCop、ShellCheck、actionlint、cfn-lint |
+| 1 | CI 基盤 (静的解析、PostgreSQL、AWS Emulator、LocalStack のコンテナ) | RuboCop、ShellCheck、actionlint、cfn-lint |
 | 2 | イメージ (Lambda の Ruby ベースイメージ、Redmine、依存関係、3 つの役割の切り替え) | イメージテスト (読み取り専用、権限の少ないユーザー、3 つの役割の起動)、Redmine 本体のテスト |
 | 3 | Lambda 上での起動 (VPC、RDS、SSM、`redmine-task`、`redmine-web` を関数 URL で開く) | SSM の読み込みとタスクハンドラーのテスト。起動時間の計測 |
 | 4 | CloudFront とアセット (ドメイン、`/assets/*` の S3、OAC と Lambda@Edge の `redmine-body-hash`) | `redmine-body-hash` のテスト。OAC で POST が通るかの確認。デプロイ後の確認の最初の項目 |

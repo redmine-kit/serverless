@@ -12,16 +12,16 @@ Serverless のテスト計画です。独自のプラグイン、Redmine 本体�
 
 - 差し替えた処理には、すべてテストを付けます。[attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#replaced-code) の表の 1 行ごとにテストを 1 つ以上書き、表とテストは同じコミットで修正します。
 - Redmine 標準のテストの仕組みを使います。Redmine は Rails の Minitest と mocha で、ユニットテスト、機能テスト、統合テスト、システムテスト (Capybara と Selenium) を持っています。プラグインのテストも同じ仕組みで書き、`rake redmine:plugins:test` で実行します。
-- テストでは、実際の AWS に接続しません。AWS SDK の応答のスタブ (`stub_responses`) と、AWS の API をローカルで再現する moto (Apache-2.0) と LocalStack を使います (下の「代替ツールの使い分け」)。
+- テストでは、実際の AWS に接続しません。AWS SDK の応答のスタブ (`stub_responses`) と、AWS の API をローカルで再現する AWS Emulator (CC0-1.0)、moto (Apache-2.0)、LocalStack を使います (下の「代替ツールの使い分け」)。
 - Lambda、CloudFront、SES の受信など、ローカルで再現できないものは、デプロイ後のチェックで確認します。
 
-このプロジェクトの CI は、redmine-kit Organization の LocalStack ライセンス (2026-11-09 から Ultimate) を使い、シークレット `LOCALSTACK_AUTH_TOKEN` でジョブに渡します。Serverless のアダプタがテストを実行するときは、その用途を認める自分の LocalStack ライセンスが必要です。ない場合は、このプロジェクトの CI の結果と、自分の環境でのデプロイ後のチェックで確認します。
+このプロジェクトの CI は、LocalStack が必要な唯一のテストである Lambda 結合テストで、redmine-kit Organization の LocalStack ライセンス (2026-11-09 から Ultimate) を使い、シークレット `LOCALSTACK_AUTH_TOKEN` でその手順に渡します。Serverless のアダプタがこのテストを実行するときは、その用途を認める自分の LocalStack ライセンスが必要です。ない場合は、このプロジェクトの CI の結果と、自分の環境でのデプロイ後のチェックで確認します。AWS Emulator には、ライセンスもトークンも AWS アカウントも要りません。
 
 <a id="running-the-tests"></a>
 
 ### テストの実行
 
-ローカルのテストは、このリポジトリの `bin/test` で実行します。Makefile は置きません。`bin/test` は、Docker でテスト用のイメージと PostgreSQL、moto、LocalStack のコンテナを起動して実行するので、ローカルに Ruby や PostgreSQL がなくても実行できます。このリポジトリの `bin/rake` と `bin/rails` は、デプロイした Redmine を対象に動くので、テストには使いません ([tasks.md](tasks.md#usage-planned))。
+ローカルのテストは、このリポジトリの `bin/test` で実行します。Makefile は置きません。`bin/test` は、Docker でテスト用のイメージと PostgreSQL、AWS Emulator、LocalStack のコンテナを起動して実行するので、ローカルに Ruby や PostgreSQL がなくても実行できます。このリポジトリの `bin/rake` と `bin/rails` は、デプロイした Redmine を対象に動くので、テストには使いません ([tasks.md](tasks.md#usage-planned))。
 
 ```sh
 bin/test            # 静的解析から Lambda の結合テストまで、CI と同じ順にすべて
@@ -36,7 +36,7 @@ bin/test plugin test/unit/attachment_patch_test.rb   # ファイルを指定す�
 
 GitHub Actions も同じ `bin/test` の手順を順に呼び出すので、ローカルと CI でテストの方法は変わりません。CI の実行順序 (下記) の途中で失敗したらそこで止まり、テストに通らないものはデプロイしません。
 
-`bin/test` にまとめるまでは、ここまでに作った手順は個別のスクリプトです。`bin/lint` (静的解析)、`bin/test-services` (PostgreSQL、moto、LocalStack を起動し、それぞれが応答するか確認する)、`bin/build-image`、`bin/test-image` (イメージテスト)、`bin/build-derived-image` (プラグインとテーマを追加した派生イメージ)、`bin/test-derived-image` (派生イメージのテスト)、`bin/test-core` (Redmine 本体のテスト)、`bin/update-gems` (`image/Gemfile.lock` を書き出す) です。
+`bin/test` にまとめるまでは、ここまでに作った手順は個別のスクリプトです。`bin/lint` (静的解析)、`bin/test-services` (PostgreSQL と AWS Emulator を起動し、それぞれが応答することと、テストのネットワークから AWS に接続できないことを確認する)、`bin/build-image`、`bin/test-image` (イメージテスト)、`bin/build-derived-image` (プラグインとテーマを追加した派生イメージ)、`bin/test-derived-image` (派生イメージのテスト)、`bin/test-core` (Redmine 本体のテスト)、`bin/update-gems` (`image/Gemfile.lock` を書き出す) です。
 
 <a id="working-on-a-plugin-at-the-same-time"></a>
 
@@ -59,10 +59,10 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 | 静的解析 | Ruby のコーディングスタイル、シェルスクリプト、ワークフロー、CloudFormation、依存関係の既知の脆弱性 | RuboCop (Redmine の設定)、ShellCheck、actionlint、cfn-lint、cfn-guard、`bundler-audit` | コミットごと |
 | イメージの脆弱性スキャン | イメージ内の OS パッケージと gem の、既知の重大な脆弱性 | Trivy など | イメージのビルドごと |
 | プラグインのユニットテストと機能テスト | 差し替えた処理、追加した画面、rake タスク | Minitest、mocha、SDK の `stub_responses` | コミットごと |
-| プラグインの統合テスト | S3、SQS、SSM と実際にやり取りする処理の流れ | Minitest、moto | コミットごと |
+| プラグインの統合テスト | S3、SQS、SSM と実際にやり取りする処理の流れ | Minitest、AWS Emulator、moto | コミットごと |
 | Redmine 本体のテスト | プラグインをインストールしても、本体の動作が壊れていないか | Redmine のテスト (ユニット、機能、統合) | コミットごと |
 | システムテスト | ブラウザーでのアップロード、ダウンロード、サムネイル | Capybara、Selenium (ヘッドレス Chrome)、moto | コミットごと |
-| イメージテスト | 読み取り専用のファイルシステムと非特権ユーザーで、3 つの役割が起動するか | Docker、Lambda ランタイムインターフェイスエミュレーター | イメージのビルドごと |
+| イメージテスト | 読み取り専用のファイルシステムと非特権ユーザーで、3 つの役割が起動するか | Docker、Lambda ランタイムインターフェイスエミュレーター、AWS Emulator | イメージのビルドごと |
 | エッジ関数のテスト | Lambda@Edge 関数と CloudFront Functions の関数、テンプレートが同じコードを持つこと | node:test (Node.js 標準) | コミットごと |
 | デプロイテスト | 設定のスキーマ、スタックパラメーター、`bin/deploy` の手順 | check-jsonschema、フェイクの AWS CLI、Minitest | コミットごと |
 | Lambda 結合テスト | 同じイメージから 3 つの関数を作成し、関数 URL、SQS からのジョブ、`redmine-task` の呼び出しが、SQS、SSM と連携して動くか | LocalStack | イメージのビルドごと |
@@ -111,7 +111,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 
 | 対象 | 確認内容 | ツール |
 | --- | --- | --- |
-| SSM の読み込み (`redmine_aws_ssm`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。既存の環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM に接続できなければ失敗する。イメージテストでは、3 つの役割が、データベースホスト、そのパスワード、`SECRET_KEY_BASE` を SSM だけから読み、`config/database.yml` より前に読めていることを確認する | Minitest、moto (プラグインの `test/loader_test.rb`、`bin/test-image`) |
+| SSM の読み込み (`redmine_aws_ssm`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。既存の環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM に接続できなければ失敗する。イメージテストでは、3 つの役割が、データベースホスト、そのパスワード、`SECRET_KEY_BASE` を SSM だけから読み、`config/database.yml` より前に読めていることを確認する | Minitest、AWS Emulator (プラグインの `test/loader_test.rb`、`bin/test-image`) |
 | タスクハンドラー | 決められた `command` と `env` だけを受け付ける。SES イベントを判別し、メッセージ ID、宛先、エンベロープの送信者、判定を渡す。形式が正しくない値は設定せず、コマンドのイベントでは SES の変数を渡せない。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
 | 拡張機能のスクリプト | `REDMINE_ROLE` によって、実際の Lambda Web Adapter を起動するか、何もしない拡張機能として登録するかが変わる | ShellCheck、イメージテスト |
 | webhook | `webhook_blocklist` の範囲 (プライベート、リンクローカル) の送信先に送らない。送信先のエラーでジョブが失敗し、再配信される | Minitest、moto |
@@ -157,10 +157,12 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 
 | ツール | 用途 | 使わない場面と理由 |
 | --- | --- | --- |
-| SDK の `stub_responses` | ユニットテストと機能テスト。SES のエラーを 1 つずつ発生させるテスト | — |
-| AWS Emulator | SQS のプラグインの統合テスト | — |
-| moto | プラグインの統合テストとシステムテスト (S3、SSM)。SES v2 の `SendEmail` は、moto が再現できるかを確認してから使い、それまでは SDK の `stub_responses` で代替する | — |
-| LocalStack (CI では Organization の Ultimate ライセンス) | Lambda 結合テスト。LocalStack の ECR にある同じイメージから作る 3 つの関数、関数 URL、SQS のイベントソースマッピング、ジョブのメールのための SES v2 | CloudFront と RDS は使わない。CloudFront はデプロイ後のチェックで確認し、データベースは PostgreSQL コンテナにする |
+| SDK の `stub_responses` | ユニットテストと機能テスト。ほかの方法では用意できないエラーとアカウントの状態 (SES の各エラー、`AccessDenied`、SES の抑制リストなど)。AWS に対するテストではない | — |
+| AWS Emulator (`test/aws-emulator/Dockerfile` で固定したバージョン。テレメトリーをオフにし、AWS に接続できない内部ネットワークで動かす) | イメージテスト (SSM と SQS) と `bin/test-services`。SQS と SSM のプラグインの統合テスト | Lambda。エミュレーターは、コンテナイメージの関数の実行、ECR へのプッシュ、関数 URL に対応していない (下の LocalStack)。S3 の `If-None-Match` 付きのコピーは `NotImplemented` を返す (下の moto) |
+| moto | S3 のプラグインの統合テストとシステムテスト。AWS Emulator が `If-None-Match` 付きのコピーに応答するまで使う。SES v2 の `SendEmail` は、moto が再現できるかを確認してから使い、それまでは SDK の `stub_responses` で代替する | 新しいテストには使わない |
+| LocalStack (CI では Organization の Ultimate ライセンス) | Lambda 結合テスト。このリポジトリで LocalStack が必要なのは、このテストだけ。LocalStack の ECR にある同じイメージから作る 3 つの関数、関数 URL、SQS のイベントソースマッピング、ジョブのメールのための SES v2 | CloudFront と RDS は使わない。CloudFront はデプロイ後のチェックで確認し、データベースは PostgreSQL コンテナにする |
+
+各プラグインのテストがどの代替ツールを使うか、その理由は、それぞれのプラグインのページにあります。
 
 <a id="administration-pages"></a>
 
@@ -196,10 +198,10 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 
 イメージをビルドするたびに、本番と同じ条件の Docker で起動します。
 
-- **条件:** arm64、読み取り専用のファイルシステム (`--read-only`)、書き込めるのは `/tmp` だけ (`--tmpfs /tmp`)、非特権ユーザー (`--user` で、root 以外の任意の番号)。データベースは、RDS と同じメジャーバージョンの PostgreSQL コンテナです。AWS (SSM と SQS) は、CI のように `LOCALSTACK_AUTH_TOKEN` があれば LocalStack、なければ moto です (フォークからのプルリクエストや、トークンのないローカル環境)。トークンがあるのに LocalStack が起動しなければ、テストは失敗します。モックは使いません。テストが使う API は、LocalStack にも moto にもすべてあります。コンテナは、PostgreSQL と AWS の代替にしか接続できない Docker の内部ネットワークで動かすので、テストから AWS には接続できません。
-- **`web`:** リクエストは、CloudFront が関数 URL を通して送る形で送ります。`Host` に関数 URL のホスト名、`X-Forwarded-Host` にドメイン、`X-Forwarded-Proto` に `https` を入れ、`REDMINE_HOST` にドメインを設定します ([lambda.md](lambda.md#host-and-scheme))。Puma が起動し、ログイン画面が 200 を返し、セッション Cookie に `Secure` が付くこと ([session.md](session.md#the-secure-attribute-of-the-session-cookie))、`X-Forwarded-Host` がないとき、ほかのホストや関数 URL のホスト名が入っているときに Rails が 403 を返すこと、リダイレクト先が `https://` とドメインになること、ログインフォームの POST でログインでき、CSRF トークンが違う POST は 422 になること、アセットの `.manifest.json` があること、起動後に `/tmp` 以外に書き込んでいないことを確認します。Redmine 7.1 (master) では、設定したファビコンを `Cache-Control: max-age=31556952, public, immutable` で返すことも確認します。CloudFront のキャッシュビヘイビア `/favicons/*` がキャッシュするレスポンスです ([lambda.md](lambda.md#the-favicon))。Puma は `127.0.0.1` だけで待ち受けるので、画面はコンテナ内から開きます。エミュレーターはリクエストを Lambda Web Adapter に通さないので、その経路は Lambda 結合テストで確認します。
+- **条件:** arm64、読み取り専用のファイルシステム (`--read-only`)、書き込めるのは `/tmp` だけ (`--tmpfs /tmp`)、非特権ユーザー (`--user` で、root 以外の任意の番号)。データベースは、RDS と同じメジャーバージョンの PostgreSQL コンテナです。AWS (SSM と SQS) は `bin/test-services` の AWS Emulator で、ローカルでも、CI でも、フォークからのプルリクエストでも同じです。モックは使いません。テストが使う API は、エミュレーターにすべてあります。コンテナは、PostgreSQL とエミュレーターにしか接続できない Docker の内部ネットワークで動かし、役割のコンテナから AWS に接続できるときは、チェックが失敗します。エミュレーターの証明書には `127.0.0.1` と `localhost` しか含まれないので、コンテナは `https://127.0.0.1:9297` でエミュレーターに接続します。短時間だけ動くコンテナはエミュレーターのネットワーク名前空間で動かし、役割のコンテナは、それぞれ転送用のコンテナのネットワーク名前空間を共有して接続します (役割のコンテナは同時に動き、TLS は端から端まで保たれます)。証明書は、非特権ユーザーが読めるようにエミュレーターからコピーし、`AWS_CA_BUNDLE` で渡します。SQS は、エミュレーターが対応する唯一のプロトコルである JSON プロトコルで呼び出します。
+- **`web`:** リクエストは、CloudFront が関数 URL を通して送る形で送ります。`Host` に関数 URL のホスト名、`X-Forwarded-Host` にドメイン、`X-Forwarded-Proto` に `https` を入れ、`REDMINE_HOST` にドメインを設定します ([lambda.md](lambda.md#host-and-scheme))。Puma が起動し、ログイン画面が 200 を返し、セッション Cookie に `Secure` が付くこと ([session.md](session.md#the-secure-attribute-of-the-session-cookie))、`X-Forwarded-Host` がないとき、ほかのホストや関数 URL のホスト名が入っているときに Rails が 403 を返すこと、リダイレクト先が `https://` とドメインになること、ログインフォームの POST でログインでき、CSRF トークンが違う POST は 422 になること、アセットの `.manifest.json` があること、起動後に `/tmp` 以外に書き込んでいないことを確認します。Redmine 7.1 (master) では、設定したファビコンを `Cache-Control: max-age=31556952, public, immutable` で返すことも確認します。CloudFront のキャッシュビヘイビア `/favicons/*` がキャッシュするレスポンスです ([lambda.md](lambda.md#the-favicon))。Puma は `127.0.0.1` だけで待ち受けるので、画面はコンテナ内から開きます。ランタイムインターフェイスエミュレーターはリクエストを Lambda Web Adapter に通さないので、その経路は Lambda 結合テストで確認します。
 - **`task`:** ベースイメージにあるランタイムインターフェイスエミュレーター (`aws-lambda-rie`) でハンドラーを呼び出し、`rake db:migrate`、`redmine:load_default_data`、`rake -T`、`rails runner` が動くこと、Redmine が Subversion と Git のクライアントを見つけ、`/tmp` に作成した Subversion と Git のリポジトリを読めること ([lambda.md](lambda.md#repositories))、失敗したタスクが終了コードを返すこと、許可していないコマンドと `env` の名前を拒否することを確認します。メールの取り込みは、プラグインと一緒に追加します。
-- **`worker`:** 同じくエミュレーターで実行します。ジョブをキューに送信して受信し、そのメッセージの受信ハンドルを付けた SQS 形式のイベントで worker に渡します。呼び出しが成功すること、ジョブが実行されること (プロジェクトが削除され、その通知メールが SQS に追加される)、worker がメッセージを削除すること (処理中のメッセージが残らない。`redmine_aws_sqs` は `REDMINE_JOBS_QUEUE_URL` で削除する。[setup.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/setup.html))、許可していないジョブクラスが実行されないことを確認します。
+- **`worker`:** 同じくランタイムインターフェイスエミュレーターで実行します。ジョブをキューに送信して受信し、そのメッセージの受信ハンドルを付けた SQS 形式のイベントで worker に渡します。呼び出しが成功すること、ジョブが実行されること (プロジェクトが削除され、その通知メールが SQS に追加される)、worker がメッセージを削除すること (処理中のメッセージが残らない。`redmine_aws_sqs` は `REDMINE_JOBS_QUEUE_URL` で削除する。[setup.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/setup.html))、許可していないジョブクラスが実行されないことを確認します。
 - **内容:** ImageMagick の `convert`、Ghostscript、Pandoc (3.8.3 以上)、Subversion と Git のクライアント (`svn`、`git`) が動くこと、`/var/task` と `/opt` のすべてを非特権ユーザーが読めること、ビルドしたアセットがあることを確認します。タスクハンドラーの単体テストも、イメージ内で実行します。push したマニフェストが arm64 だけで、インデックス形式になっていないかは、イメージを push するときに確認します。
 - **派生イメージ:** `bin/test-image <イメージ> <redmine.json>` は、`image.plugins` と `image.themes` の派生イメージ ([architecture.md](architecture.md#derived-images)) に同じテストを実行し、追加したプラグインが読み込まれてマイグレーション済みであること、追加したテーマが見つかり、そのアセットがコンパイル済みであることも確認します。`bin/deploy` は、派生イメージをプッシュする前にこれを実行します。`bin/test-derived-image [ベースイメージ]` は、`test/derived/` の派生イメージをビルドしてテストします。1 つは GitHub Packages の gem、コミットを指定した Git のプラグイン、ディレクトリのプラグインとテーマ、プラグインの設定を含むもの、1 つは RubyGems の gem を含み、GitHub のトークンなしでビルドするものです。ほかの 2 つは、わかりやすいメッセージで失敗する必要があるもので、ベースイメージの gem の別のバージョンを必要とするプラグインと、認証情報が必要な Git の取得元です。CI では、Redmine のリリースのイメージのジョブが、ビルドしたばかりのイメージに対して実行します。
 
@@ -238,7 +240,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 - **イメージ:** `bin/deploy` が派生イメージをプッシュするのと同じ方法で、LocalStack の ECR にプッシュします。tarball に保存し、そこから計算した digest で crane がプッシュします (`deploy/lib.sh` の `push_tarball`)。LocalStack の Lambda は、そこからその digest で実行します。
 - **シークレット:** `deploy/lib.sh` の `create_secrets` が SSM にシークレットを作成し、2 回目は変更しないこと。
 - **`redmine-task`:** `bin/deploy` と同じく、`deploy/lib.sh` の `task` で呼び出します。`db:migrate`、`redmine:load_default_data`、`SECRET_KEY_BASE` を SSM から読むこと、失敗したコマンドが失敗になること、設定のコード。
-- **`redmine-worker`:** SQS のイベントソースマッピングから実行します。タスクが `DestroyProjectJob` をキューに追加し、worker が実行し、可視性タイムアウトの後もジョブが 1 回しか実行されないことで、メッセージが削除されたことを確認します (イメージテストでは、moto のためこれを確認できません)。ジョブの通知メールは、worker が SES v2 で送信します。
+- **`redmine-worker`:** SQS のイベントソースマッピングから実行します。タスクが `DestroyProjectJob` をキューに追加し、worker が実行し、可視性タイムアウトの後もジョブが 1 回しか実行されないことで、メッセージが削除されたことを確認します (イメージテストで確認するのは、処理中のメッセージが残らないことだけです)。ジョブの通知メールは、worker が SES v2 で送信します。
 - **`redmine-web`:** 関数 URL を通した `/login`。Lambda Web Adapter を通る経路です。
 
 <a id="infrastructure-checks"></a>
@@ -340,7 +342,7 @@ Dependabot が、Actions (`.github/workflows/actions.lock` も)、Docker イメ�
 
 プラグイン、Redmine 本体、イメージのテストは、RDS と同じメジャーバージョンの PostgreSQL コンテナで実行します (バージョンは構築時に確認する。[rds.md](rds.md#database))。コミットごとのテストは、AWS 認証情報を使いません。AWS に接続するのはデプロイとデプロイ後のチェックだけで、本番アカウントのロールを OIDC で引き受けます ([iam.md](iam.md#role-for-deploying-code-github-actions))。
 
-LocalStack は、`LOCALSTACK_AUTH_TOKEN` に認証トークンが必要です。トークンはリポジトリに書きません。ローカルではシェルで設定し (macOS のキーチェーンから読むなど)、CI ではシークレット `LOCALSTACK_AUTH_TOKEN` に保存します。トークンがないとき、`bin/test-services` は LocalStack をスキップします。フォークからのプルリクエストにはシークレットが渡されないので、その場合も LocalStack をスキップします。
+LocalStack は `bin/test-lambda` だけが使い、`LOCALSTACK_AUTH_TOKEN` に認証トークンが必要です。トークンはリポジトリに書きません。ローカルではシェルで設定し (macOS のキーチェーンから読むなど)、CI ではシークレット `LOCALSTACK_AUTH_TOKEN` に保存し、その手順だけに渡します。トークンがないとき、`bin/test-lambda` はスキップします。フォークからのプルリクエストにはシークレットが渡されないので、その場合もスキップします。AWS Emulator にはトークンが要らないので、ほかのテストはどこでも同じように動きます。
 
 <a id="to-verify"></a>
 

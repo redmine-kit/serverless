@@ -89,7 +89,7 @@ flowchart LR
 | Mail receiving | SES receives mail and stores it in S3; `redmine-task` imports it with Redmine's `MailHandler`. Addresses per project (`<identifier>@<subdomain>`) and one for the whole instance. Mail that fails DMARC is dropped | SES in ap-northeast-1 can receive mail. Mail with a forged sender is not imported | [mail.md](mail.md#receiving) |
 | Migrations and rake | `redmine-task` runs any rake task and `rails runner` from a local command | Runs with the same image and settings as production. `rake db:migrate` and `redmine:plugins:migrate` run on RDS as they are | [tasks.md](tasks.md) |
 | Redmine upgrades | When a new version is released, review the new migrations, run them on a test database (PostgreSQL), check the impact on the plugins' replaced code, then upgrade. Record the results per version | Prevents finding breakage only after upgrading | [upgrade.md](upgrade.md) |
-| Tests | Tests for each piece of replaced code, and Redmine's own tests must pass. Locally, AWS is replaced by moto and LocalStack, and the database by a PostgreSQL container. Every deployment is checked against real AWS | Breakage of replaced code caused by Redmine upgrades is noticed | [testing.md](testing.md) |
+| Tests | Tests for each piece of replaced code, and Redmine's own tests must pass. Locally, AWS is replaced by AWS Emulator, moto and LocalStack, and the database by a PostgreSQL container. Every deployment is checked against real AWS | Breakage of replaced code caused by Redmine upgrades is noticed | [testing.md](testing.md) |
 | Network | One VPC with private subnets in two AZs. Lambda and RDS are in the private subnets. AWS services are reached through VPC endpoints or a NAT instance, chosen with `network.mode` in the configuration file | RDS is reached only from inside the VPC. Endpoints need no operation and have no way out to the internet; a NAT instance costs less and lets webhooks be sent | [rds.md](rds.md#routes-out-of-the-vpc) |
 | AI features | Split into a separate project. The AI side connects through Redmine's standard REST API, OAuth and webhooks | Decisions about AI services and their cost are kept separate from the Redmine platform | [ai.md](ai.md) |
 | Region | ap-northeast-1. Other Regions work the same by substituting endpoint names and unit prices | Close to users in Japan. Unit prices are also estimated for this Region | — |
@@ -221,7 +221,7 @@ Work starts with the points that decide whether it works at all. At each stage, 
 
 | Stage | What to build | Tests written in the same stage |
 | --- | --- | --- |
-| 1 | CI foundation (static checks, containers for PostgreSQL, moto and LocalStack) | RuboCop, ShellCheck, actionlint, cfn-lint |
+| 1 | CI foundation (static checks, containers for PostgreSQL, AWS Emulator and LocalStack) | RuboCop, ShellCheck, actionlint, cfn-lint |
 | 2 | Image (Lambda's Ruby base image, Redmine, dependencies, switching between the three roles) | Image tests (read-only, low-privilege user, startup of the three roles), Redmine's own tests |
 | 3 | Startup on Lambda (VPC, RDS, SSM, `redmine-task`, opening `redmine-web` through the function URL) | Tests for SSM loading and the task handler. Measuring startup time |
 | 4 | CloudFront and assets (domain, S3 for `/assets/*`, OAC and the Lambda@Edge `redmine-body-hash`) | Tests for `redmine-body-hash`. Checking that POST passes with OAC. The first checks after deployment |

@@ -267,6 +267,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 | アップロードとダウンロード | 確認用のプロジェクトで、CloudFront を経由して PUT したファイルを、署名付き URL で取得できる。取得したファイルの SHA256 が、送信したものと、添付ファイルのダイジェストに一致する。申告と違うサイズのアップロードは登録されない |
 | 添付ファイルのヘッダー | `/files/` の下の応答に、`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`、`X-Content-Type-Options: nosniff`、`Content-Disposition` の署名付き URL のファイル名 (日本語の名前も) が付き、署名のない同じ URL は拒否される。添付ファイルは Redmine のオリジンにあるので、ディストリビューションを変更するたびに、これが成り立つ必要がある |
 | 権限のないユーザーのダウンロード | 署名付き URL が発行されない |
+| メール送信 | SES のメールボックスシミュレーター (`success@simulator.amazonses.com`) 宛ての通知のジョブが、SQS を経由して送信される |
 | メール受信 | 確認用のアドレスから受信アドレスに送ったメールが、確認用のプロジェクトのチケットになる |
 | タスク | `bin/rake -T` が成功する |
 

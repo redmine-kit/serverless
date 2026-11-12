@@ -271,7 +271,7 @@ The image tests and Redmine's own tests run twice (a matrix): on the Redmine rel
 
 Dependabot opens weekly pull requests for the actions (with `.github/workflows/actions.lock`), the Docker images and the lint gems, for versions published at least 3 days ago (patches) or 7 days ago (others).
 
-Dependabot cannot update `image/Gemfile.lock`, because it is resolved inside the image from Redmine's Gemfile, which is not in this repository, together with `image/Gemfile.local` and the plugins' Gemfiles. Instead, a weekly workflow (`.github/workflows/update-gems.yml`) runs `bin/update-gems --update` with Bundler's `--cooldown=7`, opens a pull request and starts CI on its branch. The lock is committed so that every build installs the same, reviewed gem versions with their checksums.
+Dependabot cannot update `image/Gemfile.lock`, because it is resolved inside the image from Redmine's Gemfile, which is not in this repository, together with `image/Gemfile.local` and the plugins' Gemfiles. Instead, a weekly workflow (`.github/workflows/update-gems.yml`) runs `bin/update-gems --update` with Bundler's `--cooldown=7`, opens a pull request and starts CI on its branch. The cooldown holds back only versions whose publication date the gem server gives (`created_at` in the compact index, as rubygems.org does); Bundler takes versions without it at once. GitHub Packages gives no `created_at` (checked on 2026-11-12, [sources.md](sources.md#gems-and-tools)), so new versions of the Redmine AWS plugins are taken as soon as they are published. The lock is committed so that every build installs the same, reviewed gem versions with their checksums.
 
 ### Services and credentials
 

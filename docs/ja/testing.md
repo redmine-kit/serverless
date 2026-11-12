@@ -330,7 +330,7 @@ flowchart TD
 
 Dependabot が、Actions (`.github/workflows/actions.lock` も)、Docker イメージ、検査用の gem について、公開から 3 日 (パッチ) か 7 日 (その他) 経過したバージョンへの更新の PR を毎週作成します。
 
-`image/Gemfile.lock` は Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージ内で解決するためです。代わりに、毎週のワークフロー (`.github/workflows/update-gems.yml`) が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作成し、そのブランチで CI を実行します。lock をコミットしておくのは、どのビルドも、確認済みの同じバージョンの gem をチェックサムと一緒にインストールするためです。
+`image/Gemfile.lock` は Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージ内で解決するためです。代わりに、毎週のワークフロー (`.github/workflows/update-gems.yml`) が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作成し、そのブランチで CI を実行します。cooldown で保留されるのは、gem のサーバーが公開日 (compact index の `created_at`。rubygems.org は返す) を返すバージョンだけで、返さないバージョンは、Bundler がすぐに採用します。GitHub Packages は `created_at` を返さないので (2026-11-12 に確認。[sources.md](sources.md#gems-and-tools))、Redmine AWS のプラグインの新しいバージョンは、公開されるとすぐに採用されます。lock をコミットしておくのは、どのビルドも、確認済みの同じバージョンの gem をチェックサムと一緒にインストールするためです。
 
 <a id="services-and-credentials"></a>
 

@@ -50,7 +50,10 @@ RUN printf '%s\n' '#!/bin/sh' 'set -e' \
 # current lock, so only new gems are resolved unless UPDATE is set, and the
 # lock keeps its only platform, arm64 Linux (glibc), which Lambda runs. An
 # update takes only versions published at least 7 days ago, as Dependabot does
-# for the other dependencies.
+# for the other dependencies, but only from a server that gives each version's
+# publication date (created_at in its compact index), such as rubygems.org.
+# Bundler takes versions without it at once, and GitHub Packages gives none, so
+# new versions of the redmine_aws gems are not held back (docs/testing.md).
 FROM source AS lock
 COPY image/Gemfile.lock ./
 ARG UPDATE=

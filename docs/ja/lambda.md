@@ -436,7 +436,7 @@ Rails 8.1 のデフォルトでは、Rails も `public/` のファイルを配�
 
 ### ファビコン
 
-Redmine 7.1 では、システム管理者がファビコンを設定できます (管理 › 設定 › 表示 の「カスタムファビコン」、PNG または ICO で 32 KB まで。7.1 はリリース前で、master ブランチ 7519645 で 2026-11-10 に確認)。Redmine は画像を添付ファイルではなく設定のテーブルに Base64 で保存し、`FaviconsController#show` が `/favicons/<SHA256 の先頭 16 進 8 桁>` で返します。ログインしていない訪問者にも返し、`Cache-Control: max-age=31556952, public, immutable` を付けます。ファビコンを置き換えると URL が変わります。どの画面もこの URL を参照するので、キャッシュしなければ、画面を開くたびにファビコンのためにも Lambda を呼び出すことになります。
+Redmine 7.1 では、システム管理者がファビコンを設定できます (「管理」›「設定」›「表示」の「カスタムファビコン」、PNG または ICO で 32 KB まで。7.1 はリリース前で、master ブランチ 7519645 で 2026-11-10 に確認)。Redmine は画像を添付ファイルではなく設定のテーブルに Base64 で保存し、`FaviconsController#show` が `/favicons/<SHA256 の先頭 16 進 8 桁>` で返します。ログインしていない訪問者にも返し、`Cache-Control: max-age=31556952, public, immutable` を付けます。ファビコンを置き換えると URL が変わります。どの画面もこの URL を参照するので、キャッシュしなければ、画面を開くたびにファビコンのためにも Lambda を呼び出すことになります。
 
 | 項目 | 設定 | 理由 |
 | --- | --- | --- |
@@ -480,7 +480,7 @@ CloudFront は、定額料金プランの無料プラン (月 0 ドル) を使�
 
 ## リポジトリ
 
-イメージには、Subversion のクライアント (`svn`) と Git のクライアント (`git`) があります。Lambda では、プラグイン `redmine_aws_lambda` が、「管理 › 設定 › リポジトリ」の「使用するバージョン管理システム」で、この 2 つだけを有効にできるようにします。ほかの種類は、クライアントがイメージにないので無効のままです ([admin.md](https://redmine-kit.github.io/redmine_aws_lambda/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
+イメージには、Subversion のクライアント (`svn`) と Git のクライアント (`git`) があります。Lambda では、プラグイン `redmine_aws_lambda` が、「管理」›「設定」›「リポジトリ」の「使用するバージョン管理システム」で、この 2 つだけを有効にできるようにします。ほかの種類は、クライアントがイメージにないので無効のままです ([admin.md](https://redmine-kit.github.io/redmine_aws_lambda/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
 
 コマンドは、ビルドステージでインストールした Amazon Linux のパッケージ `subversion` と `git-core` のものです。イメージには、コマンド (`svn`、`git` と、イメージテストがリポジトリの作成に使う `svnadmin`) と、それがリンクする共有ライブラリのうちイメージにないもの (Subversion のライブラリ、APR、serf など。`git` には不要) だけをコピーします。パッケージそのものをインストールすると、`git-core` が `openssh-clients` を必要とし、それが systemd、PAM なども追加するので、約 176 MB 増えます。Redmine が実行するのはコマンドだけで、Git の組み込みコマンド (Redmine 7.0.3 では `branch`、`tag`、`ls-tree`、`log`、`diff`、`show`、`blame`) だけを使います。そのため、`/usr/libexec/git-core` にある Git のヘルパー (HTTPS のリモートなどに使う) はコピーしません。Redmine は、リモートの Git のリポジトリから取得しません。
 

@@ -2,7 +2,7 @@
 
 この設計 (Lambda とマネージドサービス) と、一般的なサーバーで Redmine を動かす構成を、料金、セキュリティ、運用で比較します。
 
-この資料の単価は、AWS の料金表 (Price List API) の ap-northeast-1 の料金表ファイルから取得しました (EC2 は 2026-11-07、ECS は 2026-10-19、ELB は 2026-11-05、Lightsail は 2026-09-15 公開)。月額は 730 時間で計算しています。利用者は 10 人ほどの前提です。出典は [sources.md](sources.md) にあります。
+この資料の単価は、AWS の料金表 (Price List API) の ap-northeast-1 の料金表ファイルから取得しました (EC2 は 2026-11-07、ECS は 2026-10-19、ELB は 2026-11-05、Lightsail は 2026-09-15 公開)。月額は 730 時間で計算しています。ユーザーは 10 人ほどの前提です。出典は [sources.md](sources.md) にあります。
 
 <a id="setups-compared"></a>
 

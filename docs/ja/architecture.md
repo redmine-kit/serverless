@@ -98,7 +98,7 @@ flowchart LR
 | テスト | 置き換えた処理ごとにテストを書き、Redmine 本体のテストも通す。ローカルでは AWS を moto と LocalStack で、データベースを PostgreSQL コンテナで代替する。デプロイのたびに実際の AWS で確認する | 置き換えた処理が Redmine の更新で壊れたときに気づける | [testing.md](testing.md) |
 | ネットワーク | VPC を 1 つ作成し、2 つの AZ にプライベートサブネットを置く。Lambda と RDS はプライベートサブネットに配置する。AWS サービスには、VPC エンドポイントか NAT インスタンスで接続する。どちらにするかは、設定ファイルの `network.mode` で選ぶ | RDS には VPC 内からしかアクセスできない。エンドポイントは運用が不要で、インターネットへの出口がない。NAT インスタンスは費用が安く、webhook も送信できる | [rds.md](rds.md#routes-out-of-the-vpc) |
 | AI 機能 | 別のプロジェクトに分ける。AI 側とは、Redmine 標準の REST API、OAuth、webhook で連携する | AI サービスや費用の判断を、Redmine の基盤から切り離す | [ai.md](ai.md) |
-| リージョン | ap-northeast-1。ほかのリージョンでも、エンドポイント名と単価を読み替えれば同じ | 日本の利用者に近い。単価もこのリージョンで見積もる | — |
+| リージョン | ap-northeast-1。ほかのリージョンでも、エンドポイント名と単価を読み替えれば同じ | 日本のユーザーに近い。単価もこのリージョンで見積もる | — |
 
 <a id="why-not-web-functions"></a>
 

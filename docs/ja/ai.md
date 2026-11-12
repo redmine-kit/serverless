@@ -26,7 +26,7 @@ flowchart LR
   redmine -- "webhook<br>(署名付き)" --> worker
   worker -- "REST API<br>(ボットユーザー)" --> redmine
   agent --> mcp
-  mcp -- "REST API<br>(OAuth、利用者の権限)" --> redmine
+  mcp -- "REST API<br>(OAuth、ユーザーの権限)" --> redmine
 ```
 
 <a id="interfaces-provided"></a>
@@ -41,10 +41,10 @@ flowchart LR
 | --- | --- | --- |
 | REST API | Redmine 標準の REST API (チケット、注記、wiki、プロジェクト、添付ファイルなど) | AI 側が、内容を読み、結果を書き込む |
 | API キー | Redmine の標準。ユーザーごとのキー | ボットユーザー (下記) で使う |
-| OAuth 2 | Redmine 7.0 は、doorkeeper の gem で OAuth 2 のプロバイダーになれる (`Gemfile`、`config/initializers/doorkeeper.rb`、`oauth2_applications` の画面) | MCP サーバーなど、利用者の権限で Redmine を操作するとき |
+| OAuth 2 | Redmine 7.0 は、doorkeeper の gem で OAuth 2 のプロバイダーになれる (`Gemfile`、`config/initializers/doorkeeper.rb`、`oauth2_applications` の画面) | MCP サーバーなど、ユーザーの権限で Redmine を操作するとき |
 | 大きな添付ファイル | CloudFront を通したアップロード (`/s3_uploads/presign`、`/s3_uploads/complete`) を、API キーと OAuth でも使えるようにする | AI 側が、要約などのファイルを添付するとき。REST API の `POST /uploads.json` は 1 MB まで ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#uploads-through-lambda)) |
 
-AI の処理が書き込むときは、専用の Redmine ユーザーを使うので、AI が書いたものはこのユーザーの注記や更新として残ります。このユーザーはシステム管理者にはせず、ロールで、使うプロジェクトと操作 (閲覧、注記の追加など) に絞ります。API キーは、AI 側のシークレットとして、AI のプロジェクトで管理します。AI エージェントが利用者の代わりに Redmine を操作するときは、OAuth で、その利用者の権限の範囲だけを許可します。
+AI の処理が書き込むときは、専用の Redmine ユーザーを使うので、AI が書いたものはこのユーザーの注記や更新として残ります。このユーザーはシステム管理者にはせず、ロールで、使うプロジェクトと操作 (閲覧、注記の追加など) に絞ります。API キーは、AI 側のシークレットとして、AI のプロジェクトで管理します。AI エージェントがユーザーの代わりに Redmine を操作するときは、OAuth で、そのユーザーの権限の範囲だけを許可します。
 
 API も画面と同じく CloudFront を経由するので、WAF の IP アドレスごとのレート制限が API にも適用されます ([lambda.md](lambda.md#flat-rate-free-plan-and-waf))。
 
@@ -88,7 +88,7 @@ Redmine 側で守ることと、AI 側で守ることを分けます。
 
 | 守ること | 担当 |
 | --- | --- |
-| AI が、ボットユーザーか、利用者の権限の範囲でしか操作できない | このプロジェクト (Redmine の権限、ロール、OAuth のスコープ) |
+| AI が、ボットユーザーか、ユーザー本人の権限の範囲でしか操作できない | このプロジェクト (Redmine の権限、ロール、OAuth のスコープ) |
 | ボットユーザーに、削除、管理、権限の変更を許可しない | このプロジェクト (ロールの設定) |
 | webhook のペイロードを、ボットユーザーが閲覧できる範囲に限る。webhook をプライベートアドレス宛てに送らせない | このプロジェクト (Redmine の webhook の権限チェック、`webhook_blocklist`) |
 | メールやチケットの本文は、信頼できない入力として扱う (本文に書かれた指示に従わない) | AI のプロジェクト |

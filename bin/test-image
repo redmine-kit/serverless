@@ -2,9 +2,9 @@
 # Image tests (docs/testing.md#image-tests). Starts the image under the same
 # conditions as Lambda: a read-only file system with only /tmp writable, and
 # a user that is not root. The database is the PostgreSQL of
-# bin/test-services. AWS (SSM and SQS) is LocalStack when LOCALSTACK_AUTH_TOKEN
-# is set, and moto otherwise (pull requests from forks); nothing is mocked.
-# worker and task run on the Runtime Interface Emulator in the base image.
+# bin/test-services, and AWS (SSM and SQS) is its AWS Emulator; nothing is
+# mocked. worker and task run on the Runtime Interface Emulator in the base
+# image.
 #   bin/test-image [image]          # default: serverless:test (bin/build-image)
 #   bin/test-image <image> <redmine.json>
 #                                   # a derived image (bin/build-derived-image), also
@@ -16,31 +16,30 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 image="${1:-serverless:test}"
 derived_config="${2:-}"
-# An internal network: the containers reach PostgreSQL and the AWS backend,
-# but not AWS.
-network=serverless-image-test
+# The internal network of test/compose.yml: the containers reach PostgreSQL
+# and AWS Emulator, but not AWS.
+network=serverless-test_internal
 prefix=serverless-image-test
-if [[ -n "${LOCALSTACK_AUTH_TOKEN:-}" ]]; then
-  backend=localstack port=4566 account=000000000000
-else
-  backend=moto port=5000 account=123456789012
-fi
-endpoint="http://$backend:$port"
+# The emulator's certificate names only 127.0.0.1 and localhost, so every
+# container reaches it on 127.0.0.1: the short-lived ones run in its network
+# namespace, and each role in the namespace of a forwarder of its own
+# (forwarder below), as the roles run side by side and each listens on 8080.
+endpoint=https://127.0.0.1:9297
+account=000000000000
 queue_url="$endpoint/$account/redmine-jobs"
 ssm_path=/image-test/env/
 secret_key_base='image-test-only-secret-key-base'
 
+. bin/lib/aws-emulator.sh
 bin/test-services >/dev/null 2>&1 || bin/test-services
-compose=(docker compose -f test/compose.yml -p serverless-test)
-
-echo "AWS for the image tests: $backend"
-# The backend chooses the service from the credential scope of the
-# Authorization header; the signature itself is not checked.
-sqs() {
-  curl -fsS -X POST "http://127.0.0.1:$port/" \
-    -H 'Authorization: AWS4-HMAC-SHA256 Credential=test/20260101/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0' \
-    "$@"
-}
+emulator=$(emulator)
+echo "AWS for the image tests: $(docker exec "$emulator" aws-emulator --version | sed -n 's/^Version: /AWS Emulator /p')"
+# The certificate, readable by the low-privilege user of the image: in the
+# emulator's volume only its own user can read it.
+ca_dir=$(mktemp -d)
+chmod 755 "$ca_dir"
+docker cp -q "$emulator:$emulator_ca" "$ca_dir/ca.pem"
+chmod 644 "$ca_dir/ca.pem"
 
 failures=0
 quiet() { "$@" >/dev/null; }
@@ -48,27 +47,49 @@ pass() { echo "ok: $*"; }
 fail() { echo "FAILED: $*" >&2; failures=$((failures + 1)); }
 check() { local name="$1"; shift; if "$@"; then pass "$name"; else fail "$name"; fi; }
 
+roles=(web worker task)
 cleanup() {
-  docker rm -f "$prefix-web" "$prefix-worker" "$prefix-task" >/dev/null 2>&1 || true
-  for service in postgres "$backend"; do
-    docker network disconnect "$network" "serverless-test-$service-1" >/dev/null 2>&1 || true
+  local role
+  for role in "${roles[@]}"; do
+    docker rm -f "$prefix-$role" "$prefix-$role-forwarder" >/dev/null 2>&1 || true
   done
-  docker network rm "$network" >/dev/null 2>&1 || true
 }
-trap '[[ -n "${KEEP:-}" ]] || cleanup' EXIT
+trap '[[ -n "${KEEP:-}" ]] || { cleanup; rm -rf "$ca_dir"; }' EXIT
 cleanup
-docker network create --internal "$network" >/dev/null
-for service in postgres "$backend"; do
-  docker network connect --alias "$service" "$network" "serverless-test-$service-1"
-done
 
 # Same conditions as Lambda. The secrets come from SSM as on Lambda; the other
 # settings go in as environment variables.
 aws_env=(-e AWS_REGION=us-east-1 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test
-  -e AWS_ENDPOINT_URL="$endpoint")
+  -e AWS_ENDPOINT_URL="$endpoint" -v "$ca_dir/ca.pem:/etc/aws-emulator-ca.pem:ro"
+  -e AWS_CA_BUNDLE=/etc/aws-emulator-ca.pem)
+# The short-lived containers: in the emulator's network namespace.
+at_emulator=(--network "container:$emulator")
+# A role's network namespace on the internal network, where 127.0.0.1:9297 is
+# forwarded to the emulator (TLS stays end to end), with Ruby from the image.
+forwarder() { # <role>
+  docker run -d --name "$prefix-$1-forwarder" --network "$network" --read-only --user 993:993 \
+    --entrypoint ruby "$image" -rsocket -e '
+      server = TCPServer.new("127.0.0.1", 9297)
+      loop do
+        Thread.new(server.accept) do |client|
+          upstream = TCPSocket.new("aws-emulator", 9297)
+          [[client, upstream], [upstream, client]].map do |from, to|
+            Thread.new { IO.copy_stream(from, to) rescue nil; to.close_write rescue nil }
+          end.each(&:join)
+          [client, upstream].each(&:close)
+        end
+      end' >/dev/null
+  for _ in $(seq 1 30); do
+    docker exec "$prefix-$1-forwarder" ruby -rsocket -e 'TCPSocket.new("127.0.0.1", 9297).close' 2>/dev/null && return 0
+    sleep 1
+  done
+  echo "the forwarder of $1 does not listen" >&2
+  return 1
+}
 run() {
   local role="$1"; shift
-  docker run -d --name "$prefix-$role" --network "$network" \
+  forwarder "$role"
+  docker run -d --name "$prefix-$role" --network "container:$prefix-$role-forwarder" \
     --read-only --tmpfs /tmp:exec --user 993:993 \
     -e REDMINE_ROLE="$role" \
     -e REDMINE_DB_NAME=postgres -e REDMINE_DB_USERNAME=postgres -e REDMINE_DB_SSLMODE=disable \
@@ -112,7 +133,7 @@ handler_tests() {
 }
 check "task handler" handler_tests
 ssm_tests() {
-  docker run --rm --read-only --tmpfs /tmp --user 993:993 --network "$network" "${aws_env[@]}" \
+  docker run --rm --read-only --tmpfs /tmp --user 993:993 "${at_emulator[@]}" "${aws_env[@]}" \
     -w /var/task/redmine --entrypoint ruby "$image" \
     -rbundler/setup -rredmine_aws_ssm/loader plugins/redmine_aws_ssm/test/loader_test.rb
 }
@@ -148,13 +169,17 @@ echo "== task"
 "${compose[@]}" exec -T postgres psql -q -U postgres \
   -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public' >/dev/null 2>&1
 # A new queue each run (SQS allows one PurgeQueue per 60 seconds).
-sqs -d Action=DeleteQueue -d QueueUrl="$queue_url" >/dev/null 2>&1 || true
-sqs -d Action=CreateQueue -d QueueName=redmine-jobs >/dev/null
+sqs DeleteQueue "$(jq -nc --arg url "$queue_url" '{QueueUrl: $url}')" >/dev/null 2>&1 || true
+sqs CreateQueue '{"QueueName":"redmine-jobs"}' >/dev/null
+queue_attribute() { # <name>: prints the queue's attribute
+  sqs GetQueueAttributes "$(jq -nc --arg url "$queue_url" --arg name "$1" '{QueueUrl: $url, AttributeNames: [$name]}')" |
+    jq -r --arg name "$1" '.Attributes[$name]'
+}
 # The database host and the secrets in SSM, as the deployment puts them
 # (PostgreSQL here does not check the password). The host is only there, so
 # the roles reach the database only if SSM is read before Rails reads
 # config/database.yml.
-docker run --rm --network "$network" "${aws_env[@]}" -w /var/task/redmine --entrypoint ruby "$image" \
+docker run --rm "${at_emulator[@]}" "${aws_env[@]}" -w /var/task/redmine --entrypoint ruby "$image" \
   -rbundler/setup -raws-sdk-ssm -e '
     ssm = Aws::SSM::Client.new
     { "SECRET_KEY_BASE" => ARGV[1], "REDMINE_DB_PASSWORD" => "unused" }.each do |name, value|
@@ -163,6 +188,7 @@ docker run --rm --network "$network" "${aws_env[@]}" -w /var/task/redmine --entr
     ssm.put_parameter(name: "#{ARGV[0]}REDMINE_DB_HOST", value: "postgres", type: "String", overwrite: true)' "$ssm_path" "$secret_key_base"
 run task
 wait_rie task
+check "AWS cannot be reached from the roles' network" aws_unreachable "$prefix-task"
 check "rake db:migrate" quiet task '{"command":"rake","args":["db:migrate"]}'
 check "rake redmine:plugins:migrate" quiet task '{"command":"rake","args":["redmine:plugins:migrate"]}'
 check "rake redmine:load_default_data" \
@@ -333,16 +359,17 @@ wait_rie worker
 job=$(task '{"command":"runner","args":["p = Project.create!(name: \"Worker probe\", identifier: \"worker-probe\"); Project.mark_for_deletion(p); puts DestroyProjectJob.new(p.id, 1, \"127.0.0.1\").serialize.to_json"]}' | tail -n 1)
 # The job goes through the queue, and the worker gets it as Lambda's event
 # source would pass it, with the receipt handle of the message received.
-sqs -d Action=SendMessage -d QueueUrl="$queue_url" --data-urlencode MessageBody="$job" >/dev/null
-received=$(sqs -d Action=ReceiveMessage -d QueueUrl="$queue_url" -d VisibilityTimeout=300)
-handle=$(sed -n 's:.*<ReceiptHandle>\([^<]*\)</ReceiptHandle>.*:\1:p' <<<"$received")
+sqs SendMessage "$(jq -nc --arg url "$queue_url" --arg body "$job" '{QueueUrl: $url, MessageBody: $body}')" >/dev/null
+received=$(sqs ReceiveMessage "$(jq -nc --arg url "$queue_url" '{QueueUrl: $url, VisibilityTimeout: 300}')")
+handle=$(jq -r '.Messages[0].ReceiptHandle' <<<"$received")
 event=$(jq -nc --arg body "$job" --arg handle "$handle" --arg account "$account" '{Records: [{messageId: "image-test", receiptHandle: $handle,
   body: $body, md5OfBody: "", messageAttributes: {}, eventSource: "aws:sqs",
   eventSourceARN: "arn:aws:sqs:us-east-1:\($account):redmine-jobs", awsRegion: "us-east-1"}]}')
 # After the job, redmine_aws_sqs deletes the message at
-# REDMINE_JOBS_QUEUE_URL (the backend here), not at the public host the gem builds
-# from the ARN. The runtime may write the job's log after the invocation
-# returns, so the log is read for a few seconds.
+# REDMINE_JOBS_QUEUE_URL (the emulator here), not at the public host the gem
+# builds from the ARN, which the internal network does not reach. The runtime
+# may write the job's log after the invocation returns, so the log is read for
+# a few seconds.
 job_logged() {
   for _ in $(seq 1 10); do
     docker logs "$prefix-worker" 2>&1 | grep -q 'Running job: .*\[DestroyProjectJob\]' && return 0
@@ -368,13 +395,11 @@ project_deleted() {
 check "the job deleted the project" project_deleted
 # The received message was in flight; deleted, nothing is left in flight.
 message_deleted() {
-  sqs -d Action=GetQueueAttributes -d QueueUrl="$queue_url" -d AttributeName.1=ApproximateNumberOfMessagesNotVisible |
-    grep -q '<Value>0<'
+  queue_attribute ApproximateNumberOfMessagesNotVisible | grep -qx 0
 }
 check "the worker deleted the message" message_deleted
 queued() {
-  sqs -d Action=GetQueueAttributes -d QueueUrl="$queue_url" -d AttributeName.1=ApproximateNumberOfMessages |
-    grep -o '<Value>[0-9]*' | grep -qv '<Value>0$'
+  queue_attribute ApproximateNumberOfMessages | grep -qvx 0
 }
 check "the job queued its notification mail in SQS" queued
 not_allowed() {

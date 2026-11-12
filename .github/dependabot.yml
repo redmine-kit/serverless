@@ -25,6 +25,15 @@ updates:
     cooldown:
       default-days: 7
       semver-patch-days: 3
+  # The base image of AWS Emulator (test/aws-emulator/Dockerfile); the
+  # emulator's own version is updated by hand, as that file says.
+  - package-ecosystem: docker
+    directory: /test/aws-emulator
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+      semver-patch-days: 3
   - package-ecosystem: bundler
     directory: /
     schedule:

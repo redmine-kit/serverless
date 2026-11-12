@@ -72,11 +72,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      # The secret is not given to pull requests from forks, so LocalStack is
-      # skipped there.
+      # PostgreSQL and AWS Emulator, which needs no secret.
       - run: bin/test-services
-        env:
-          LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
       - if: always()
         run: bin/test-services --down
 
@@ -99,26 +96,26 @@ jobs:
     env:
       REDMINE_BRANCH: ${{ matrix.redmine == 'master' && 'master' || '' }}
       BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ github.token }}
-      # AWS in the image and Lambda tests is LocalStack. The secret is not
-      # given to pull requests from forks: there the image tests use moto and
-      # the Lambda tests are skipped.
-      LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - run: bin/build-image
+      # AWS in the image tests is AWS Emulator (bin/test-services).
       - run: bin/test-image
       # Derived images with the plugins and themes of test/derived, as
       # bin/deploy builds them from image.plugins and image.themes, on the
       # release only.
       - if: matrix.redmine != 'master'
         run: bin/test-derived-image serverless:test
-      # The functions as Lambda on LocalStack, with the release only. Its
-      # LocalStack takes the same port as the image tests' one, which stops
-      # first.
+      # The functions as Lambda on LocalStack, with the release only: the only
+      # tests that need LocalStack (docs/testing.md#which-substitute-to-use).
+      # The secret is not given to pull requests from forks, so they are
+      # skipped there.
       - if: matrix.redmine != 'master'
-        run: bin/test-services --down && bin/test-lambda
+        run: bin/test-lambda
+        env:
+          LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
       - if: matrix.redmine != 'master'
         uses: codecov/codecov-action@v7.1.1
         with:

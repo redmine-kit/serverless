@@ -1,10 +1,19 @@
 # Services for the tests (see docs/testing.md). PostgreSQL follows the major
 # version chosen for RDS for PostgreSQL (docs/rds.md); 16 until it is chosen.
+# The image tests run on the internal network, which cannot reach AWS
+# (bin/test-services and bin/test-image fail if it can). Redmine's own tests
+# (bin/test-core), which call no AWS API, use PostgreSQL on the default
+# network.
+networks:
+  internal:
+    internal: true
+
 services:
   postgres:
     image: postgres:16@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
+    networks: [internal, default]
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -12,23 +21,25 @@ services:
       interval: 2s
       retries: 30
 
-  moto:
-    image: motoserver/moto:5.2.5@sha256:59a1965d845249b04def37a0e2565f9cc6c44543cb89b68e90f28f344b3b0d1a
-    ports:
-      - "127.0.0.1:5000:5000"
+  # SSM and SQS for the image tests: AWS Emulator (test/aws-emulator/Dockerfile).
+  # Its certificate names only 127.0.0.1 and localhost, so the containers of
+  # the tests reach it on https://127.0.0.1:9297 (bin/test-image), trusting
+  # the certificate it writes to the volume at each start. Authentication is
+  # off: the tests sign with fixed keys.
+  aws-emulator:
+    build: aws-emulator
+    image: serverless-test-aws-emulator
+    pull_policy: build
+    command: ["--auth", "off"]
+    networks: [internal]
+    mem_limit: 2g
+    memswap_limit: 2g
+    volumes:
+      - aws-emulator:/home/emulator/.aws/emulator
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/moto-api/')"]
-      interval: 2s
+      test: ["CMD", "curl", "-fsk", "https://127.0.0.1:9297/__admin/health"]
+      interval: 1s
       retries: 30
 
-  # LocalStack needs an auth token, so it starts only with the
-  # "localstack" profile, which bin/test-services turns on when
-  # LOCALSTACK_AUTH_TOKEN is set. The token is never written to the repository.
-  localstack:
-    image: localstack/localstack:2026.10.6@sha256:f94401988db4c01a5b2634d37d698a9b11c93f74c1ad0f7a8849f5ebd73dcbdc
-    profiles: ["localstack"]
-    environment:
-      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
-    ports:
-      - "127.0.0.1:4566:4566"
-    # The image has its own health check (the image has no curl).
+volumes:
+  aws-emulator:

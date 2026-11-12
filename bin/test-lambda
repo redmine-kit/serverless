@@ -9,8 +9,7 @@
 #   bin/test-lambda [image]   # default: serverless:test (bin/build-image)
 #   bin/test-lambda --down    # stop LocalStack and PostgreSQL
 #   KEEP=1 bin/test-lambda    # leave them running for inspection
-# LocalStack listens on 127.0.0.1:4566, as the one of bin/test-services does:
-# stop that one first (bin/test-services --down).
+# LocalStack listens on 127.0.0.1:4566.
 # Commands that run inside containers are in single quotes on purpose.
 # shellcheck disable=SC2016
 set -euo pipefail

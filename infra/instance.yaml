@@ -763,6 +763,11 @@ Resources:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub ${MailBucket.Arn}/processed/*
+              # Re-importing email that was already imported
+              # (redmine_aws_ses:receive_mail with MESSAGE_ID).
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${MailBucket.Arn}/processed/*
               # Lambda sends failed asynchronous invocations with this role.
               - Effect: Allow
                 Action: sqs:SendMessage

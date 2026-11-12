@@ -251,7 +251,7 @@ Rails の設定は、どこに書くかで有効になるかどうかが変わ�
 | --- | --- | --- |
 | ホスト名とパス、プロトコル | メール本文の URL に使う | Redmine のドメイン、HTTPS |
 | 一括ダウンロードの合計ファイルサイズの上限 (`bulk_download_max_size`) | zip は S3 の一時ファイルにして返すので、6 MB の制限を受けない ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#downloading-all-attachments))。生成時間が 60 秒に収まるかを計測する | Redmine のデフォルト (100 MB) のまま |
-| 管理者のパスワード | 初期の管理者は `admin`、パスワードも `admin` | 初期データの投入後すぐに変更する |
+| システム管理者のパスワード | 初期のシステム管理者は `admin`、パスワードも `admin` | 初期データの投入後すぐに変更する |
 | 認証が必要 (`login_required`) | Redmine を、ログインしていないユーザーに公開しない。Redmine の標準の `/robots.txt` も、検索エンジンにすべてを拒否する (`Disallow: /`) ようになる | 有効を推奨 |
 
 <a id="background-jobs"></a>
@@ -304,7 +304,7 @@ sequenceDiagram
 
 Redmine 7.0 は webhook をジョブ (`WebhookJob`) で送信するので、送信するのは `redmine-worker` です。`redmine-worker` は VPC 内で動くので、webhook を送信できるのは NAT インスタンス構成の場合だけです ([rds.md](rds.md#routes-out-of-the-vpc))。VPC エンドポイント構成では、すぐに失敗します (上の `webhook_blocklist`)。
 
-webhook は、Redmine のデフォルトでは無効です (`webhooks_enabled` が 0)。管理者が有効にし、権限 (`use_webhooks`) を持つユーザーが自分の webhook を作成します。送信先がエラーを返すか、Redmine のタイムアウトの 60 秒以内に接続できないと、ジョブは失敗し、上の再試行を経て失敗の記録に残ります。管理画面の「ジョブ」から再送信できます。
+webhook は、Redmine のデフォルトでは無効です (`webhooks_enabled` が 0)。システム管理者が有効にし、権限 (`use_webhooks`) を持つユーザーが自分の webhook を作成します。送信先がエラーを返すか、Redmine のタイムアウトの 60 秒以内に接続できないと、ジョブは失敗し、上の再試行を経て失敗の記録に残ります。管理画面の「ジョブ」から再送信できます。
 
 Redmine は、送信前に送信先のホスト名を IP アドレスに名前解決し、`webhook_blocklist` の範囲なら送信しません。そのうえで解決したアドレスに直接接続するので、途中で DNS の応答を差し替える攻撃も防げます (`lib/webhook_endpoint_validator.rb`、`Webhook::Executor`)。この設計では、プライベートアドレスと、メタデータのアドレス `169.254.169.254` を含むリンクローカルアドレスを拒否します ([ai.md](ai.md#event-notifications-redmines-standard-webhooks))。
 
@@ -436,7 +436,7 @@ Rails 8.1 のデフォルトでは、Rails も `public/` のファイルを配�
 
 ### ファビコン
 
-Redmine 7.1 では、管理者がファビコンを設定できます (管理 › 設定 › 表示 の「カスタムファビコン」、PNG または ICO で 32 KB まで。7.1 はリリース前で、master ブランチ 7519645 で 2026-11-10 に確認)。Redmine は画像を添付ファイルではなく設定のテーブルに Base64 で保存し、`FaviconsController#show` が `/favicons/<SHA256 の先頭 16 進 8 桁>` で返します。ログインしていない訪問者にも返し、`Cache-Control: max-age=31556952, public, immutable` を付けます。ファビコンを置き換えると URL が変わります。どの画面もこの URL を参照するので、キャッシュしなければ、画面を開くたびにファビコンのためにも Lambda を呼び出すことになります。
+Redmine 7.1 では、システム管理者がファビコンを設定できます (管理 › 設定 › 表示 の「カスタムファビコン」、PNG または ICO で 32 KB まで。7.1 はリリース前で、master ブランチ 7519645 で 2026-11-10 に確認)。Redmine は画像を添付ファイルではなく設定のテーブルに Base64 で保存し、`FaviconsController#show` が `/favicons/<SHA256 の先頭 16 進 8 桁>` で返します。ログインしていない訪問者にも返し、`Cache-Control: max-age=31556952, public, immutable` を付けます。ファビコンを置き換えると URL が変わります。どの画面もこの URL を参照するので、キャッシュしなければ、画面を開くたびにファビコンのためにも Lambda を呼び出すことになります。
 
 | 項目 | 設定 | 理由 |
 | --- | --- | --- |

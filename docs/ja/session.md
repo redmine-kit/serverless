@@ -35,7 +35,7 @@ Redmine は、セッションを暗号化した Cookie に保存し、データ�
 | 自動ログイン | 同上 | 無効 | 「ログインを維持」でログインしたままにする日数。専用の Cookie とトークンを使う |
 | `autologin_cookie_secure` | `config/configuration.yml` | リクエストのプロトコルに従う | 自動ログインの Cookie に `Secure` 属性を付けるか。CloudFront の背後では、リクエストは HTTPS として Redmine に転送されるので、付く |
 
-最初の 2 つを変更すると、Redmine が管理者にセキュリティ通知を送信します。
+最初の 2 つを変更すると、Redmine がシステム管理者にセキュリティ通知を送信します。
 
 <a id="the-secure-attribute-of-the-session-cookie"></a>
 

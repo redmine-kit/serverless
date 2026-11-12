@@ -228,7 +228,7 @@ Work starts with the points that decide whether it works at all. At each stage, 
 | 5 | Attachments (`redmine_aws_s3`) | The plugin's unit, functional, integration and system tests. Redmine's own attachment tests pass with S3 |
 | 6 | Jobs and mail sending (SQS, `redmine-worker`, SES and the sending part of `redmine_aws_ses`, resending) | Tests for jobs and mail sending, retry tests per error type. Checks with the mailbox simulator |
 | 7 | Administration pages (state and connections, mail sending, jobs, S3 attachments) | Functional and system tests per page. Non-administrators cannot open them |
-| 8 | Mail receiving (MX, receipt rules, import in `redmine_aws_ses`, the "Mail receiving" administration page) | Import tests (spoofing, spam, auto-replies). Checking real mail receiving |
+| 8 | Mail receiving (MX, receipt rules, import in `redmine_aws_ses`, the "Email receiving" administration tab) | Import tests (spoofing, spam, auto-replies). Checking real mail receiving |
 | 9 | Migration (if data from an old Redmine is moved) | The checks after deployment pass with the migrated data |
 
 ## Open questions

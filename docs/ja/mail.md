@@ -102,7 +102,7 @@ sequenceDiagram
   participant B as S3<br>redmine-mail
   participant T as redmine-task
   S->>E: SMTP(MX のレコード)
-  E->>E: 迷惑メールとウイルスの検査、SPF、DKIM、DMARC
+  E->>E: スパムとウイルスの検査、SPF、DKIM、DMARC
   E->>B: 全文を置く(inbound/メッセージ ID)
   E->>T: 非同期の呼び出し(SES のイベント)
   T->>B: GetObject
@@ -171,9 +171,9 @@ SES の受信ルールは受信ルールセットにまとめ、リージョン�
 
 <a id="spoofing-and-spam"></a>
 
-### なりすましと迷惑メール
+### なりすましとスパム
 
-Redmine は送信者のアドレスでユーザーを特定するので、取り込みでは、イベントに含まれる SES の判定結果を確認します (送信者が操作できるメールのヘッダーからは取得しません)。ウイルスを含むメールは常に取り込まず、迷惑メールと DMARC に合格しないメールは、受信設定で取り込むようにしない限り取り込みません (`import_spam`、`import_without_dmarc_pass`。`redmine.json` の `pluginSettings`。[deploy-config.md](deploy-config.md#fields-of-redminejson))。判定の規則は、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/ja/receiving.html#spoofing-and-spam) にあります。SES が判定結果を出すように、受信ルールでは、スパムとウイルスのスキャンを有効にしておきます。
+Redmine は送信者のアドレスでユーザーを特定するので、取り込みでは、イベントに含まれる SES の判定結果を確認します (送信者が操作できるメールのヘッダーからは取得しません)。ウイルスを含むメールは常に取り込まず、スパムと DMARC に失敗したメールは、受信設定で取り込むようにしない限り取り込みません (`import_spam`、`import_without_dmarc_pass`。`redmine.json` の `pluginSettings`。[deploy-config.md](deploy-config.md#fields-of-redminejson))。判定の規則は、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/ja/receiving.html#spoofing-and-spam) にあります。SES が判定結果を出すように、受信ルールでは、スパムとウイルスのスキャンを有効にしておきます。
 
 <a id="settings-for-receiving-replies"></a>
 

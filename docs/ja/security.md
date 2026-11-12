@@ -40,7 +40,7 @@ Serverless のセキュリティ設計です。保護対象、脅威、層ごと
 | 権限のないユーザーに添付ファイルを読まれる | Redmine が権限を確認してから、有効期限 5 分の CloudFront 署名付き URL を発行する。バケットは公開せず、OAC を通した CloudFront からのアクセスだけを許可する | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#download) |
 | 署名付き URL が漏えいする | 有効期限は 5 分。ログに記録しない (下の「ログ」) | 下の「ログ」 |
 | 添付ファイルで悪意のあるコードを実行される (HTML、SVG) | 添付ファイルは、Redmine の標準と同じく Redmine のオリジンから、CloudFront のビヘイビア `/files/*` と `/tmp/*` (サムネイルと zip) を通して返され、Redmine が付けるのと同じ `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` と `X-Content-Type-Options: nosniff` が付く。sandbox の文書は不透明なオリジンになり、スクリプトも実行されないので、Redmine の Cookie を読むことも、Redmine を呼び出すこともできない。PDF 以外は、ダウンロードとして返す (`Content-Disposition: attachment`。Redmine の標準と同じ)。デプロイ後の確認で、ヘッダーを確認する ([testing.md](testing.md#checks-after-deployment)) | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#download) |
-| 送信者を偽装したメールで、チケットを作成される | DMARC に合格しないメール、迷惑メール、ウイルスを含むメールを破棄する。登録されていないアドレスからのメールを受け付けない | [mail.md](mail.md#spoofing-and-spam) |
+| 送信者を偽装したメールで、チケットを作成される | DMARC に失敗したメール、スパム、ウイルスを含むメールを破棄する。登録されていないアドレスからのメールを受け付けない | [mail.md](mail.md#spoofing-and-spam) |
 | webhook で、内部のアドレスにリクエストを送信させられる (SSRF) | `webhook_blocklist` で、プライベート、ループバック、リンクローカルのアドレスを拒否する | [lambda.md](lambda.md#rails-and-redmine-settings) |
 | 依存する gem やイメージに悪意のあるコードが混入する | digest と SHA256 で固定する、依存関係の脆弱性スキャン、GitHub Actions を SHA で固定する | 下の「サプライチェーン」 |
 | AWS の権限を昇格される | 関数ごとのロール、アクセス許可の境界、インフラの変更には承認が必要 | [iam.md](iam.md) |

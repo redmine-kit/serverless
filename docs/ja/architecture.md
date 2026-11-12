@@ -92,7 +92,7 @@ flowchart LR
 | バックグラウンドジョブ | ActiveJob のジョブを AWS 公式の gem `aws-activejob-sqs` で SQS に送り、`redmine-worker` で実行する | 独自のコードが不要。再試行とデッドレターキューがある。画面のリクエストがジョブを待たない | [lambda.md](lambda.md#background-jobs) |
 | メール送信 | Rails の ActionMailer の配信方法 (`aws-actionmailer-ses` の `:ses_v2`) で、SES の API から送信する。送信するのは `redmine-worker` | Rails 標準の仕組みで、独自のコードが不要 | [mail.md](mail.md#sending) |
 | ドメインと DNS | Web とメールを同じホスト名 (Redmine のサブドメイン) にする。Web は CloudFront を指すエイリアスレコード、同じ名前に MX レコードを置く。親ドメインの DNS で設定できなければ、サブドメインを Route 53 に委任する | URL とメールアドレスがそろう。CNAME と MX は同じ名前に置けない | [mail.md](mail.md#receiving-domain) |
-| メール受信 | SES で受信して S3 に保存し、`redmine-task` が Redmine の `MailHandler` で取り込む。アドレスはプロジェクトごと (`<識別子>@<サブドメイン>`) と全体用。DMARC に合格しないメールは破棄する | ap-northeast-1 の SES で受信できる。差出人を偽ったメールを取り込まない | [mail.md](mail.md#receiving) |
+| メール受信 | SES で受信して S3 に保存し、`redmine-task` が Redmine の `MailHandler` で取り込む。アドレスはプロジェクトごと (`<識別子>@<サブドメイン>`) と全体用。DMARC に失敗したメールは破棄する | ap-northeast-1 の SES で受信できる。差出人を偽ったメールを取り込まない | [mail.md](mail.md#receiving) |
 | migration と rake | `redmine-task` で、ローカルのコマンドから任意の rake と `rails runner` を実行する | 本番と同じイメージと設定で動く。`rake db:migrate` と `redmine:plugins:migrate` を、RDS に対してそのまま実行する | [tasks.md](tasks.md) |
 | Redmine の更新 | 新しいバージョンが出たら、追加された migration を分類し、試験用データベース (PostgreSQL) で実行し、プラグインによる置き換えへの影響を確認してからバージョンアップする。結果はバージョンごとに記録する | バージョンアップ後に不具合に気づく事態を防ぐ | [upgrade.md](upgrade.md) |
 | テスト | 置き換えた処理ごとにテストを書き、Redmine 本体のテストも通す。ローカルでは AWS を moto と LocalStack で、データベースを PostgreSQL コンテナで代替する。デプロイのたびに実際の AWS で確認する | 置き換えた処理が Redmine の更新で壊れたときに気づける | [testing.md](testing.md) |
@@ -258,7 +258,7 @@ serverless/
 | 5 | 添付ファイル (`redmine_aws_s3`) | プラグインのユニットテスト、機能テスト、統合テスト、システムテスト。本体の添付ファイルのテストを S3 構成で通す |
 | 6 | ジョブとメール送信 (SQS、`redmine-worker`、SES と `redmine_aws_ses` の送信部分、再送) | ジョブとメール送信のテスト、エラーの種類ごとの再試行のテスト。メールボックスシミュレーターでの確認 |
 | 7 | 管理画面 (ステータス、メール送信、ジョブ、S3) | 画面ごとの機能テストとシステムテスト。管理者以外が開けないこと |
-| 8 | メール受信 (MX、受信ルール、`redmine_aws_ses` での取り込み、管理画面の「メール受信」のタブ) | 取り込みのテスト (なりすまし、迷惑メール、自動応答)。実際の受信の確認 |
+| 8 | メール受信 (MX、受信ルール、`redmine_aws_ses` での取り込み、管理画面の「メール受信」のタブ) | 取り込みのテスト (なりすまし、スパム、自動応答)。実際の受信の確認 |
 | 9 | 移行 (古い Redmine のデータを移行する場合) | 移行したデータで、デプロイ後の確認を通す |
 
 <a id="open-questions"></a>

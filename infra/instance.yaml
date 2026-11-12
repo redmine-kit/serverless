@@ -816,7 +816,6 @@ Resources:
           REDMINE_DB_USERNAME: redmine
           REDMINE_HOST: !Ref Domain
           REDMINE_JOBS_QUEUE_URL: !Ref JobQueue
-          REDMINE_JOBS_DEAD_LETTER_QUEUE_URL: !Ref JobDeadLetterQueue
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan

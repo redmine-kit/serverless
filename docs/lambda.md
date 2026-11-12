@@ -52,7 +52,7 @@ The following packages were confirmed to be installable from the standard Amazon
 | PostgreSQL connections | `libpq` (runtime), `libpq-devel` (building the `pg` gem) | 15.0 |
 | Japanese text in Gantt PNG | `ipa-gothic-fonts` | 003.03. Set with Redmine's `minimagick_font_path` |
 | Repositories ([below](#repositories)) | `subversion`<br>`git-core` (only the commands are copied into the image) | 1.14.5<br>2.50.1 (2026-11-10) |
-| Building gems | `gcc`<br>`make`<br>`libyaml-devel` | — |
+| Building gems | `gcc`<br>`gcc-c++`<br>`make`<br>`libyaml-devel` | — |
 | Unpacking files | `tar`<br>`gzip` | — |
 
 Pandoc is not in the Amazon Linux 2023 repositories (searched with `microdnf repoquery`), so the official Pandoc Linux arm64 executable (`pandoc-3.13-linux-arm64.tar.gz`, 2026-10-26) is installed after checking its SHA256; Redmine 7.0 needs 3.8.3 or later to preview xlsx and pptx. ImageMagick 6 has the `convert` command that Redmine uses for thumbnails (`lib/redmine/thumbnail.rb`), so it works as is.
@@ -61,19 +61,21 @@ Pandoc is not in the Amazon Linux 2023 repositories (searched with `microdnf rep
 
 ```dockerfile
 FROM public.ecr.aws/lambda/ruby:4.0@sha256:<digest> AS build
-# Install gcc, make, libpq-devel, libyaml-devel, tar, gzip
+# Install gcc, gcc-c++, make, libpq-devel, libyaml-devel, tar, gzip
 # Download the Redmine 7.0.3 tar.gz from redmine.org, check its SHA256 and unpack it to /var/task/redmine
-# Add config/database.yml and Gemfile.local, and install gems into vendor/bundle (excluding development and test)
-# Compile assets (bin/rails assets:precompile)
+# Add the configuration files (config/database.yml and others) and Gemfile.local
+# Install the gems of Gemfile.lock into vendor/bundle (excluding development and test),
+# including the project's own plugins, which are gems from GitHub Packages
+# Link each plugin gem into plugins/ (link-plugins), where Redmine loads plugins from
+# Compile assets (bin/rails assets:precompile), then make tmp a symbolic link to /tmp/redmine
+# Download the RDS CA bundle (global-bundle.pem) and the Pandoc executable, and check their SHA256
 
 FROM public.ecr.aws/lambda/ruby:4.0@sha256:<digest>
 # Install ImageMagick, ghostscript, urw-base35-fonts, libpq, ipa-gothic-fonts
 # Copy svn, svnadmin and git, and the libraries they need, from a stage with subversion and git-core
-# Install the Pandoc executable
-# Download the RDS CA bundle (global-bundle.pem), check its SHA256 and place it at /var/task/rds-global-bundle.pem
-# Copy /var/task/redmine from the build stage (build tools such as gcc are not included)
-# Add the configuration files, the project's own plugins (plugins/), the start-up script and the task handler
-# Make tmp a symbolic link to /tmp/redmine
+# Copy /var/task/redmine, Pandoc and the RDS CA bundle (to /var/task/rds-global-bundle.pem) from the build stage
+# (build tools such as gcc are not included)
+# Add the start-up script and the task handler
 COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0@sha256:<digest> /lambda-adapter /opt/lambda-web-adapter/lambda-adapter
 COPY image/extensions/lambda-adapter /opt/extensions/lambda-adapter
 ENTRYPOINT ["/var/task/bin/start"]

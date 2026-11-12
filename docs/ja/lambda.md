@@ -60,7 +60,7 @@ Amazon Linux 2023 の標準リポジトリで、次のパッケージをイン�
 | PostgreSQL への接続 | `libpq` (実行時)、`libpq-devel` (`pg` gem のビルド) | 15.0 |
 | ガントチャートの PNG の日本語 | `ipa-gothic-fonts` | 003.03。Redmine の `minimagick_font_path` で指定する |
 | リポジトリ ([下記](#repositories)) | `subversion`<br>`git-core` (イメージにはコマンドだけをコピーする) | 1.14.5<br>2.50.1 (2026-11-10) |
-| gem のビルド | `gcc`<br>`make`<br>`libyaml-devel` | — |
+| gem のビルド | `gcc`<br>`gcc-c++`<br>`make`<br>`libyaml-devel` | — |
 | ファイルの展開 | `tar`<br>`gzip` | — |
 
 Pandoc は Amazon Linux 2023 のリポジトリにないので (`microdnf repoquery` で検索)、Pandoc 公式の Linux arm64 用の実行ファイル (`pandoc-3.13-linux-arm64.tar.gz`、2026-10-26) を、SHA256 を確認してインストールします。Redmine 7.0 で xlsx と pptx をプレビューするには、3.8.3 以上が必要です。ImageMagick 6 には、Redmine がサムネイルの生成に使う `convert` コマンドがあるので (`lib/redmine/thumbnail.rb`)、そのまま使えます。
@@ -71,19 +71,21 @@ Pandoc は Amazon Linux 2023 のリポジトリにないので (`microdnf repoqu
 
 ```dockerfile
 FROM public.ecr.aws/lambda/ruby:4.0@sha256:<digest> AS build
-# gcc、make、libpq-devel、libyaml-devel、tar、gzip を入れる
-# Redmine 7.0.3 の tar.gz を redmine.org から取り、SHA256 を確認して /var/task/redmine に展開する
-# config/database.yml、Gemfile.local を入れ、gem を vendor/bundle に入れる(開発用とテスト用は除く)
-# アセットを書き出す(bin/rails assets:precompile)
+# gcc、gcc-c++、make、libpq-devel、libyaml-devel、tar、gzip をインストールする
+# Redmine 7.0.3 の tar.gz を redmine.org からダウンロードし、SHA256 を確認して /var/task/redmine に展開する
+# 設定ファイル (config/database.yml など) と Gemfile.local を追加する
+# Gemfile.lock の gem を vendor/bundle にインストールする (開発用とテスト用は除く)。
+# 独自のプラグインも、GitHub Packages の gem としてインストールする
+# プラグインの gem を、Redmine がプラグインを読み込む plugins/ にリンクする (link-plugins)
+# アセットを書き出し (bin/rails assets:precompile)、tmp を /tmp/redmine へのシンボリックリンクにする
+# RDS の CA 証明書バンドル (global-bundle.pem) と Pandoc の実行ファイルをダウンロードし、SHA256 を確認する
 
 FROM public.ecr.aws/lambda/ruby:4.0@sha256:<digest>
-# ImageMagick、ghostscript、urw-base35-fonts、libpq、ipa-gothic-fonts を入れる
-# subversion と git-core を入れたステージから、svn、svnadmin、git と、必要なライブラリをコピーする
-# Pandoc の実行ファイルを入れる
-# RDS の CA 証明書バンドル(global-bundle.pem)をダウンロードし、SHA256 を確認して /var/task/rds-global-bundle.pem に置く
-# build ステージから /var/task/redmine を取る(gcc などのビルドツールは入れない)
-# 設定ファイル、独自のプラグイン(plugins/)、起動スクリプト、タスクハンドラーを入れる
-# tmp を /tmp/redmine へのシンボリックリンクにする
+# ImageMagick、ghostscript、urw-base35-fonts、libpq、ipa-gothic-fonts をインストールする
+# subversion と git-core をインストールしたステージから、svn、svnadmin、git と、必要なライブラリをコピーする
+# build ステージから、/var/task/redmine、Pandoc、RDS の CA 証明書バンドル (/var/task/rds-global-bundle.pem に) をコピーする
+# (gcc などのビルドツールは含めない)
+# 起動スクリプトとタスクハンドラーを追加する
 COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0@sha256:<digest> /lambda-adapter /opt/lambda-web-adapter/lambda-adapter
 COPY image/extensions/lambda-adapter /opt/extensions/lambda-adapter
 ENTRYPOINT ["/var/task/bin/start"]

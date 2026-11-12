@@ -27,7 +27,7 @@
 - **実行環境:** Lambda の Ruby ベースイメージ (Ruby 4.0、Amazon Linux 2023) に、Redmine と Lambda Web Adapter をインストールしたコンテナイメージ (arm64) を、Event Functions で実行します。Web、ジョブ、タスクの 3 つの関数は同じイメージで、環境変数で役割を切り替えます。
 - **エントリーポイント:** CloudFront から関数 URL に転送します。関数 URL は IAM 認証にし、CloudFront の OAC が署名したリクエストだけを受け付けます。POST などのリクエスト本文のハッシュは、Lambda@Edge が追加します。アセット (`/assets/*`) は、CloudFront が S3 から返します。
 - **データベース:** VPC 内の RDS for PostgreSQL を使います。Lambda 関数は VPC のプライベートサブネットで動作し、AWS サービスには VPC エンドポイントか NAT インスタンス経由で接続します ([docs/rds.md](docs/ja/rds.md))。
-- **添付ファイル:** S3 に保存します。アップロードはブラウザーから CloudFront 署名付き URL で CloudFront 経由で S3 に送信し、ダウンロードは CloudFront 署名付き URL にリダイレクトします。Redmine の S3 プラグインの方式を参考に、独自プラグイン `redmine_aws_s3` として実装します。
+- **添付ファイル:** S3 に保存します。アップロードでは、ブラウザーが CloudFront 署名付き URL を使い、CloudFront 経由で S3 に送信します。ダウンロードは CloudFront 署名付き URL にリダイレクトします。Redmine の S3 プラグインの方式を参考に、独自プラグイン `redmine_aws_s3` として実装します。
 - **ジョブ:** ActiveJob のジョブは、SQS (`aws-activejob-sqs`) に送り、ジョブ用の関数で実行します。
 - **メール:** 送信では、ジョブ用の関数が Rails の ActionMailer から SES の API (`aws-actionmailer-ses`) で送信します。受信では、SES で受信して S3 に保存し、タスク用の関数が Redmine に取り込みます。
 - **設定とシークレット:** SSM Parameter Store に保存し、Redmine が起動時に読み込みます。

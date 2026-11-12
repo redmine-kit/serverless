@@ -5,6 +5,7 @@
 #   - the stack parameters of deploy/params.jq against the templates
 #   - the cache behaviors of the distribution (behaviors.py)
 #   - the environment of the functions (functions.py)
+#   - the mail bucket permissions of the roles that import email (roles.py)
 #   - deploy.sh against fake aws, crane and curl (test/deploy/fake), which
 #     record every call: the order of the steps, --dry-run, --code-only,
 #     failures, and that no secret reaches a command line or the output
@@ -99,6 +100,11 @@ echo "== Functions"
 functions_problems=$(python3.13 test/deploy/functions.py infra/instance.yaml 2>&1)
 check "the three functions get their image in REDMINE_IMAGE" test -z "$functions_problems"
 [[ -z "$functions_problems" ]] || echo "$functions_problems"
+
+echo "== Roles"
+roles_problems=$(python3.13 test/deploy/roles.py infra/instance.yaml 2>&1)
+check "the task and the worker read email in inbound/ and processed/" test -z "$roles_problems"
+[[ -z "$roles_problems" ]] || echo "$roles_problems"
 
 echo "== Settings code"
 # shellcheck source=deploy/lib.sh

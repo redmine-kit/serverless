@@ -179,7 +179,7 @@ Redmine は送信者のアドレスでユーザーを特定するので、取り
 
 ### 返信を受信するための設定
 
-Redmine の管理画面で、「送信元メールアドレス」をデフォルトアドレスに、「この行以降を切り捨てる」を引用の前の行にします ([receiving.md](https://redmine-kit.github.io/redmine_aws_ses/ja/receiving.html#settings-for-receiving-replies))。
+Redmine の管理画面で、「送信元メールアドレス」をデフォルトアドレスに、「メール本文から一致する行以降を切り捨てる」を引用の前の行にします ([receiving.md](https://redmine-kit.github.io/redmine_aws_ses/ja/receiving.html#settings-for-receiving-replies))。
 
 <a id="to-verify"></a>
 

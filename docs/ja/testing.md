@@ -103,7 +103,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 
 ### ジョブ (`redmine_aws_sqs`)
 
-プラグインは、`aws-activejob-sqs` を通した SQS でのジョブ、許可リスト、失敗の記録、再送信、デッドレターキューの再処理を、自分のリポジトリと CI で、LocalStack (トークンがなければ moto) に対してテストします ([setup.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/setup.html#tests))。
+プラグインは、`aws-activejob-sqs` を通した SQS でのジョブ、許可リスト、失敗の記録、再送信、デッドレターキューの再処理を、自分のリポジトリと CI で、AWS Emulator に対してテストします ([setup.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/setup.html#tests))。
 
 <a id="settings-and-code-outside-the-plugins"></a>
 
@@ -158,7 +158,8 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 | ツール | 用途 | 使わない場面と理由 |
 | --- | --- | --- |
 | SDK の `stub_responses` | ユニットテストと機能テスト。SES のエラーを 1 つずつ発生させるテスト | — |
-| moto | プラグインの統合テストとシステムテスト (S3、SQS、SSM)。SES v2 の `SendEmail` は、moto が再現できるかを確認してから使い、それまでは SDK の `stub_responses` で代替する | — |
+| AWS Emulator | SQS のプラグインの統合テスト | — |
+| moto | プラグインの統合テストとシステムテスト (S3、SSM)。SES v2 の `SendEmail` は、moto が再現できるかを確認してから使い、それまでは SDK の `stub_responses` で代替する | — |
 | LocalStack (CI では Organization の Ultimate ライセンス) | Lambda 結合テスト。LocalStack の ECR にある同じイメージから作る 3 つの関数、関数 URL、SQS のイベントソースマッピング、ジョブのメールのための SES v2 | CloudFront と RDS は使わない。CloudFront はデプロイ後のチェックで確認し、データベースは PostgreSQL コンテナにする |
 
 <a id="administration-pages"></a>

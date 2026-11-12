@@ -83,7 +83,7 @@ The plugin tests sending through SES v2, each SES error, the import from the mai
 
 ### Jobs (`redmine_aws_sqs`)
 
-The plugin tests the jobs on SQS through `aws-activejob-sqs`, the allowlist, the failure records, resending and moving the dead-letter queue back in its own repository and CI, against LocalStack (or moto without its token) ([setup.md](https://redmine-kit.github.io/redmine_aws_sqs/setup.html#tests)).
+The plugin tests the jobs on SQS through `aws-activejob-sqs`, the allowlist, the failure records, resending and moving the dead-letter queue back in its own repository and CI, against AWS Emulator ([setup.md](https://redmine-kit.github.io/redmine_aws_sqs/setup.html#tests)).
 
 ### Settings and code outside the plugins
 
@@ -124,7 +124,8 @@ For each replaced Redmine method, the SHA256 of the original code is recorded, a
 | Tool | Where it is used | Where it is not used, and why |
 | --- | --- | --- |
 | SDK `stub_responses` | Unit and functional tests. Tests that raise SES errors one by one | — |
-| moto | Plugin integration tests and system tests (S3, SQS, SSM). SES v2 `SendEmail` is used only after checking that moto reproduces it; until then, SDK `stub_responses` is used instead | — |
+| AWS Emulator | Plugin integration tests of SQS | — |
+| moto | Plugin integration tests and system tests (S3, SSM). SES v2 `SendEmail` is used only after checking that moto reproduces it; until then, SDK `stub_responses` is used instead | — |
 | LocalStack (the organization's Ultimate license in CI) | Lambda integration tests. Three functions from the same image in LocalStack's ECR, function URLs, SQS event source mappings, SES v2 for the jobs' mail | CloudFront and RDS are not used: CloudFront is checked after deployment, and the database is a PostgreSQL container |
 
 ## Administration pages

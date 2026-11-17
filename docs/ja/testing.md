@@ -296,7 +296,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 | `edge` | CloudFront で動く関数 (`edge/`) | `bin/test-edge` で、Node.js の標準機能で計測する (`--experimental-test-coverage`、LCOV)。npm パッケージは使わない |
 | `image` | イメージに含める独自の Ruby ファイル (`image/*.rb`。現在はタスクハンドラー) | `bin/test-image` のハンドラーの単体テストで、Ruby の `Coverage` で計測する (`test/image/coverage.rb`、LCOV)。イメージに gem は追加しない |
 
-カバレッジは、`codecov/codecov-action` で OIDC トークンを使って送信するので、シークレットは不要です。リポジトリに Codecov の GitHub App をインストールするまでは、送信に失敗しても CI を失敗にしません。`bin/deploy` などのシェルスクリプト (`bin/test-deploy` がフェイクの AWS CLI でテストします。[デプロイテスト](#deployment-tests)) と、イメージ内の Redmine とプラグインは、計測しません。
+カバレッジは、`codecov/codecov-action` で OIDC トークンを使って送信するので、シークレットは不要です。Codecov のステータスは参考情報で、コミットや Pull Request を失敗にしません。ステータスと各フラグのパスは `codecov.yml` で設定します。リポジトリに Codecov の GitHub App をインストールするまでは、送信に失敗しても CI を失敗にしません。`bin/deploy` などのシェルスクリプト (`bin/test-deploy` がフェイクの AWS CLI でテストします。[デプロイテスト](#deployment-tests)) と、イメージ内の Redmine とプラグインは、計測しません。
 
 <a id="order-in-ci"></a>
 

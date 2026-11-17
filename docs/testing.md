@@ -242,7 +242,7 @@ CI sends the coverage of what this repository tests to Codecov, with a flag for 
 | `edge` | The functions that run at CloudFront (`edge/`) | Node.js's own coverage in `bin/test-edge` (`--experimental-test-coverage`, LCOV). No npm packages |
 | `image` | The image's own Ruby files (`image/*.rb`; now the task handler) | Ruby's `Coverage` in the task handler's unit tests in `bin/test-image` (`test/image/coverage.rb`, LCOV). No gem is added to the image |
 
-The coverage is uploaded with `codecov/codecov-action` and an OIDC token, so no secret is needed. Until the Codecov GitHub App is installed for the repository, a failed upload does not fail the run. Not measured are `bin/deploy` and the other shell scripts, which `bin/test-deploy` tests against a fake AWS CLI ([Deployment tests](#deployment-tests)), and Redmine and the plugins in the image.
+The coverage is uploaded with `codecov/codecov-action` and an OIDC token, so no secret is needed. Its statuses are informational and never fail a commit or a pull request; `codecov.yml` sets them and the paths of each flag. Until the Codecov GitHub App is installed for the repository, a failed upload does not fail the run. Not measured are `bin/deploy` and the other shell scripts, which `bin/test-deploy` tests against a fake AWS CLI ([Deployment tests](#deployment-tests)), and Redmine and the plugins in the image.
 
 ## Order in CI
 

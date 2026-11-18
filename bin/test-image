@@ -210,7 +210,13 @@ echo "== task"
 psql -q -U postgres -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public' >/dev/null 2>&1
 # A new queue each run (SQS allows one PurgeQueue per 60 seconds).
 sqs DeleteQueue "$(jq -nc --arg url "$queue_url" '{QueueUrl: $url}')" >/dev/null 2>&1 || true
-sqs CreateQueue '{"QueueName":"redmine-jobs"}' >/dev/null
+# SQS refuses the name for 60 seconds after the deletion (QueueDeletedRecently),
+# so a run soon after another waits for it.
+for _ in $(seq 1 15); do
+  sqs CreateQueue '{"QueueName":"redmine-jobs"}' >/dev/null 2>&1 && break
+  sleep 5
+done
+sqs GetQueueUrl '{"QueueName":"redmine-jobs"}' >/dev/null
 queue_attribute() { # <name>: prints the queue's attribute
   sqs GetQueueAttributes "$(jq -nc --arg url "$queue_url" --arg name "$1" '{QueueUrl: $url, AttributeNames: [$name]}')" |
     jq -r --arg name "$1" '.Attributes[$name]'

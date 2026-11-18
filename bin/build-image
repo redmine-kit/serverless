@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Builds the arm64 image as a single-architecture image (Lambda does not
-# accept an index, so provenance is off).
+# accept an index, so provenance is off), in Apple container when it runs,
+# else in Docker (CONTAINER_CLI=container|docker chooses).
 #   bin/build-image [tag]   # default tag: serverless:test
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. bin/lib/container.sh
 . bin/lib/plugin.sh
-docker buildx build --platform linux/arm64 --provenance=false --sbom=false ${build_secrets[@]+"${build_secrets[@]}"} --build-arg REDMINE_BRANCH="${REDMINE_BRANCH:-}" \
+image_build --load --provenance=false --sbom=false -- --platform linux/arm64 \
+  ${build_secrets[@]+"${build_secrets[@]}"} --build-arg REDMINE_BRANCH="${REDMINE_BRANCH:-}" \
   ${GITHUB_SHA:+--label "org.opencontainers.image.revision=$GITHUB_SHA"} \
-  --load -t "${1:-serverless:test}" -f image/Dockerfile .
+  -t "${1:-serverless:test}" -f image/Dockerfile .

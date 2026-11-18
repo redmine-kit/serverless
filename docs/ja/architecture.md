@@ -12,7 +12,7 @@
 
 ![1 つのインスタンスの AWS リソース](../diagrams/architecture.ja.drawio.svg)
 
-図は `docs/diagrams/gen.py` が draw.io の形式で配置します。`bin/diagrams` がこれを実行し、Docker の中の draw.io で `docs/diagrams/architecture.drawio.svg` と `architecture.ja.drawio.svg` に書き出します。SVG には図が埋め込まれているので、draw.io で開いて編集できます。展開した AWS アーキテクチャアイコンのパッケージ ([AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)) を `AWS_ICONS` で指定して実行します。
+図は `docs/diagrams/gen.py` が draw.io の形式で配置します。`bin/diagrams` がこれを実行し、コンテナ (Apple container か Docker) の中の draw.io で `docs/diagrams/architecture.drawio.svg` と `architecture.ja.drawio.svg` に書き出します。SVG には図が埋め込まれているので、draw.io で開いて編集できます。展開した AWS アーキテクチャアイコンのパッケージ ([AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)) を `AWS_ICONS` で指定して実行します。
 
 ```sh
 AWS_ICONS=~/Downloads/Icon-package_07312026 bin/diagrams

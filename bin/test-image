@@ -4,7 +4,8 @@
 # a user that is not root. The database is the PostgreSQL of
 # bin/test-services, and AWS (SSM and SQS) is its AWS Emulator; nothing is
 # mocked. worker and task run on the Runtime Interface Emulator in the base
-# image.
+# image. In Apple container when it runs, else in Docker
+# (CONTAINER_CLI=container|docker chooses).
 #   bin/test-image [image]          # default: serverless:test (bin/build-image)
 #   bin/test-image <image> <redmine.json>
 #                                   # a derived image (bin/build-derived-image), also
@@ -16,29 +17,32 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 image="${1:-serverless:test}"
 derived_config="${2:-}"
-# The internal network of test/compose.yml: the containers reach PostgreSQL
-# and AWS Emulator, but not AWS.
-network=serverless-test_internal
 prefix=serverless-image-test
 # The emulator's certificate names only 127.0.0.1 and localhost, so every
-# container reaches it on 127.0.0.1: the short-lived ones run in its network
-# namespace, and each role in the namespace of a forwarder of its own
+# container reaches it on 127.0.0.1. In Docker, the short-lived ones run in its
+# network namespace, and each role in the namespace of a forwarder of its own
 # (forwarder below), as the roles run side by side and each listens on 8080.
+# Apple container can't share a network namespace: each container starts the
+# forwarder of test/image/aws_forward.rb itself, before its command.
 endpoint=https://127.0.0.1:9297
 account=000000000000
 queue_url="$endpoint/$account/redmine-jobs"
 ssm_path=/image-test/env/
 secret_key_base='image-test-only-secret-key-base'
 
+. bin/lib/container.sh
 . bin/lib/aws-emulator.sh
+# The internal network of the services: the containers reach PostgreSQL and
+# AWS Emulator, but not AWS.
+network=$internal_network
 bin/test-services >/dev/null 2>&1 || bin/test-services
 emulator=$(emulator)
-echo "AWS for the image tests: $(docker exec "$emulator" aws-emulator --version | sed -n 's/^Version: /AWS Emulator /p')"
+echo "AWS for the image tests: $("$cli" exec "$emulator" aws-emulator --version | sed -n 's/^Version: /AWS Emulator /p')"
 # The certificate, readable by the low-privilege user of the image: in the
 # emulator's volume only its own user can read it.
 ca_dir=$(mktemp -d)
 chmod 755 "$ca_dir"
-docker cp -q "$emulator:$emulator_ca" "$ca_dir/ca.pem"
+"$cli" exec "$emulator" cat "$emulator_ca" >"$ca_dir/ca.pem"
 chmod 644 "$ca_dir/ca.pem"
 
 failures=0
@@ -51,7 +55,7 @@ roles=(web worker task)
 cleanup() {
   local role
   for role in "${roles[@]}"; do
-    docker rm -f "$prefix-$role" "$prefix-$role-forwarder" >/dev/null 2>&1 || true
+    "$cli" rm -f "$prefix-$role" "$prefix-$role-forwarder" >/dev/null 2>&1 || true
   done
 }
 trap '[[ -n "${KEEP:-}" ]] || { cleanup; rm -rf "$ca_dir"; }' EXIT
@@ -60,10 +64,34 @@ cleanup
 # Same conditions as Lambda. The secrets come from SSM as on Lambda; the other
 # settings go in as environment variables.
 aws_env=(-e AWS_REGION=us-east-1 -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test
-  -e AWS_ENDPOINT_URL="$endpoint" -v "$ca_dir/ca.pem:/etc/aws-emulator-ca.pem:ro"
-  -e AWS_CA_BUNDLE=/etc/aws-emulator-ca.pem)
-# The short-lived containers: in the emulator's network namespace.
-at_emulator=(--network "container:$emulator")
+  -e AWS_ENDPOINT_URL="$endpoint" -v "$ca_dir:/etc/aws-emulator:ro"
+  -e AWS_CA_BUNDLE=/etc/aws-emulator/ca.pem)
+# Read-only, with only /tmp writable, as on Lambda (Apple container's tmpfs
+# takes no options).
+if [[ "$cli" == docker ]]; then tmp_fs=(--tmpfs /tmp:exec); else tmp_fs=(--tmpfs /tmp); fi
+# A short-lived container that reaches the emulator: in Docker, in its network
+# namespace; in Apple container, on the internal network with the forwarder
+# started first.
+#   at_emulator <run options>... -- <entrypoint> <arguments>...
+forward='ruby /test/aws_forward.rb "$AWS_EMULATOR_ADDRESS" 9297 &
+  until ruby -rsocket -e "TCPSocket.new(%(127.0.0.1), 9297).close" 2>/dev/null; do sleep 0.2; done; '
+if [[ "$cli" == container ]]; then
+  forward_env=(-v "$PWD/test/image:/test:ro" -e AWS_EMULATOR_ADDRESS="$(emulator_host)")
+fi
+at_emulator() {
+  local opts=()
+  while [[ "$1" != -- ]]; do opts+=("$1"); shift; done
+  shift
+  local entrypoint=$1
+  shift
+  if [[ "$cli" == docker ]]; then
+    docker run --rm ${opts[@]+"${opts[@]}"} --network "container:$emulator" "${aws_env[@]}" \
+      --entrypoint "$entrypoint" "$image" "$@"
+  else
+    container run --rm ${opts[@]+"${opts[@]}"} --network "$network" "${forward_env[@]}" "${aws_env[@]}" \
+      --entrypoint sh "$image" -c "$forward"'exec "$@"' sh "$entrypoint" "$@"
+  fi
+}
 # A role's network namespace on the internal network, where 127.0.0.1:9297 is
 # forwarded to the emulator (TLS stays end to end), with Ruby from the image.
 forwarder() { # <role>
@@ -88,20 +116,26 @@ forwarder() { # <role>
 }
 run() {
   local role="$1"; shift
-  forwarder "$role"
-  docker run -d --name "$prefix-$role" --network "container:$prefix-$role-forwarder" \
-    --read-only --tmpfs /tmp:exec --user 993:993 \
+  local where=()
+  if [[ "$cli" == docker ]]; then
+    forwarder "$role"
+    where=(--network "container:$prefix-$role-forwarder")
+  else
+    where=(--network "$network" "${forward_env[@]}" --entrypoint sh)
+  fi
+  "$cli" run -d --name "$prefix-$role" "${where[@]}" \
+    --read-only "${tmp_fs[@]}" --user 993:993 \
     -e REDMINE_ROLE="$role" \
     -e REDMINE_DB_NAME=postgres -e REDMINE_DB_USERNAME=postgres -e REDMINE_DB_SSLMODE=disable \
     -e REDMINE_SSM_PATH="$ssm_path" "${aws_env[@]}" \
     -e REDMINE_SQS_QUEUE_URL="$queue_url" \
-    "$@" "$image" >/dev/null
+    "$@" "$image" ${forward_env:+-c "${forward}exec /var/task/bin/start"} >/dev/null
 }
 
 # Waits until the emulator inside the container answers (any HTTP status).
 wait_rie() {
   for _ in $(seq 1 30); do
-    docker exec "$prefix-$1" curl -s -o /dev/null http://127.0.0.1:8080/ 2>/dev/null && return 0
+    "$cli" exec "$prefix-$1" curl -s -o /dev/null http://127.0.0.1:8080/ 2>/dev/null && return 0
     sleep 1
   done
   echo "the emulator in $prefix-$1 does not answer" >&2
@@ -110,7 +144,7 @@ wait_rie() {
 
 # Invokes a function on the emulator inside its container.
 invoke() {
-  docker exec "$prefix-$1" curl -sS -X POST -d "$2" \
+  "$cli" exec "$prefix-$1" curl -sS -X POST -d "$2" \
     http://127.0.0.1:8080/2015-03-31/functions/function/invocations
 }
 
@@ -127,22 +161,29 @@ echo "== task handler unit tests"
 mkdir -p coverage/image
 chmod a+rwx coverage/image
 handler_tests() {
-  docker run --rm --read-only --tmpfs /tmp --user 993:993 -v "$PWD/test/image:/test:ro" \
+  "$cli" run --rm --read-only "${tmp_fs[@]}" --user 993:993 -v "$PWD/test/image:/test:ro" \
     -v "$PWD/coverage/image:/coverage" -e COVERAGE_FILE=/coverage/image.lcov \
     --entrypoint ruby "$image" -r/test/coverage.rb -r/var/task/handler.rb /test/task_handler_test.rb
 }
 check "task handler" handler_tests
 ssm_tests() {
-  docker run --rm --read-only --tmpfs /tmp --user 993:993 "${at_emulator[@]}" "${aws_env[@]}" \
-    -w /var/task/redmine --entrypoint ruby "$image" \
+  at_emulator --read-only "${tmp_fs[@]}" --user 993:993 -w /var/task/redmine -- ruby \
     -rbundler/setup -rredmine_kit_aws_ssm/loader plugins/redmine_kit_aws_ssm/test/loader_test.rb
 }
 check "SSM loading (redmine_kit_aws_ssm)" ssm_tests
 
 echo "== contents"
-check "arm64 Linux image" test "$(docker image inspect "$image" -f '{{.Os}}/{{.Architecture}}')" = linux/arm64
+platform() {
+  if [[ "$cli" == docker ]]; then
+    docker image inspect "$image" -f '{{.Os}}/{{.Architecture}}'
+  else
+    container image inspect "$image" | awk -F'"' '/"os" :/ { os = $4 } /"architecture" :/ { arch = $4 }
+      os != "" && arch != "" { print os "/" arch; exit }'
+  fi
+}
+check "arm64 Linux image" test "$(platform)" = linux/arm64
 contents() {
-  docker run --rm --read-only --tmpfs /tmp --user 993:993 --entrypoint sh "$image" -c "$1"
+  "$cli" run --rm --read-only "${tmp_fs[@]}" --user 993:993 --entrypoint sh "$image" -c "$1"
 }
 check "ImageMagick convert" contents 'convert -version | grep -q "ImageMagick 6"'
 check "Ghostscript" contents 'gs --version >/dev/null'
@@ -160,14 +201,13 @@ check "the S3 plugin's upload script is in the assets" contents \
 check "tmp links to /tmp/redmine" contents 'test "$(readlink /var/task/redmine/tmp)" = /tmp/redmine'
 unknown_role() {
   local code=0
-  docker run --rm --read-only --tmpfs /tmp --user 993:993 -e REDMINE_ROLE=other "$image" >/dev/null 2>&1 || code=$?
+  "$cli" run --rm --read-only "${tmp_fs[@]}" --user 993:993 -e REDMINE_ROLE=other "$image" >/dev/null 2>&1 || code=$?
   [[ "$code" == 64 ]]
 }
 check "unknown REDMINE_ROLE exits with 64" unknown_role
 
 echo "== task"
-"${compose[@]}" exec -T postgres psql -q -U postgres \
-  -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public' >/dev/null 2>&1
+psql -q -U postgres -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public' >/dev/null 2>&1
 # A new queue each run (SQS allows one PurgeQueue per 60 seconds).
 sqs DeleteQueue "$(jq -nc --arg url "$queue_url" '{QueueUrl: $url}')" >/dev/null 2>&1 || true
 sqs CreateQueue '{"QueueName":"redmine-jobs"}' >/dev/null
@@ -179,13 +219,13 @@ queue_attribute() { # <name>: prints the queue's attribute
 # (PostgreSQL here does not check the password). The host is only there, so
 # the roles reach the database only if SSM is read before Rails reads
 # config/database.yml.
-docker run --rm "${at_emulator[@]}" "${aws_env[@]}" -w /var/task/redmine --entrypoint ruby "$image" \
-  -rbundler/setup -raws-sdk-ssm -e '
+at_emulator -w /var/task/redmine -- ruby -rbundler/setup -raws-sdk-ssm -e '
     ssm = Aws::SSM::Client.new
     { "SECRET_KEY_BASE" => ARGV[1], "REDMINE_DB_PASSWORD" => "unused" }.each do |name, value|
       ssm.put_parameter(name: "#{ARGV[0]}#{name}", value: value, type: "SecureString", overwrite: true)
     end
-    ssm.put_parameter(name: "#{ARGV[0]}REDMINE_DB_HOST", value: "postgres", type: "String", overwrite: true)' "$ssm_path" "$secret_key_base"
+    ssm.put_parameter(name: "#{ARGV[0]}REDMINE_DB_HOST", value: ARGV[2], type: "String", overwrite: true)' \
+  "$ssm_path" "$secret_key_base" "$(postgres_host)"
 run task
 wait_rie task
 check "AWS cannot be reached from the roles' network" aws_unreachable "$prefix-task"
@@ -276,7 +316,7 @@ domain=redmine.example.test
 function_url_host=abcdefghijklmnopqrstuvwxyz012345.lambda-url.us-east-1.on.aws
 run web -e REDMINE_HOST="$domain"
 web_curl() {
-  docker exec "$prefix-web" curl -sS -H "Host: $function_url_host" -H "X-Forwarded-Host: $domain" \
+  "$cli" exec "$prefix-web" curl -sS -H "Host: $function_url_host" -H "X-Forwarded-Host: $domain" \
     -H 'X-Forwarded-Proto: https' "$@"
 }
 web_up() {
@@ -284,7 +324,7 @@ web_up() {
     web_curl -f -o /dev/null http://127.0.0.1:3000/login 2>/dev/null && return 0
     sleep 1
   done
-  docker logs "$prefix-web" 2>&1 | tail -20 >&2
+  "$cli" logs "$prefix-web" 2>&1 | tail -20 >&2
   return 1
 }
 check "Puma starts and /login returns 200" web_up
@@ -304,7 +344,7 @@ secure_cookie() {
 }
 check "the session cookie is Secure" secure_cookie
 status_of() { # <curl arguments...>: prints the HTTP status
-  docker exec "$prefix-web" curl -sS -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' "$@"
+  "$cli" exec "$prefix-web" curl -sS -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' "$@"
 }
 check "without X-Forwarded-Host, the function URL's host is blocked" \
   test "$(status_of -H "Host: $function_url_host" http://127.0.0.1:3000/login)" = 403
@@ -372,7 +412,7 @@ event=$(jq -nc --arg body "$job" --arg handle "$handle" --arg account "$account"
 # a few seconds.
 job_logged() {
   for _ in $(seq 1 10); do
-    docker logs "$prefix-worker" 2>&1 | grep -q 'Running job: .*\[DestroyProjectJob\]' && return 0
+    "$cli" logs "$prefix-worker" 2>&1 | grep -q 'Running job: .*\[DestroyProjectJob\]' && return 0
     sleep 1
   done
   return 1
@@ -384,7 +424,7 @@ worker_runs() {
   # object with errorType.
   if ! jq -e 'type == "string"' <<<"$response" >/dev/null 2>&1 || ! job_logged; then
     echo "$response" >&2
-    docker logs "$prefix-worker" 2>&1 | tail -20 >&2
+    "$cli" logs "$prefix-worker" 2>&1 | tail -20 >&2
     return 1
   fi
 }

@@ -1,32 +1,28 @@
 #!/usr/bin/env bash
 # Starts the services that the tests use (PostgreSQL 16 and AWS Emulator,
-# test/compose.yml) and checks that each answers, and that AWS cannot be
-# reached from the emulator's network. Later stages run their tests against
-# them.
+# bin/lib/aws-emulator.sh) in Apple container when it runs, else in Docker
+# (CONTAINER_CLI=container|docker chooses), and checks that each answers, and
+# that AWS cannot be reached from the emulator's network. Later stages run
+# their tests against them.
 #   bin/test-services          # start, check and keep them running
 #   bin/test-services --down   # stop them
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. bin/lib/container.sh
 . bin/lib/aws-emulator.sh
 
 if [[ "${1:-}" == "--down" ]]; then
-  "${compose[@]}" down -v
+  services_down
   exit 0
 fi
 
-if ! "${compose[@]}" up -d --build --wait; then
-  "${compose[@]}" ps -a
-  "${compose[@]}" logs --tail 80
-  exit 1
-fi
-
-psql() { "${compose[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -q -t -A "$@"; }
+services_up
 
 echo "== PostgreSQL"
-psql -U postgres -c 'SELECT version()'
+psql -U postgres -v ON_ERROR_STOP=1 -q -t -A -c 'SELECT version()'
 
 echo "== AWS Emulator"
-docker exec "$(emulator)" aws-emulator --version | sed -n 's/^Version: /AWS Emulator /p'
+"$cli" exec "$(emulator)" aws-emulator --version | sed -n 's/^Version: /AWS Emulator /p'
 sqs ListQueues '{}' >/dev/null
 echo "SQS answers"
 aws_unreachable "$(emulator)"

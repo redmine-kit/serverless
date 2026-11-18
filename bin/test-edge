@@ -4,12 +4,13 @@
 # (CloudFront Functions), with
 # node:test in the Node.js image. No npm packages. The coverage of the files
 # the tests load as modules is written to coverage/edge.lcov, with Node.js's
-# own coverage.
+# own coverage. In Apple container when it runs, else in Docker.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. bin/lib/container.sh
 NODE=node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f
 mkdir -p coverage
-docker run --rm -v "$PWD:/work:ro" -v "$PWD/coverage:/coverage" -w /work --user "$(id -u):$(id -g)" "$NODE" sh -c '
+"$cli" run --rm -v "$PWD:/work:ro" -v "$PWD/coverage:/coverage" -w /work --user "$(id -u):$(id -g)" "$NODE" sh -c '
   node --check edge/body-hash/index.js &&
   node --check edge/incoming-size/index.js &&
   node --check edge/attachment-headers/index.js &&

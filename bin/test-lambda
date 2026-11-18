@@ -23,6 +23,14 @@ if [[ -z "${LOCALSTACK_AUTH_TOKEN:-}" ]]; then
   echo "skipped: LOCALSTACK_AUTH_TOKEN is not set"
   exit 0
 fi
+# Docker only: LocalStack runs Lambda functions as containers through the
+# Docker socket, which Apple container does not have. CONTAINER_CLI=docker
+# runs it with Docker where both are installed.
+. bin/lib/container.sh
+if [[ "$cli" != docker ]]; then
+  echo "skipped: the Lambda tests need Docker (LocalStack runs the functions through the Docker socket)"
+  exit 0
+fi
 image="${1:-serverless:test}"
 tools=serverless-deploy-tools:local
 instance=lambda-test

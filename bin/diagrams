@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Draws the AWS architecture diagram (docs/architecture.md#aws-resources):
 # docs/diagrams/gen.py lays it out for draw.io with the AWS Architecture Icons,
-# and draw.io, in Docker, exports it as an SVG that holds the diagram, so that
+# and draw.io, in a container (Apple container when it runs, else Docker), exports it as an SVG that holds the diagram, so that
 # draw.io can open it again.
 #   AWS_ICONS=<unpacked icon package> bin/diagrams
 # writes docs/diagrams/architecture.drawio.svg and architecture.ja.drawio.svg.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. bin/lib/container.sh
 
 : "${AWS_ICONS:?the unpacked AWS Architecture Icons package (https://aws.amazon.com/architecture/icons/)}"
 export AWS_ICONS
@@ -21,7 +22,7 @@ python3 "$dir/gen.py" en "$work/in/architecture.drawio"
 python3 "$dir/gen.py" ja "$work/in/architecture.ja.drawio"
 # One run of draw.io exports the folder; labels are plain text, so the SVGs
 # hold no foreignObject.
-docker run --rm -e DRAWIO_DESKTOP_COMMAND_TIMEOUT=600s -v "$work:/data" -w /data "$drawio" \
+"$cli" run --rm -e DRAWIO_DESKTOP_COMMAND_TIMEOUT=600s -v "$work:/data" -w /data "$drawio" \
   --export --format svg --embed-diagram --svg-theme light --border 0 --output out in >/dev/null
 for name in architecture architecture.ja; do
   cp "$work/out/$name.svg" "$dir/$name.drawio.svg"

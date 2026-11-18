@@ -21,7 +21,7 @@ Serverless のテスト計画です。独自のプラグイン、Redmine 本体�
 
 ### テストの実行
 
-ローカルのテストは、このリポジトリの `bin/test` で実行します。Makefile は置きません。`bin/test` は、Docker でテスト用のイメージと PostgreSQL、AWS Emulator、LocalStack のコンテナを起動して実行するので、ローカルに Ruby や PostgreSQL がなくても実行できます。このリポジトリの `bin/rake` と `bin/rails` は、デプロイした Redmine を対象に動くので、テストには使いません ([tasks.md](tasks.md#usage-planned))。
+ローカルのテストは、このリポジトリの `bin/test` で実行します。Makefile は置きません。`bin/test` は、テスト用のイメージと PostgreSQL、AWS Emulator、LocalStack のコンテナを、Apple container がインストールされて動いていれば Apple container で、そうでなければ Docker で起動して実行するので (`CONTAINER_CLI=container` または `docker` で選べます)、ローカルに Ruby や PostgreSQL がなくても実行できます。Lambda の統合テストには Docker が必要です。LocalStack が Docker のソケットを通じて関数を実行するためで、Apple container では `bin/test-lambda` はテストを省略します。このリポジトリの `bin/rake` と `bin/rails` は、デプロイした Redmine を対象に動くので、テストには使いません ([tasks.md](tasks.md#usage-planned))。
 
 ```sh
 bin/test            # 静的解析から Lambda の結合テストまで、CI と同じ順にすべて
@@ -196,9 +196,9 @@ REDMINE_KIT_AWS_SSM_DIR=../redmine_kit_aws_ssm bin/test-image
 
 ## イメージテスト
 
-イメージをビルドするたびに、本番と同じ条件の Docker で起動します。
+イメージをビルドするたびに、本番と同じ条件のコンテナ (Apple container か Docker) で起動します。
 
-- **条件:** arm64、読み取り専用のファイルシステム (`--read-only`)、書き込めるのは `/tmp` だけ (`--tmpfs /tmp`)、非特権ユーザー (`--user` で、root 以外の任意の番号)。データベースは、RDS と同じメジャーバージョンの PostgreSQL コンテナです。AWS (SSM と SQS) は `bin/test-services` の AWS Emulator で、ローカルでも、CI でも、フォークからのプルリクエストでも同じです。モックは使いません。テストが使う API は、エミュレーターにすべてあります。コンテナは、PostgreSQL とエミュレーターにしか接続できない Docker の内部ネットワークで動かし、役割のコンテナから AWS に接続できるときは、チェックが失敗します。エミュレーターの証明書には `127.0.0.1` と `localhost` しか含まれないので、コンテナは `https://127.0.0.1:9297` でエミュレーターに接続します。短時間だけ動くコンテナはエミュレーターのネットワーク名前空間で動かし、役割のコンテナは、それぞれ転送用のコンテナのネットワーク名前空間を共有して接続します (役割のコンテナは同時に動き、TLS は端から端まで保たれます)。証明書は、非特権ユーザーが読めるようにエミュレーターからコピーし、`AWS_CA_BUNDLE` で渡します。SQS は、エミュレーターが対応する唯一のプロトコルである JSON プロトコルで呼び出します。
+- **条件:** arm64、読み取り専用のファイルシステム (`--read-only`)、書き込めるのは `/tmp` だけ (`--tmpfs /tmp`)、非特権ユーザー (`--user` で、root 以外の任意の番号)。データベースは、RDS と同じメジャーバージョンの PostgreSQL コンテナです。AWS (SSM と SQS) は `bin/test-services` の AWS Emulator で、ローカルでも、CI でも、フォークからのプルリクエストでも同じです。モックは使いません。テストが使う API は、エミュレーターにすべてあります。コンテナは、PostgreSQL とエミュレーターにしか接続できない内部ネットワークで動かし、役割のコンテナから AWS に接続できるときは、チェックが失敗します。エミュレーターの証明書には `127.0.0.1` と `localhost` しか含まれないので、コンテナは `https://127.0.0.1:9297` でエミュレーターに接続します。Docker では、短時間だけ動くコンテナはエミュレーターのネットワーク名前空間で動かし、役割のコンテナは、それぞれ転送用のコンテナのネットワーク名前空間を共有して接続します (役割のコンテナは同時に動き、TLS は端から端まで保たれます)。Apple container はネットワーク名前空間を共有できないので、各コンテナが最初に自分の転送プロセスを起動します (`test/image/aws_forward.rb`)。証明書は、非特権ユーザーが読めるようにエミュレーターからコピーし、`AWS_CA_BUNDLE` で渡します。SQS は、エミュレーターが対応する唯一のプロトコルである JSON プロトコルで呼び出します。
 - **`web`:** リクエストは、CloudFront が関数 URL を通して送る形で送ります。`Host` に関数 URL のホスト名、`X-Forwarded-Host` にドメイン、`X-Forwarded-Proto` に `https` を入れ、`REDMINE_HOST` にドメインを設定します ([lambda.md](lambda.md#host-and-scheme))。Puma が起動し、ログイン画面が 200 を返し、セッション Cookie に `Secure` が付くこと ([session.md](session.md#the-secure-attribute-of-the-session-cookie))、`X-Forwarded-Host` がないとき、ほかのホストや関数 URL のホスト名が入っているときに Rails が 403 を返すこと、リダイレクト先が `https://` とドメインになること、ログインフォームの POST でログインでき、CSRF トークンが違う POST は 422 になること、アセットの `.manifest.json` があること、起動後に `/tmp` 以外に書き込んでいないことを確認します。Redmine 7.1 (master) では、設定したファビコンを `Cache-Control: max-age=31556952, public, immutable` で返すことも確認します。CloudFront のキャッシュビヘイビア `/favicons/*` がキャッシュするレスポンスです ([lambda.md](lambda.md#the-favicon))。Puma は `127.0.0.1` だけで待ち受けるので、画面はコンテナ内から開きます。ランタイムインターフェイスエミュレーターはリクエストを Lambda Web Adapter に通さないので、その経路は Lambda 結合テストで確認します。
 - **`task`:** ベースイメージにあるランタイムインターフェイスエミュレーター (`aws-lambda-rie`) でハンドラーを呼び出し、`rake db:migrate`、`redmine:load_default_data`、`rake -T`、`rails runner` が動くこと、Redmine が Subversion と Git のクライアントを見つけ、`/tmp` に作成した Subversion と Git のリポジトリを読めること ([lambda.md](lambda.md#repositories))、失敗したタスクが終了コードを返すこと、許可していないコマンドと `env` の名前を拒否することを確認します。メールの取り込みは、プラグインと一緒に追加します。
 - **`worker`:** 同じくランタイムインターフェイスエミュレーターで実行します。ジョブをキューに送信して受信し、そのメッセージの受信ハンドルを付けた SQS 形式のイベントで worker に渡します。呼び出しが成功すること、ジョブが実行されること (プロジェクトが削除され、その通知メールが SQS に追加される)、worker がメッセージを削除すること (処理中のメッセージが残らない。`redmine_kit_aws_sqs` は `REDMINE_SQS_QUEUE_URL` で削除する。[setup.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/setup.html))、許可していないジョブクラスが実行されないことを確認します。

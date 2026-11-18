@@ -8,7 +8,7 @@
 #   <context>/themes/<name>/   themes from Git or a directory
 #   <context>/Gemfile.plugins  the plugin gems, appended to Gemfile.local
 #   <context>/gems             their names, one per line
-# The build context "derived" is image/derived, for lock.rb.
+#   <context>/lock.rb          image/derived/lock.rb
 ARG BASE_IMAGE
 
 FROM ${BASE_IMAGE} AS build
@@ -26,11 +26,10 @@ COPY . /tmp/derived/
 # is a build secret, never in a layer. The plugin gems are linked
 # into plugins/ as the base image links its own. tmp links to /tmp/redmine,
 # which building the assets uses.
-RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM \
-  --mount=type=bind,from=derived,source=lock.rb,target=/tmp/lock.rb <<'EOF'
+RUN --mount=type=secret,id=bundle_github,env=BUNDLE_RUBYGEMS__PKG__GITHUB__COM <<'EOF'
 set -eu
 cd /var/task/redmine
-ruby /tmp/lock.rb base /tmp/base-gems
+ruby /tmp/derived/lock.rb base /tmp/base-gems
 cd /tmp/derived
 for kind in plugins themes; do
   for dir in "$kind"/*/; do
@@ -55,20 +54,20 @@ if [ -s /tmp/derived/Gemfile.plugins ] || $gemfiles; then
     exit 1
   }
   cat /tmp/derived/Gemfile.plugins >>Gemfile.local
-  BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false ruby /tmp/lock.rb pins /tmp/base-gems >/tmp/pins
+  BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false ruby /tmp/derived/lock.rb pins /tmp/base-gems >/tmp/pins
   cat /tmp/pins >>Gemfile.local
   if [ -n "${BUNDLE_RUBYGEMS__PKG__GITHUB__COM:-}" ]; then
     BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false bundle lock || fail "bundle lock failed"
-    ruby /tmp/lock.rb check /tmp/base-gems
+    ruby /tmp/derived/lock.rb check /tmp/base-gems
     bundle install --jobs 4
   else
     mkdir -p /tmp/added
-    ruby /tmp/lock.rb gemfile /tmp/base-gems /tmp/added/Gemfile
+    ruby /tmp/derived/lock.rb gemfile /tmp/base-gems /tmp/added/Gemfile
     (cd /tmp/added && BUNDLE_APP_CONFIG=/tmp/added/.bundle BUNDLE_PATH=/var/task/redmine/vendor/bundle \
       BUNDLE_WITHOUT=development:test bundle install --jobs 4) || fail "installing the added gems failed"
     BUNDLE_DEPLOYMENT=false BUNDLE_FROZEN=false bundle lock --local || fail "bundle lock failed"
-    ruby /tmp/lock.rb checksums /tmp/added/Gemfile.lock
-    ruby /tmp/lock.rb check /tmp/base-gems
+    ruby /tmp/derived/lock.rb checksums /tmp/added/Gemfile.lock
+    ruby /tmp/derived/lock.rb check /tmp/base-gems
     bundle install --local
   fi
   rm -rf vendor/bundle/ruby/*/cache /tmp/added /tmp/pins

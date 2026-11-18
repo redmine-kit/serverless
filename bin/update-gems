@@ -6,8 +6,10 @@
 #   bin/update-gems --local    # the plugins at the commits of local checkouts
 #                              # (PLUGIN_CHECKOUTS, default ..), before they are
 #                              # pushed: the lock names those commits
+# In Apple container when it runs, else in Docker (CONTAINER_CLI chooses).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. bin/lib/container.sh
 . bin/lib/plugin.sh
 # Not checkouts that replace gems: the lock is of the repositories.
 find image/plugin-overrides -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
@@ -24,5 +26,5 @@ case "${1:-}" in
     done
     ;;
 esac
-docker buildx build --platform linux/arm64 ${build_secrets[@]+"${build_secrets[@]}"} ${args[@]+"${args[@]}"} \
+image_build -- --platform linux/arm64 ${build_secrets[@]+"${build_secrets[@]}"} ${args[@]+"${args[@]}"} \
   -f image/Dockerfile --target lockfile --output type=local,dest=image .

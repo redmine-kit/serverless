@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Deploys one Redmine server from its redmine.json (docs/deploy-config.md).
-# The steps run in the tools image (deploy/Dockerfile), so only Docker is
-# needed. Credentials come from the AWS_* environment variables or from
-# ~/.aws (read-only); bin/deploy assumes deployRoleArn with them.
+# The steps run in the tools image (deploy/Dockerfile), in Apple container
+# when it runs, else in Docker (CONTAINER_CLI=container|docker chooses).
+# Credentials come from the AWS_* environment variables or from ~/.aws
+# (read-only); bin/deploy assumes deployRoleArn with them.
 # With image.plugins or image.themes, the derived image is built, tested and
-# saved here first (Docker with Buildx, jq and curl), and the steps push it.
+# saved here first (with jq and curl), and the steps push it.
 #   DERIVED_IMAGE_TESTS=<command> bin/deploy redmine.json
 #     tests the derived image with <command> <image> <redmine.json> in place
 #     of bin/test-image
@@ -14,6 +15,7 @@
 #   bin/deploy redmine.json --account    # the account's roles, once, as an administrator
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. bin/lib/container.sh
 
 config="" args=()
 for arg in "$@"; do
@@ -28,17 +30,17 @@ if [[ -z "$config" || ! -f "$config" ]]; then
 fi
 
 image=serverless-deploy-tools:local
-docker build --quiet -t "$image" deploy >/dev/null
+image_build --quiet -- -t "$image" deploy >/dev/null
 
 config_path="$(cd "$(dirname "$config")" && pwd)/$(basename "$config")"
-run=(docker run --rm -i -v "$PWD:/work:ro" -v "$config_path:/config/redmine.json:ro")
+run=("$cli" run --rm -i -v "$PWD:/work:ro" -v "$config_path:/config/redmine.json:ro")
 
 # The derived image with image.plugins and image.themes
 # (docs/architecture.md#derived-images), on top of the image that the
 # configuration names: built, put through the image tests, and saved as a
 # tarball for step 5. The configuration is checked first, as step 1 does.
 # --account does not use an image.
-tools() { docker run --rm -i -v "$PWD:/work:ro" -v "$config_path:/config/redmine.json:ro" --entrypoint "$@"; }
+tools() { "$cli" run --rm -i -v "$PWD:/work:ro" -v "$config_path:/config/redmine.json:ro" --entrypoint "$@"; }
 if [[ " ${args[*]} " != *" --account "* ]] &&
   [[ "$(tools jq "$image" '(.image.plugins // []) + (.image.themes // []) | length' /config/redmine.json)" != 0 ]]; then
   tools check-jsonschema "$image" --schemafile /work/schema/redmine.schema.json /config/redmine.json >&2
@@ -56,7 +58,11 @@ if [[ " ${args[*]} " != *" --account "* ]] &&
   ${DERIVED_IMAGE_TESTS:-bin/test-image} "$derived_tag" "$config_path" >&2
   derived_dir=$(mktemp -d)
   trap 'rm -rf "$derived_dir"' EXIT
-  docker save -o "$derived_dir/image.tar" "$derived_tag"
+  if [[ "$cli" == docker ]]; then
+    docker save -o "$derived_dir/image.tar" "$derived_tag"
+  else
+    container image save --platform linux/arm64 -o "$derived_dir/image.tar" "$derived_tag"
+  fi
   run+=(-v "$derived_dir/image.tar:/derived/image.tar:ro" -e DERIVED_IMAGE=/derived/image.tar)
 fi
 for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_REGION; do

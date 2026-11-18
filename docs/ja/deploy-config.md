@@ -180,7 +180,7 @@ bin/test-image redmine-derived:local path/to/redmine.json
 
 ## デプロイコマンド
 
-`bin/deploy` に必要なのは Docker だけです。ツールのイメージ (`deploy/Dockerfile`。AWS CLI、jq、OpenSSL、crane、check-jsonschema を、バージョンを固定してインストールする。Python のパッケージはハッシュで固定する) をビルドし、その中で `deploy/deploy.sh` を実行します。AWS 認証情報は、`AWS_*` 環境変数か、`~/.aws` (読み取り専用) から取得します。`image.plugins` か `image.themes` を指定する場合は、派生イメージのビルドとテストのために、Docker Buildx、jq、curl も必要です。
+`bin/deploy` に必要なのは Apple container か Docker だけです。ツールのイメージ (`deploy/Dockerfile`。AWS CLI、jq、OpenSSL、crane、check-jsonschema を、バージョンを固定してインストールする。Python のパッケージはハッシュで固定する) をビルドし、その中で `deploy/deploy.sh` を実行します。AWS 認証情報は、`AWS_*` 環境変数か、`~/.aws` (読み取り専用) から取得します。`image.plugins` か `image.themes` を指定する場合は、派生イメージのビルドとテストのために、jq、curl、git (Docker では Buildx も) も必要です。
 
 ```sh
 bin/deploy path/to/redmine.json --account    # アカウントごとに 1 回、管理者が

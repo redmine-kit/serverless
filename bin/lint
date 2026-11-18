@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Static checks of the repository, the same locally and in CI. Every tool runs
-# in a container pinned by digest, so only Docker is needed.
+# in a container pinned by digest, in Apple container when it runs, else in
+# Docker (CONTAINER_CLI=container|docker chooses).
 #   bin/lint
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. bin/lib/container.sh
 
 ACTIONLINT=rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
 SHELLCHECK=koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
@@ -13,7 +15,7 @@ CFN_LINT_VERSION=1.60.0
 
 # Called through step, which ShellCheck cannot follow.
 # shellcheck disable=SC2329
-run() { docker run --rm -v "$PWD:/work" -w /work "$@"; }
+run() { "$cli" run --rm -v "$PWD:/work" -w /work "$@"; }
 failed=0
 step() {
   echo "== $1"

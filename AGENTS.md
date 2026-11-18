@@ -32,3 +32,9 @@ It runs the latest Redmine on AWS Lambda (Event Functions), with RDS for Postgre
 - English, imperative mood, 72 characters or fewer in the first line, no trailing period. Explain the reason after a blank line when the first line does not show it.
 - One purpose per commit.
 - Do not rewrite pushed history (`--amend`, rebase, force push).
+
+## Development environment
+
+- **Apple container first, Docker too** (a public repository). Scripts (`bin/test`, databases, emulators) use Apple container (`container`) when it is installed and running, else Docker (other machines, CI); `CONTAINER_CLI=docker|container` chooses. Docs give both, Apple container first. Images are built from the `Dockerfile` with either tool.
+- **Libraries at their latest versions.** Dependencies are kept at their latest stable releases, pinned exactly in the lockfiles; a version held back has its reason next to the pin.
+- Both are the organization's rules (`../AGENTS.md`, "Development environment").

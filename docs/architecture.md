@@ -10,7 +10,7 @@ The resources one instance creates in AWS (`infra/*.yaml`), with those of the sh
 
 ![The AWS resources of one instance](diagrams/architecture.drawio.svg)
 
-`docs/diagrams/gen.py` lays out the diagram for draw.io. `bin/diagrams` runs it and exports `docs/diagrams/architecture.drawio.svg` and `architecture.ja.drawio.svg` with draw.io in Docker. The SVGs hold the diagram, so draw.io can open them. The script needs the AWS Architecture Icons package ([AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)), unpacked, in `AWS_ICONS`:
+`docs/diagrams/gen.py` lays out the diagram for draw.io. `bin/diagrams` runs it and exports `docs/diagrams/architecture.drawio.svg` and `architecture.ja.drawio.svg` with draw.io in a container (Apple container or Docker). The SVGs hold the diagram, so draw.io can open them. The script needs the AWS Architecture Icons package ([AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)), unpacked, in `AWS_ICONS`:
 
 ```sh
 AWS_ICONS=~/Downloads/Icon-package_07312026 bin/diagrams

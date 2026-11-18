@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Tests of bin/deploy without AWS (docs/testing.md#deployment-tests): the
 # schema, the stack parameters and deploy.sh against fake AWS in the tools
-# image, and the settings code in Ruby.
+# image, and the settings code in Ruby. In Apple container when it runs, else
+# in Docker (CONTAINER_CLI=container|docker chooses).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. bin/lib/container.sh
 RUBY=ruby:4.0@sha256:a69f361db050bb2c65ec66ef75411bfc4ce2e1d993ba1179fac4e4ba6ecfe91f
 image=serverless-deploy-tools:local
-docker build --quiet -t "$image" deploy >/dev/null
-docker run --rm -v "$PWD:/work:ro" -w /work --entrypoint bash "$image" test/deploy/run.sh
+image_build --quiet -- -t "$image" deploy >/dev/null
+"$cli" run --rm -v "$PWD:/work:ro" -w /work --entrypoint bash "$image" test/deploy/run.sh
 echo "== Settings code in Ruby"
-docker run --rm -v "$PWD:/work:ro" -w /work "$RUBY" ruby test/deploy/settings_test.rb
+"$cli" run --rm -v "$PWD:/work:ro" -w /work "$RUBY" ruby test/deploy/settings_test.rb

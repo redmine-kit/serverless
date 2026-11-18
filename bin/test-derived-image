@@ -13,6 +13,7 @@
 #   bin/test-derived-image [base image]   # default: serverless:test
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. bin/lib/container.sh
 base="${1:-serverless:test}"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -43,5 +44,5 @@ fails_with() { # <config> <message>
 echo "== Builds that fail"
 fails_with test/derived/drift/redmine.json "need other versions of gems in the base image"
 fails_with test/derived/private-git/redmine.json "A Git entry must be a public HTTPS repository"
-docker rmi serverless-derived:failing >/dev/null 2>&1 || true
+"$cli" image rm serverless-derived:failing >/dev/null 2>&1 || true
 ((failures == 0))

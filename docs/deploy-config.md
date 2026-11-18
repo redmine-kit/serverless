@@ -166,7 +166,7 @@ Writing your own Dockerfile on top of this project's image and setting it in `im
 
 ## Deployment commands
 
-`bin/deploy` needs only Docker. It builds a tools image (`deploy/Dockerfile`: the AWS CLI, jq, OpenSSL, crane and check-jsonschema, at pinned versions; the Python packages with hashes) and runs `deploy/deploy.sh` in it. AWS credentials come from the `AWS_*` environment variables or from `~/.aws` (read-only). With `image.plugins` or `image.themes`, it also needs Docker Buildx, jq and curl, for building and testing the derived image.
+`bin/deploy` needs only Apple container or Docker. It builds a tools image (`deploy/Dockerfile`: the AWS CLI, jq, OpenSSL, crane and check-jsonschema, at pinned versions; the Python packages with hashes) and runs `deploy/deploy.sh` in it. AWS credentials come from the `AWS_*` environment variables or from `~/.aws` (read-only). With `image.plugins` or `image.themes`, it also needs jq, curl and git (and Buildx with Docker), for building and testing the derived image.
 
 ```sh
 bin/deploy path/to/redmine.json --account    # once per account, as an administrator

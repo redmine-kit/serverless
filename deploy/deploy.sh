@@ -50,7 +50,7 @@ stack="$instance" edge_stack="$instance-edge"
 account=$(cut -d: -f5 <<<"$(cfg '.deployRoleArn')")
 # CloudFormation creates the resources with its service role
 # (docs/iam.md#role-for-deploying-infrastructure).
-cfn_role_arn="arn:$(cut -d: -f2 <<<"$(cfg '.deployRoleArn')"):iam::$account:role/redmine-cfn-exec"
+cfn_role_arn="arn:$(cut -d: -f2 <<<"$(cfg '.deployRoleArn')"):iam::$account:role/redmine-kit-cfn-exec"
 tags=$(params stack_tags "$config")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -68,7 +68,7 @@ account_singleton() {
     echo "$configured"
     return
   fi
-  current=$(aws cloudformation describe-stacks --stack-name redmine-account \
+  current=$(aws cloudformation describe-stacks --stack-name redmine-kit-account \
     --query "Stacks[0].Parameters[?ParameterKey=='$1'].ParameterValue | [0]" --output text 2>/dev/null || true)
   if [[ "$current" == true ]]; then
     echo true
@@ -89,7 +89,7 @@ if $account_only; then
   analyzer=$(account_singleton CreateAccessAnalyzer '.account.accessAnalyzer' \
     "$(aws accessanalyzer list-analyzers --query "length(analyzers[?status=='ACTIVE' && (type=='ACCOUNT' || type=='ORGANIZATION')])" --output text)")
   note "trail: $trail, external access analyzer: $analyzer"
-  cfn_role_arn="" deploy_stack redmine-account "$region" "$root/infra/account.yaml" \
+  cfn_role_arn="" deploy_stack redmine-kit-account "$region" "$root/infra/account.yaml" \
     "$(params 'account_params($trail; $analyzer)' --arg trail "$trail" --arg analyzer "$analyzer" "$config")"
   note "done; deployRoleArn is $(cfg '.deployRoleArn')"
   exit 0
@@ -141,20 +141,20 @@ instance_stack() { # <image URI>
     'instance_params($image; $cert; $acl; $hash; $key)' --arg image "$1" \
     --arg cert "$(output "$edge_stack" us-east-1 CertificateArn)" \
     --arg acl "$(output "$edge_stack" us-east-1 WebAclArn)" \
-    --arg hash "$(output redmine-shared-edge us-east-1 FunctionVersionArn)" \
+    --arg hash "$(output redmine-kit-shared-edge us-east-1 FunctionVersionArn)" \
     --arg key "$public_key" "$config")"
 }
 
 if ! $code_only; then
   # 2. The shared base, in the Region and in us-east-1.
   step "2. Shared base"
-  deploy_stack redmine-shared "$region" "$root/infra/shared.yaml" "$(params shared_params "$config")"
+  deploy_stack redmine-kit-shared "$region" "$root/infra/shared.yaml" "$(params shared_params "$config")"
   code_sha=$(sha256sum "$root/edge/body-hash/index.js" | cut -d' ' -f1)
-  deploy_stack redmine-shared-edge us-east-1 "$root/infra/shared-edge.yaml" \
+  deploy_stack redmine-kit-shared-edge us-east-1 "$root/infra/shared-edge.yaml" \
     "$(params 'shared_edge_params($sha)' -n --arg sha "$code_sha")"
   if [[ "$(cfg '.mail.receive != false')" == true ]] && ! $dry_run; then
     # A Region has one active rule set; the instances share it (docs/mail.md).
-    aws ses set-active-receipt-rule-set --rule-set-name "$(output redmine-shared "$region" ReceiptRuleSetName)"
+    aws ses set-active-receipt-rule-set --rule-set-name "$(output redmine-kit-shared "$region" ReceiptRuleSetName)"
   fi
 
   # 3. Secrets in SSM, before the instance stack (RDS reads the password).
@@ -183,7 +183,7 @@ if $dry_run; then
     note "$stack: the functions get $image_digest"
   else
     step "Instance stack"
-    instance_stack "$(output redmine-shared "$region" RepositoryUri)@$image_digest"
+    instance_stack "$(output redmine-kit-shared "$region" RepositoryUri)@$image_digest"
   fi
   note "dry run: nothing was changed"
   exit 0
@@ -197,7 +197,7 @@ if [[ -n "$derived_image" ]]; then
 else
   step "5. Image $image_repository@$image_digest"
 fi
-repository_uri=$(output redmine-shared "$region" RepositoryUri)
+repository_uri=$(output redmine-kit-shared "$region" RepositoryUri)
 image_uri="$repository_uri@$image_digest"
 if aws ecr describe-images --repository-name "${repository_uri#*/}" --image-ids "imageDigest=$image_digest" >/dev/null 2>&1; then
   note "already in ECR"

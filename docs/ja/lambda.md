@@ -344,7 +344,7 @@ Redmine は、送信前に送信先のホスト名を IP アドレスに名前�
 ```mermaid
 flowchart LR
   b["ブラウザー"] --> cf["CloudFront"]
-  cf --> edge["Lambda@Edge<br>redmine-body-hash<br>(オリジンリクエスト)"]
+  cf --> edge["Lambda@Edge<br>redmine-kit-body-hash<br>(オリジンリクエスト)"]
   edge -- "本文の SHA256 を<br>x-amz-content-sha256 に" --> oac["OAC が<br>SigV4 で署名"]
   oac --> url["関数 URL<br>(AWS_IAM)"]
   url --> app["Lambda<br>redmine-web"]
@@ -353,7 +353,7 @@ flowchart LR
 
 - **関数 URL の認証:** `AuthType: AWS_IAM` にします。関数のリソースベースのポリシーで、CloudFront (`cloudfront.amazonaws.com`) に、`lambda:InvokeFunctionUrl` と `lambda:InvokeFunction` の両方を、このディストリビューションからのリクエスト (`AWS:SourceArn`) に限って許可します (CloudFront のドキュメント。[iam.md](iam.md#resource-based-policies))。署名のない直接のリクエストは、関数の呼び出し前に拒否されるので、費用も同時実行数も消費しません。
 - **OAC:** オリジンタイプは Lambda、署名は常に行う (`SigningBehavior: always`、`sigv4`)。
-- **本文のハッシュ:** 関数 URL は、署名のない本文 (`UNSIGNED-PAYLOAD`) を受け付けないので、PUT と POST では、本文の SHA256 を `x-amz-content-sha256` に入れて送る必要があります (CloudFront のドキュメント)。ブラウザーで表示する Redmine の画面のフォームは、このヘッダーを付けません。そこで、オリジンリクエストで実行される Lambda@Edge 関数 `redmine-body-hash` が、本文からハッシュを計算して追加します。そのあとで、OAC がリクエストに署名します。
+- **本文のハッシュ:** 関数 URL は、署名のない本文 (`UNSIGNED-PAYLOAD`) を受け付けないので、PUT と POST では、本文の SHA256 を `x-amz-content-sha256` に入れて送る必要があります (CloudFront のドキュメント)。ブラウザーで表示する Redmine の画面のフォームは、このヘッダーを付けません。そこで、オリジンリクエストで実行される Lambda@Edge 関数 `redmine-kit-body-hash` が、本文からハッシュを計算して追加します。そのあとで、OAC がリクエストに署名します。
 - **CloudFront Functions では実装できない:** CloudFront Functions のリクエストのデータには、本文が含まれません (メソッド、URI、クエリ文字列、ヘッダー、Cookie だけ)。本文を読めるのは Lambda@Edge だけです。
 - **`Host`:** 関数 URL には、ビューワーの `Host` を転送しません (オリジンリクエストポリシーは `AllViewerExceptHostHeader`)。OAC は関数 URL のホスト名で署名します。Redmine のドメインとスキームは、オリジンのカスタムヘッダー `X-Forwarded-Host` と `X-Forwarded-Proto` で渡します (下の「ホストとスキーム」)。
 - **キャッシュ:** デフォルトのキャッシュビヘイビア (関数 URL) はキャッシュしません (`CachingDisabled`)。`/assets/*` は S3 から配信し、キャッシュします (下の「アセットの配信」)。添付ファイルは、`/files/*` と `/tmp/*` (サムネイル、zip、アップロード) のビヘイビアを使い、OAC で添付ファイル用のバケットに転送し、署名付き URL を必須にします ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#download))。これらもキャッシュしません (`CachingDisabled`)。署名付き URL のファイル名と種類をキャッシュキーに含める、マネージドキャッシュポリシーがないためです (下記)。Redmine 7.1 のファビコンの `/favicons/*` は、関数 URL に転送し、キャッシュします (下の「ファビコン」)。
@@ -384,7 +384,7 @@ CloudFront は、関数 URL 自身のホスト名を `Host` として関数 URL 
 
 | 項目 | 値 | 理由 |
 | --- | --- | --- |
-| 関数 | `redmine-body-hash`。デフォルトのキャッシュビヘイビアのオリジンリクエスト (origin request) に、本文を含めて (`IncludeBody`) 関連付ける | 本文を読めるのは Lambda@Edge だけ。オリジンリクエストなら、本文を 1 MB まで読める (ビューワーリクエストでは 40 KB まで) |
+| 関数 | `redmine-kit-body-hash`。デフォルトのキャッシュビヘイビアのオリジンリクエスト (origin request) に、本文を含めて (`IncludeBody`) 関連付ける | 本文を読めるのは Lambda@Edge だけ。オリジンリクエストなら、本文を 1 MB まで読める (ビューワーリクエストでは 40 KB まで) |
 | ランタイム | Node.js 24 (`nodejs24.x`。Lambda@Edge が対応する最新のもの)、x86_64、128 MB、5 秒。依存する npm パッケージは使わず、`node:crypto` だけで実装する。コードは `infra/shared-edge.yaml` に埋め込み、`bin/test-edge` でテストする ([testing.md](testing.md#edge-function-tests)) | Lambda@Edge は Node.js と Python だけで、コンテナイメージと arm64 には対応しない |
 | アーキテクチャ、メモリ、タイムアウト | x86_64、128 MB、5 秒 | ハッシュの計算だけ |
 | リージョン | us-east-1 | Lambda@Edge 関数は us-east-1 に作成する必要がある |
@@ -398,7 +398,7 @@ CloudFront は、関数 URL 自身のホスト名を `Host` として関数 URL 
 
 この関数があるので、CloudFront を経由して Redmine に転送されるリクエスト本文は 1 MB までになります。画面からの添付ファイルは S3 に直接送るので、この制限を受けません。制限を受けるものは、下の[「6 MB の制限」](#the-6-mb-limit)にまとめました。
 
-この関数はオリジンリクエストで実行されるので、キャッシュしない画面のリクエストごとに実行されます。添付ファイルのビヘイビアには関連付けません。アップロードの SHA256 は、Redmine がコピーするときに S3 が計算します ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#upload))。ap-northeast-1 では 100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルで (料金表)、月 5 万件なら 0.1 ドル未満です。CloudFront の定額料金プランでも使え、料金はプランとは別にかかります (AWS のブログ、2026-03-24)。ログは、関数が実行されたエッジロケーションに近いリージョンの CloudWatch Logs に出力されます (`/aws/lambda/us-east-1.redmine-body-hash`)。
+この関数はオリジンリクエストで実行されるので、キャッシュしない画面のリクエストごとに実行されます。添付ファイルのビヘイビアには関連付けません。アップロードの SHA256 は、Redmine がコピーするときに S3 が計算します ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#upload))。ap-northeast-1 では 100 万件あたり 0.60 ドルと、1 GB 秒あたり 0.00005001 ドルで (料金表)、月 5 万件なら 0.1 ドル未満です。CloudFront の定額料金プランでも使え、料金はプランとは別にかかります (AWS のブログ、2026-03-24)。ログは、関数が実行されたエッジロケーションに近いリージョンの CloudWatch Logs に出力されます (`/aws/lambda/us-east-1.redmine-kit-body-hash`)。
 
 Lambda@Edge で本文のハッシュを追加してから OAC が署名する構成は、公式のドキュメントには記載されていません。動作したという実践の記録はあります (クラスメソッドの記事、2024-07-29。公式の情報ではありません)。最初に試して確認します。
 
@@ -465,7 +465,7 @@ CloudFront は、定額料金プランの無料プラン (月 0 ドル) を使�
 | オリジンリクエストポリシー | マネージドポリシーだけ (カスタムポリシーはビジネスプランから) | Redmine は `AllViewerExceptHostHeader`、S3 と `/favicons/*` はなし |
 | レスポンスヘッダーポリシー | マネージドポリシーだけ (カスタムポリシーはビジネスプランから) | すべてのビヘイビアに `SecurityHeadersPolicy`。添付ファイルの `nosniff` もこのポリシーで付く。sandbox の CSP とファイル名は CloudFront Functions で追加する |
 | CloudFront Functions | 含まれる。ほかのディストリビューションが使う関数は関連付けられない | `<instance>-incoming-size` (ビューワーリクエスト) と `<instance>-attachment-headers` (ビューワーレスポンス)。インスタンスごと |
-| Lambda@Edge | 使える。呼び出し料金はプランとは別 | `redmine-body-hash` (Redmine のビヘイビアのオリジンリクエスト)。インスタンス間で共有 |
+| Lambda@Edge | 使える。呼び出し料金はプランとは別 | `redmine-kit-body-hash` (Redmine のビヘイビアのオリジンリクエスト)。インスタンス間で共有 |
 | KeyValueStore | 含まれない | 使わない |
 | オリジンアクセスコントロール、署名付き URL | 含まれる | 関数 URL と S3 のオリジン、添付ファイルのキーグループ |
 | VPC オリジン | 含まれない | 使わない。関数 URL と S3 は VPC 外 |

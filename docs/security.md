@@ -151,7 +151,7 @@ How long logs, records, temporary files and backups are kept. All periods are de
 | Target | Period (default) | How it is deleted | Configuration file field |
 | --- | --- | --- | --- |
 | CloudWatch Logs (`redmine-web`, `redmine-worker`, `redmine-task`) | 90 days | Log group retention setting. Log groups are created in advance by CloudFormation | `logs.retentionDays` |
-| CloudWatch Logs (Lambda@Edge `redmine-body-hash`) | 90 days | Lambda@Edge creates a log group automatically in each Region where it runs. CloudFormation cannot create them in advance, so `bin/deploy` applies the retention setting to the log groups in all Regions (and reapplies it on every deployment to log groups created later) | `logs.retentionDays` |
+| CloudWatch Logs (Lambda@Edge `redmine-kit-body-hash`) | 90 days | Lambda@Edge creates a log group automatically in each Region where it runs. CloudFormation cannot create them in advance, so `bin/deploy` applies the retention setting to the log groups in all Regions (and reapplies it on every deployment to log groups created later) | `logs.retentionDays` |
 | CloudWatch Logs (Session Manager; only the setup with a NAT instance) | 90 days | Log group retention setting | `logs.retentionDays` |
 | CloudTrail (management events) | 1 year (proposal) | Lifecycle of the S3 bucket that holds the trail. If the account has rules, follow them. CloudTrail event history (90 days) is set by AWS | Decided in the account baseline (outside this design) |
 | Records of received email (`aws_ses_received_mails`) | 90 days | Deleted by the daily scheduled rake task ([tasks.md](tasks.md#scheduled-runs)) | `retention.recordsDays` |

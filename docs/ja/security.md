@@ -177,7 +177,7 @@ WAF は、リクエストがオリジンに到達する前に評価されます�
 | 対象 | 期間 (デフォルト) | 削除の方法 | 設定ファイルの項目 |
 | --- | --- | --- | --- |
 | CloudWatch Logs (`redmine-web`、`redmine-worker`、`redmine-task`) | 90 日 | ロググループの保持設定。ロググループは CloudFormation で先に作成する | `logs.retentionDays` |
-| CloudWatch Logs (Lambda@Edge の `redmine-body-hash`) | 90 日 | Lambda@Edge は、実行されたリージョンごとに、ロググループを自動で作成する。CloudFormation では先に作成できないので、`bin/deploy` が、すべてのリージョンのロググループに保持設定を適用する (作成されたあとのものにも、デプロイのたびに適用し直す) | `logs.retentionDays` |
+| CloudWatch Logs (Lambda@Edge の `redmine-kit-body-hash`) | 90 日 | Lambda@Edge は、実行されたリージョンごとに、ロググループを自動で作成する。CloudFormation では先に作成できないので、`bin/deploy` が、すべてのリージョンのロググループに保持設定を適用する (作成されたあとのものにも、デプロイのたびに適用し直す) | `logs.retentionDays` |
 | CloudWatch Logs (Session Manager。NAT インスタンス構成だけ) | 90 日 | ロググループの保持設定 | `logs.retentionDays` |
 | CloudTrail (管理イベント) | 1 年 (案) | 証跡を保存する S3 バケットのライフサイクル。アカウントの規定があれば、それに従う。CloudTrail のイベント履歴 (90 日) は、AWS が決めている | アカウントの基盤で決める (この設計の対象外) |
 | 受信したメールの記録 (`aws_ses_received_mails`) | 90 日 | 毎日の定期 rake で削除する ([tasks.md](tasks.md#scheduled-runs)) | `retention.recordsDays` |

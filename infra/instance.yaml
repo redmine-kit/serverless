@@ -16,7 +16,7 @@ Parameters:
     Description: The instance name (instance in redmine.json).
   SharedStackName:
     Type: String
-    Default: redmine-shared
+    Default: redmine-kit-shared
     Description: The stack of the shared base, whose exports this stack uses.
   ImageUri:
     Type: String
@@ -42,8 +42,8 @@ Parameters:
     Description: The web ACL, from the stack <instance>-edge or cloudfront.webAclArn.
   BodyHashFunctionArn:
     Type: String
-    AllowedPattern: ^arn:aws[a-z-]*:lambda:us-east-1:[0-9]{12}:function:redmine-body-hash:[0-9]+$
-    Description: The version of redmine-body-hash, from the stack redmine-shared-edge.
+    AllowedPattern: ^arn:aws[a-z-]*:lambda:us-east-1:[0-9]{12}:function:redmine-kit-body-hash:[0-9]+$
+    Description: The version of redmine-kit-body-hash, from the stack redmine-kit-shared-edge.
   CloudFrontPublicKey:
     Type: String
     Description: >-
@@ -127,7 +127,7 @@ Parameters:
   CostExplorerTagKey:
     Type: String
     Default: ""
-    Description: costExplorer.allocationTag in redmine.json, a cost allocation tag such as redmine:instance.
+    Description: costExplorer.allocationTag in redmine.json, a cost allocation tag such as redmine-kit:instance.
   ReceiveMail:
     Type: String
     Default: "true"
@@ -135,7 +135,7 @@ Parameters:
     Description: mail.receive in redmine.json.
   ReceiptRuleSetName:
     Type: String
-    Default: redmine-shared
+    Default: redmine-kit-shared
     Description: The SES receipt rule set of the shared base, which bin/deploy makes active.
   SendReminders:
     Type: String
@@ -226,7 +226,7 @@ Resources:
       CopyTagsToSnapshot: true
       AutoMinorVersionUpgrade: true
       Tags:
-        - Key: redmine:instance
+        - Key: redmine-kit:instance
           Value: !Ref InstanceName
 
   # The host is not a secret; it is read with the secrets at start-up.
@@ -295,7 +295,7 @@ Resources:
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 1
       Tags:
-        - Key: redmine:instance
+        - Key: redmine-kit:instance
           Value: !Ref InstanceName
   AttachmentsBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -374,8 +374,8 @@ Resources:
     Type: AWS::IAM::Role
     Condition: ScansMalware
     Properties:
-      Path: /redmine/
-      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
+      Path: /redmine-kit/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-kit-boundary
       RoleName: !Sub ${InstanceName}-malware-scan
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -421,7 +421,7 @@ Resources:
                 Action: [s3:GetObject, s3:GetObjectVersion]
                 Resource: !Sub ${AttachmentsBucket.Arn}/*
       Tags:
-        - Key: redmine:instance
+        - Key: redmine-kit:instance
           Value: !Ref InstanceName
 
   MalwareProtectionPlan:
@@ -437,7 +437,7 @@ Resources:
         Tagging:
           Status: ENABLED
       Tags:
-        - Key: redmine:instance
+        - Key: redmine-kit:instance
           Value: !Ref InstanceName
 
   # Compiled assets and the maintenance page (bin/deploy syncs them).
@@ -458,7 +458,7 @@ Resources:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
       Tags:
-        - Key: redmine:instance
+        - Key: redmine-kit:instance
           Value: !Ref InstanceName
   AssetsBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -516,7 +516,7 @@ Resources:
             Prefix: processed/
             ExpirationInDays: !Ref MailDays
       Tags:
-        - Key: redmine:instance
+        - Key: redmine-kit:instance
           Value: !Ref InstanceName
   MailBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -592,7 +592,7 @@ Resources:
   CommonPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Path: /redmine/
+      Path: /redmine-kit/
       Description: !Sub ${InstanceName} functions, common permissions
       PolicyDocument:
         Version: "2012-10-17"
@@ -651,8 +651,8 @@ Resources:
   WebRole:
     Type: AWS::IAM::Role
     Properties:
-      Path: /redmine/
-      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
+      Path: /redmine-kit/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-kit-boundary
       RoleName: !Sub ${InstanceName}-web
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -699,8 +699,8 @@ Resources:
   WorkerRole:
     Type: AWS::IAM::Role
     Properties:
-      Path: /redmine/
-      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
+      Path: /redmine-kit/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-kit-boundary
       RoleName: !Sub ${InstanceName}-worker
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -738,8 +738,8 @@ Resources:
   TaskRole:
     Type: AWS::IAM::Role
     Properties:
-      Path: /redmine/
-      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
+      Path: /redmine-kit/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-kit-boundary
       RoleName: !Sub ${InstanceName}-task
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -1244,7 +1244,7 @@ Resources:
             ResponsePagePath: /assets/maintenance.html
             ErrorCachingMinTTL: 0
       Tags:
-        - Key: redmine:instance
+        - Key: redmine-kit:instance
           Value: !Ref InstanceName
 
   # DNS records, with dns.mode route53.
@@ -1338,8 +1338,8 @@ Resources:
   SchedulerRole:
     Type: AWS::IAM::Role
     Properties:
-      Path: /redmine/
-      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
+      Path: /redmine-kit/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-kit-boundary
       RoleName: !Sub ${InstanceName}-scheduler
       AssumeRolePolicyDocument:
         Version: "2012-10-17"

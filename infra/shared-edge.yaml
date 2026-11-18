@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  Serverless shared base in us-east-1 (stack redmine-shared-edge): the
-  Lambda@Edge function redmine-body-hash that every instance's CloudFront
+  Serverless shared base in us-east-1 (stack redmine-kit-shared-edge): the
+  Lambda@Edge function redmine-kit-body-hash that every instance's CloudFront
   distribution attaches (docs/lambda.md#function-that-adds-the-body-hash-lambdaedge).
   Lambda@Edge functions must be created in us-east-1.
 
@@ -17,9 +17,9 @@ Resources:
   Role:
     Type: AWS::IAM::Role
     Properties:
-      Path: /redmine/
-      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
-      RoleName: redmine-body-hash
+      Path: /redmine-kit/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-kit-boundary
+      RoleName: redmine-kit-body-hash
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -28,7 +28,7 @@ Resources:
               Service: [lambda.amazonaws.com, edgelambda.amazonaws.com]
             Action: sts:AssumeRole
       # Logs of Lambda@Edge go to the Region near the edge that ran it, so
-      # the log groups are /aws/lambda/us-east-1.redmine-body-hash in many
+      # the log groups are /aws/lambda/us-east-1.redmine-kit-body-hash in many
       # Regions (docs/iam.md#execution-role-of-lambdaedge).
       Policies:
         - PolicyName: logs
@@ -37,12 +37,12 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
-                Resource: !Sub arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws/lambda/us-east-1.redmine-body-hash:*
+                Resource: !Sub arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws/lambda/us-east-1.redmine-kit-body-hash:*
 
   Function:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: redmine-body-hash
+      FunctionName: redmine-kit-body-hash
       Description: Adds x-amz-content-sha256 for CloudFront origin access control to Lambda function URLs
       Runtime: nodejs24.x
       Handler: index.handler
@@ -53,7 +53,7 @@ Resources:
       Code:
         # edge/body-hash/index.js; bin/test-edge checks that this is the same.
         ZipFile: |
-          // redmine-body-hash: Lambda@Edge on the origin request of Redmine's behaviors
+          // redmine-kit-body-hash: Lambda@Edge on the origin request of Redmine's behaviors
           // (docs/lambda.md#function-that-adds-the-body-hash-lambdaedge). CloudFront
           // signs requests to the Lambda function URL with origin access control,
           // which needs the SHA256 of the body in x-amz-content-sha256 for requests

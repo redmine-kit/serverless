@@ -79,7 +79,7 @@ flowchart LR
 | 実行環境 | Event Functions、コンテナイメージ、arm64 | Ruby を実行できる。Web Functions は Node.js だけ (下記) | [lambda.md](lambda.md) |
 | イメージ | Lambda の Ruby ベースイメージ (`public.ecr.aws/lambda/ruby:4.0`) に、Redmine、ImageMagick などの依存関係、Subversion と Git のクライアント ([lambda.md](lambda.md#repositories))、Lambda Web Adapter をインストールする | Lambda と同じ OS と Ruby で、Lambda で動かす前提の構成。HTTP サーバー (Puma) をそのまま使える | [lambda.md](lambda.md#choosing-the-base) |
 | 3 つの関数 | `redmine-web` (画面)、`redmine-worker` (ジョブ)、`redmine-task` (rake とメールの取り込み)。同じイメージを、環境変数 `REDMINE_ROLE` で切り替える。`REDMINE_LAMBDA_IMAGE` で、各関数に「ステータス」のタブのためのイメージの digest 付きの URI を渡す。Puma を起動するのは `redmine-web` だけ | ビルドが 1 回で済み、同じコードが動く | [tasks.md](tasks.md#how-one-image-runs-everything) |
-| エントリーポイント | CloudFront → 関数 URL。関数 URL は IAM 認証にし、OAC で署名したリクエストだけを受け付ける。POST などのリクエスト本文のハッシュは、Lambda@Edge (`redmine-body-hash`) が追加する | 署名のない直接のリクエストは、関数が呼び出される前に拒否される。秘密のヘッダーを持たなくてよい。CloudFront Functions は本文を読めないので Lambda@Edge を使う。リクエスト本文は 1 MB までになる | [lambda.md](lambda.md#cloudfront-and-function-urls) |
+| エントリーポイント | CloudFront → 関数 URL。関数 URL は IAM 認証にし、OAC で署名したリクエストだけを受け付ける。POST などのリクエスト本文のハッシュは、Lambda@Edge (`redmine-kit-body-hash`) が追加する | 署名のない直接のリクエストは、関数が呼び出される前に拒否される。秘密のヘッダーを持たなくてよい。CloudFront Functions は本文を読めないので Lambda@Edge を使う。リクエスト本文は 1 MB までになる | [lambda.md](lambda.md#cloudfront-and-function-urls) |
 | アセット | CloudFront の `/assets/*` のオリジンを S3 にする | Lambda を通さず、コールドスタートと同時リクエストを減らす | [lambda.md](lambda.md#serving-assets) |
 | データベース | RDS for PostgreSQL (db.t4g.micro、シングル AZ)。VPC のプライベートサブネットに配置し、外部からアクセスできないようにする。パスワードは SSM Parameter Store に保存する。Redmine 標準の migration をそのまま実行する | Redmine は PostgreSQL に標準で対応しているので、アダプターや migration の修正が不要。費用の見通しが立つ | [rds.md](rds.md) |
 | 設定とシークレット | SSM Parameter Store (`/<instance>/env/`) に保存し、起動時に読み込む | Lambda の環境変数にシークレットを置かない。パラメーターを追加するだけで設定を増やせる | [lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store) |
@@ -229,7 +229,7 @@ Redmine 7.0 は、テーマを `themes/` か `app/assets/themes/` から読み�
 ```text
 serverless/
   image/          コンテナイメージ(Dockerfile、設定ファイル、起動スクリプト、拡張機能のスクリプト、タスクハンドラー)
-  edge/           CloudFront で動作する関数。redmine-body-hash(Lambda@Edge。リクエスト本文のハッシュを追加する)と、アップロードのサイズを制限し、添付ファイルのヘッダーを付ける CloudFront Functions の関数、そのテスト
+  edge/           CloudFront で動作する関数。redmine-kit-body-hash(Lambda@Edge。リクエスト本文のハッシュを追加する)と、アップロードのサイズを制限し、添付ファイルのヘッダーを付ける CloudFront Functions の関数、そのテスト
   infra/          CloudFormation(アカウント単位のロール。共有基盤。インスタンス別の VPC の利用、データベース、S3、SQS、Lambda、CloudFront、WAF、SES、スケジュール、アラーム。us-east-1 の Lambda@Edge、証明書、Web ACL)
   deploy/         bin/deploy の手順と、そのツールのイメージ
   schema/         redmine.json の JSON Schema
@@ -254,7 +254,7 @@ serverless/
 | 1 | CI 基盤 (静的解析、PostgreSQL、AWS Emulator、LocalStack のコンテナ) | RuboCop、ShellCheck、actionlint、cfn-lint |
 | 2 | イメージ (Lambda の Ruby ベースイメージ、Redmine、依存関係、3 つの役割の切り替え) | イメージテスト (読み取り専用、権限の少ないユーザー、3 つの役割の起動)、Redmine 本体のテスト |
 | 3 | Lambda 上での起動 (VPC、RDS、SSM、`redmine-task`、`redmine-web` を関数 URL で開く) | SSM の読み込みとタスクハンドラーのテスト。起動時間の計測 |
-| 4 | CloudFront とアセット (ドメイン、`/assets/*` の S3、OAC と Lambda@Edge の `redmine-body-hash`) | `redmine-body-hash` のテスト。OAC で POST が通るかの確認。デプロイ後の確認の最初の項目 |
+| 4 | CloudFront とアセット (ドメイン、`/assets/*` の S3、OAC と Lambda@Edge の `redmine-kit-body-hash`) | `redmine-kit-body-hash` のテスト。OAC で POST が通るかの確認。デプロイ後の確認の最初の項目 |
 | 5 | 添付ファイル (`redmine_kit_aws_s3`) | プラグインのユニットテスト、機能テスト、統合テスト、システムテスト。本体の添付ファイルのテストを S3 構成で通す |
 | 6 | ジョブとメール送信 (SQS、`redmine-worker`、SES と `redmine_kit_aws_ses` の送信部分、再送) | ジョブとメール送信のテスト、エラーの種類ごとの再試行のテスト。メールボックスシミュレーターでの確認 |
 | 7 | 管理画面 (ステータス、メール送信、ジョブ、S3) | 画面ごとの機能テストとシステムテスト。システム管理者以外が開けないこと |

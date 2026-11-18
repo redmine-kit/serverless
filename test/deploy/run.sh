@@ -80,16 +80,16 @@ check "values: the records' retention, 90 days by default" test \
   "$(value "$minimal" RecordsDays) $(value "$full" RecordsDays)" == "90 60"
 check "values: Cost Explorer off by default, on in full.json" test \
   "$(value "$minimal" CostExplorerEnabled)|$(value "$minimal" CostExplorerTagKey)|$(value "$full" CostExplorerEnabled)|$(value "$full" CostExplorerTagKey)" == \
-  "false||true|redmine:instance"
+  "false||true|redmine-kit:instance"
 check "values: the values from other stacks" test \
   "$(value "$full" ImageUri) $(value "$full" CertificateArn) $(value "$full" CloudFrontPublicKey)" == "img $arn key"
 edge=$(params instance_edge_params test/deploy/valid/full.json)
 check "values: the web ACL settings" test \
   "$(value "$edge" CommonRuleSetAction) $(value "$edge" LoginRateLimit) $(value "$edge" CommonRuleSetCountOnly)" \
   == "block 30 SizeRestrictions_BODY"
-check "tags: redmine:instance first, then the configuration's" test \
+check "tags: redmine-kit:instance first, then the configuration's" test \
   "$(params stack_tags test/deploy/valid/full.json)" == \
-  '[{"Key":"redmine:instance","Value":"team-a"},{"Key":"team","Value":"a"},{"Key":"cost-center","Value":"1234"}]'
+  '[{"Key":"redmine-kit:instance","Value":"team-a"},{"Key":"team","Value":"a"},{"Key":"cost-center","Value":"1234"}]'
 
 echo "== CloudFront behaviors"
 behaviors_problems=$(python3.13 test/deploy/behaviors.py infra/instance.yaml 2>&1)
@@ -144,8 +144,8 @@ export TEMPLATE_BODY_LIMIT
 check "first deployment succeeds" run_deploy "$state" "$config"
 check "first deployment: the steps in order" in_order "$state" \
   "crane digest ghcr.io/redmine-kit/serverless:$(sed -n 's/^ARG REDMINE_VERSION=//p' image/Dockerfile)$" \
-  "create-change-set .*--stack-name redmine-shared " \
-  "create-change-set .*--stack-name redmine-shared-edge " \
+  "create-change-set .*--stack-name redmine-kit-shared " \
+  "create-change-set .*--stack-name redmine-kit-shared-edge " \
   "ssm put-parameter" \
   "create-change-set .*--stack-name redmine-edge " \
   "crane copy ghcr.io/redmine-kit/serverless@sha256:b+ .*/redmine:sha256-b+" \
@@ -158,15 +158,15 @@ check "first deployment: the steps in order" in_order "$state" \
   "curl .*https://redmine.example.com/login" \
   "curl .*https://redmine.example.com/files/"
 check "first deployment: a template over the limit goes by URL" bash -c "
-  grep -q 's3 cp /work/infra/instance.yaml s3://redmine-templates-111122223333-ap-northeast-1/redmine/' '$state/calls' &&
-  grep -q 'create-change-set .*--stack-name redmine .*--template-url https://redmine-templates-111122223333-ap-northeast-1.s3.ap-northeast-1.amazonaws.com/redmine/' '$state/calls' &&
-  grep -q 'create-change-set .*--stack-name redmine-shared .*--template-body file:///work/infra/shared.yaml' '$state/calls'"
+  grep -q 's3 cp /work/infra/instance.yaml s3://redmine-kit-templates-111122223333-ap-northeast-1/redmine/' '$state/calls' &&
+  grep -q 'create-change-set .*--stack-name redmine .*--template-url https://redmine-kit-templates-111122223333-ap-northeast-1.s3.ap-northeast-1.amazonaws.com/redmine/' '$state/calls' &&
+  grep -q 'create-change-set .*--stack-name redmine-kit-shared .*--template-body file:///work/infra/shared.yaml' '$state/calls'"
 check "first deployment: the stacks are created" test \
-  "$(cat "$state"/params/{redmine-shared,redmine-shared-edge,redmine-edge,redmine}.type | tr '\n' ' ')" == "CREATE CREATE CREATE CREATE "
-check "first deployment: the receipt rule set is activated" grep -q "ses set-active-receipt-rule-set --rule-set-name redmine-shared" "$state/calls"
-check "first deployment: assumes deployRoleArn" grep -q "sts assume-role --role-arn arn:aws:iam::111122223333:role/redmine-infra-deploy" "$state/calls"
+  "$(cat "$state"/params/{redmine-kit-shared,redmine-kit-shared-edge,redmine-edge,redmine}.type | tr '\n' ' ')" == "CREATE CREATE CREATE CREATE "
+check "first deployment: the receipt rule set is activated" grep -q "ses set-active-receipt-rule-set --rule-set-name redmine-kit-shared" "$state/calls"
+check "first deployment: assumes deployRoleArn" grep -q "sts assume-role --role-arn arn:aws:iam::111122223333:role/redmine-kit-infra-deploy" "$state/calls"
 check "first deployment: CloudFormation uses its service role" bash -c \
-  "! grep 'create-change-set' '$state/calls' | grep -qv -- '--role-arn arn:aws:iam::111122223333:role/redmine-cfn-exec'"
+  "! grep 'create-change-set' '$state/calls' | grep -qv -- '--role-arn arn:aws:iam::111122223333:role/redmine-kit-cfn-exec'"
 check "first deployment: the Lambda@Edge log groups get the retention period" bash -c "
   grep -q 'logs put-retention-policy --region us-east-1 .*--retention-in-days 90' '$state/calls' &&
   grep -q 'logs put-retention-policy --region ap-northeast-1 ' '$state/calls' &&
@@ -231,8 +231,8 @@ check "--code-only: task, then web and worker" in_order "$state" \
   "update-function-code --function-name redmine-web" "update-function-code --function-name redmine-worker"
 
 : >"$state/calls"
-FAKE_NO_CHANGES=redmine-shared check "a stack without changes is not a failure" run_deploy "$state" "$config"
-check "a stack without changes: its change set is deleted" grep -q "delete-change-set .*--stack-name redmine-shared " "$state/calls"
+FAKE_NO_CHANGES=redmine-kit-shared check "a stack without changes is not a failure" run_deploy "$state" "$config"
+check "a stack without changes: its change set is deleted" grep -q "delete-change-set .*--stack-name redmine-kit-shared " "$state/calls"
 
 : >"$state/calls"
 FAKE_TASK_FAIL=db:migrate check "a failed migration stops the deployment" bash -c "! FAKE='$state' deploy/deploy.sh $config >'$state/output' 2>&1"
@@ -243,20 +243,20 @@ FAKE_HSTS=0 check "a missing Strict-Transport-Security fails the checks" bash -c
 account=$(mktemp -d)
 check "--account succeeds" run_deploy "$account" test/deploy/valid/full.json --account
 check "--account: only the account stack, with the caller's credentials" bash -c "
-  [[ \$(grep -c create-change-set '$account/calls') == 1 ]] && grep -q 'stack-name redmine-account .*CAPABILITY_NAMED_IAM' '$account/calls' &&
+  [[ \$(grep -c create-change-set '$account/calls') == 1 ]] && grep -q 'stack-name redmine-kit-account .*CAPABILITY_NAMED_IAM' '$account/calls' &&
   ! grep -q -e assume-role -e --role-arn '$account/calls'"
-check "--account: the GitHub settings" test "$(value "$(cat "$account/params/redmine-account.json")" GitHubRepository) $(value "$(cat "$account/params/redmine-account.json")" GitHubCodeEnvironment)" == "example/redmine-deploy redmine"
+check "--account: the GitHub settings" test "$(value "$(cat "$account/params/redmine-kit-account.json")" GitHubRepository) $(value "$(cat "$account/params/redmine-kit-account.json")" GitHubCodeEnvironment)" == "example/redmine-deploy redmine"
 check "--account: a trail when the account has none, no second access analyzer" test \
-  "$(value "$(cat "$account/params/redmine-account.json")" CreateTrail) $(value "$(cat "$account/params/redmine-account.json")" CreateAccessAnalyzer)" == "true false"
+  "$(value "$(cat "$account/params/redmine-kit-account.json")" CreateTrail) $(value "$(cat "$account/params/redmine-kit-account.json")" CreateAccessAnalyzer)" == "true false"
 account2=$(mktemp -d)
 FAKE_HAS_TRAIL=1 check "--account with a trail in the account" run_deploy "$account2" test/deploy/valid/minimal.json --account
-check "--account: no second trail" test "$(value "$(cat "$account2/params/redmine-account.json")" CreateTrail)" == false
+check "--account: no second trail" test "$(value "$(cat "$account2/params/redmine-kit-account.json")" CreateTrail)" == false
 account3=$(mktemp -d)
 cfg3="$account3/redmine.json"
 jq '.account = {cloudTrail: false, accessAnalyzer: true}' test/deploy/valid/minimal.json >"$cfg3"
 check "--account with account.cloudTrail false and accessAnalyzer true" run_deploy "$account3" "$cfg3" --account
 check "--account: as configured" test \
-  "$(value "$(cat "$account3/params/redmine-account.json")" CreateTrail) $(value "$(cat "$account3/params/redmine-account.json")" CreateAccessAnalyzer)" == "false true"
+  "$(value "$(cat "$account3/params/redmine-kit-account.json")" CreateTrail) $(value "$(cat "$account3/params/redmine-kit-account.json")" CreateAccessAnalyzer)" == "false true"
 check "--account with --code-only is refused" bash -c "! FAKE='$account' deploy/deploy.sh $config --account --code-only >/dev/null 2>&1"
 
 fresh=$(mktemp -d)
@@ -291,7 +291,7 @@ DERIVED_IMAGE="$tarball" check "a derived image without image.plugins and image.
 DERIVED_IMAGE="$tarball" check "derived image: first deployment succeeds" run_deploy "$derived_state" "$derived_config"
 check "derived image: pushed from the tarball by its digest, then the steps as usual" in_order "$derived_state" \
   "crane digest --tarball $tarball$" \
-  "create-change-set .*--stack-name redmine-shared " \
+  "create-change-set .*--stack-name redmine-kit-shared " \
   "crane push $tarball .*/redmine:sha256-d+$" \
   "create-change-set .*--stack-name redmine " \
   "crane export .*/redmine@sha256:d+ " \

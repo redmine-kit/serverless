@@ -73,7 +73,7 @@ flowchart LR
 | Runtime | Event Functions, container image, arm64 | Can run Ruby. Web Functions support only Node.js (see below) | [lambda.md](lambda.md) |
 | Image | Lambda's Ruby base image (`public.ecr.aws/lambda/ruby:4.0`) with Redmine, dependencies such as ImageMagick, the Subversion and Git clients ([lambda.md](lambda.md#repositories)), and Lambda Web Adapter | Same OS and Ruby as Lambda, built to run on Lambda. The HTTP server (Puma) can be used as is | [lambda.md](lambda.md#choosing-the-base) |
 | Three functions | `redmine-web` (pages), `redmine-worker` (jobs), `redmine-task` (rake and mail import). The same image, switched by the environment variable `REDMINE_ROLE`; `REDMINE_LAMBDA_IMAGE` gives each function the image's digest URI for the "Status" tab. Only `redmine-web` starts Puma | One build, and the same code runs everywhere | [tasks.md](tasks.md#how-one-image-runs-everything) |
-| Entry point | CloudFront → function URL. The function URL uses IAM authentication and accepts only requests signed by OAC. Lambda@Edge (`redmine-body-hash`) adds the body hash for POST and similar requests | Direct requests without a signature are rejected before the function is invoked. No secret header is needed. CloudFront Functions cannot read the body, so Lambda@Edge is used. Request bodies are limited to 1 MB | [lambda.md](lambda.md#cloudfront-and-function-urls) |
+| Entry point | CloudFront → function URL. The function URL uses IAM authentication and accepts only requests signed by OAC. Lambda@Edge (`redmine-kit-body-hash`) adds the body hash for POST and similar requests | Direct requests without a signature are rejected before the function is invoked. No secret header is needed. CloudFront Functions cannot read the body, so Lambda@Edge is used. Request bodies are limited to 1 MB | [lambda.md](lambda.md#cloudfront-and-function-urls) |
 | Assets | CloudFront routes `/assets/*` to S3 | Bypasses Lambda, reducing cold-start waits and concurrent requests | [lambda.md](lambda.md#serving-assets) |
 | Database | RDS for PostgreSQL (db.t4g.micro, Single-AZ) in the private subnets of a VPC, with no public access. The password is in SSM Parameter Store. Redmine's standard migrations run as they are | Redmine supports PostgreSQL as it is, so no adapter or migration changes are needed. The cost is predictable | [rds.md](rds.md) |
 | Settings and secrets | Stored in SSM Parameter Store (`/<instance>/env/`) and read at startup | No secrets in Lambda environment variables. Settings are added by adding parameters | [lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store) |
@@ -201,7 +201,7 @@ Mail sending (`aws-actionmailer-ses`) and jobs (`aws-activejob-sqs`) use AWS's o
 ```text
 serverless/
   image/          Container image (Dockerfile, configuration files, startup script, extension script, task handler)
-  edge/           The functions that run at CloudFront: redmine-body-hash (Lambda@Edge, adds the body hash), and the CloudFront Functions that limit uploads and add the attachments' headers, with their tests
+  edge/           The functions that run at CloudFront: redmine-kit-body-hash (Lambda@Edge, adds the body hash), and the CloudFront Functions that limit uploads and add the attachments' headers, with their tests
   infra/          CloudFormation (the account roles; the shared base; per instance: VPC use, database, S3, SQS, Lambda, CloudFront, WAF, SES, schedules, alarms; Lambda@Edge, the certificate and the web ACL in us-east-1)
   deploy/         The steps of bin/deploy and its tools image
   schema/         The JSON Schema of redmine.json
@@ -224,7 +224,7 @@ Work starts with the points that decide whether it works at all. At each stage, 
 | 1 | CI foundation (static checks, containers for PostgreSQL, AWS Emulator and LocalStack) | RuboCop, ShellCheck, actionlint, cfn-lint |
 | 2 | Image (Lambda's Ruby base image, Redmine, dependencies, switching between the three roles) | Image tests (read-only, low-privilege user, startup of the three roles), Redmine's own tests |
 | 3 | Startup on Lambda (VPC, RDS, SSM, `redmine-task`, opening `redmine-web` through the function URL) | Tests for SSM loading and the task handler. Measuring startup time |
-| 4 | CloudFront and assets (domain, S3 for `/assets/*`, OAC and the Lambda@Edge `redmine-body-hash`) | Tests for `redmine-body-hash`. Checking that POST passes with OAC. The first checks after deployment |
+| 4 | CloudFront and assets (domain, S3 for `/assets/*`, OAC and the Lambda@Edge `redmine-kit-body-hash`) | Tests for `redmine-kit-body-hash`. Checking that POST passes with OAC. The first checks after deployment |
 | 5 | Attachments (`redmine_kit_aws_s3`) | The plugin's unit, functional, integration and system tests. Redmine's own attachment tests pass with S3 |
 | 6 | Jobs and mail sending (SQS, `redmine-worker`, SES and the sending part of `redmine_kit_aws_ses`, resending) | Tests for jobs and mail sending, retry tests per error type. Checks with the mailbox simulator |
 | 7 | Administration pages (state and connections, mail sending, jobs, S3 attachments) | Functional and system tests per page. Non-administrators cannot open them |

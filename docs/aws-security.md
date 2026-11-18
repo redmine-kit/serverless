@@ -53,14 +53,14 @@ To turn the scan off, set `"uploads": {"malwareScan": false}` in `redmine.json` 
 
 A trail keeps the account's API calls (management events) as log files in S3, for investigations after an incident ([security.md](security.md)).
 
-- **Who:** The account stack (`infra/account.yaml`, `bin/deploy --account`) creates the trail `redmine-trail`: all Regions, global service events, log file validation, to the bucket `redmine-trail-<account>-<Region>` (encrypted, Block Public Access, TLS only, only CloudTrail of this trail can write). The log files are deleted after `account.trailDays` (default 365).
+- **Who:** The account stack (`infra/account.yaml`, `bin/deploy --account`) creates the trail `redmine-kit-trail`: all Regions, global service events, log file validation, to the bucket `redmine-kit-trail-<account>-<Region>` (encrypted, Block Public Access, TLS only, only CloudTrail of this trail can write). The log files are deleted after `account.trailDays` (default 365).
 - **Not a second one:** `bin/deploy --account` creates it only when the account has no multi-Region trail (an organization trail counts). `account.cloudTrail` (`true` or `false`) overrides that; once created, it is kept.
 - **Cost:** The first copy of management events is free; a second trail of the same events costs USD 2.00 per 100,000 events (USD 0.00002 per event; AWS price list for CloudTrail of 2026-11-02), which is why a second trail is not created. The S3 storage of the log files is a few cents per month for a small account (estimate).
 
 ## IAM Access Analyzer
 
-- **External access:** An analyzer of the account (`redmine-external-access`) reports resources in the Region that can be reached from outside the account, such as a bucket policy or a role trust that allows another account. It is free. The account stack creates it unless the Region already has an account or organization analyzer (`account.accessAnalyzer` overrides). Analyzers are per Region; for other Regions, the adopter adds them.
-- **Unused access:** An analyzer of unused access (`redmine-unused-access`) reports roles, keys and permissions not used for 90 days. It costs USD 0.20 per role or user analyzed per month (AWS price list for IAM Access Analyzer of 2026-11-08), so it is off by default (`account.unusedAccessAnalyzer`).
+- **External access:** An analyzer of the account (`redmine-kit-external-access`) reports resources in the Region that can be reached from outside the account, such as a bucket policy or a role trust that allows another account. It is free. The account stack creates it unless the Region already has an account or organization analyzer (`account.accessAnalyzer` overrides). Analyzers are per Region; for other Regions, the adopter adds them.
+- **Unused access:** An analyzer of unused access (`redmine-kit-unused-access`) reports roles, keys and permissions not used for 90 days. It costs USD 0.20 per role or user analyzed per month (AWS price list for IAM Access Analyzer of 2026-11-08), so it is off by default (`account.unusedAccessAnalyzer`).
 
 ## AWS Security Hub
 

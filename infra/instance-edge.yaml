@@ -58,7 +58,7 @@ Resources:
             HostedZoneId: !Ref HostedZoneId
         - !Ref AWS::NoValue
       Tags:
-        - Key: redmine:instance
+        - Key: redmine-kit:instance
           Value: !Ref InstanceName
 
   # The rules of docs/security.md#rules, in that order. Rate limits count

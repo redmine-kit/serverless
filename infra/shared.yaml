@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  Serverless shared base (stack redmine-shared): the ECR repository and the
+  Serverless shared base (stack redmine-kit-shared): the ECR repository and the
   VPC that the instances share (docs/deploy-config.md#shared-base-and-per-instance-resources).
 
 Parameters:
@@ -61,7 +61,7 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: redmine-shared
+          Value: redmine-kit-shared
 
   # Two private subnets in two AZs (an RDS subnet group needs two). There is
   # no internet gateway: AWS services are reached through the endpoints.
@@ -73,7 +73,7 @@ Resources:
       CidrBlock: !Select [0, !Cidr [!Ref VpcCidr, 2, 12]]
       Tags:
         - Key: Name
-          Value: redmine-shared-private-1
+          Value: redmine-kit-shared-private-1
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -82,7 +82,7 @@ Resources:
       CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 2, 12]]
       Tags:
         - Key: Name
-          Value: redmine-shared-private-2
+          Value: redmine-kit-shared-private-2
 
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
@@ -90,7 +90,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: redmine-shared-private
+          Value: redmine-kit-shared-private
   PrivateSubnet1Routes:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -163,7 +163,7 @@ Resources:
   TemplatesBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub redmine-templates-${AWS::AccountId}-${AWS::Region}
+      BucketName: !Sub redmine-kit-templates-${AWS::AccountId}-${AWS::Region}
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -202,7 +202,7 @@ Resources:
   ReceiptRuleSet:
     Type: AWS::SES::ReceiptRuleSet
     Properties:
-      RuleSetName: redmine-shared
+      RuleSetName: redmine-kit-shared
 
   # The NAT instance (network.mode nat; docs/rds.md#setup-2-nat-instance):
   # one t4g.nano in a public subnet, kept running by an Auto Scaling group of
@@ -226,7 +226,7 @@ Resources:
       CidrBlock: !Select [2, !Cidr [!Ref VpcCidr, 3, 12]]
       Tags:
         - Key: Name
-          Value: redmine-shared-public
+          Value: redmine-kit-shared-public
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Condition: UseNat
@@ -269,9 +269,9 @@ Resources:
     Type: AWS::IAM::Role
     Condition: UseNat
     Properties:
-      Path: /redmine/
-      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-boundary
-      RoleName: redmine-shared-nat
+      Path: /redmine-kit/
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-kit-boundary
+      RoleName: redmine-kit-shared-nat
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -301,18 +301,18 @@ Resources:
                 Resource: !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
                 Condition:
                   StringEquals:
-                    aws:ResourceTag/aws:autoscaling:groupName: redmine-shared-nat
+                    aws:ResourceTag/aws:autoscaling:groupName: redmine-kit-shared-nat
   NatInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Condition: UseNat
     Properties:
-      Path: /redmine/
+      Path: /redmine-kit/
       Roles: [!Ref NatRole]
   NatLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Condition: UseNat
     Properties:
-      LaunchTemplateName: redmine-shared-nat
+      LaunchTemplateName: redmine-kit-shared-nat
       LaunchTemplateData:
         ImageId: !Ref NatImageId
         InstanceType: t4g.nano
@@ -357,7 +357,7 @@ Resources:
     Condition: UseNat
     DependsOn: PublicDefaultRoute
     Properties:
-      AutoScalingGroupName: redmine-shared-nat
+      AutoScalingGroupName: redmine-kit-shared-nat
       MinSize: "1"
       MaxSize: "1"
       DesiredCapacity: "1"
@@ -368,7 +368,7 @@ Resources:
       HealthCheckType: EC2
       Tags:
         - Key: Name
-          Value: redmine-shared-nat
+          Value: redmine-kit-shared-nat
           PropagateAtLaunch: true
 
 Outputs:

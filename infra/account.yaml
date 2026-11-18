@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  Serverless account roles (stack redmine-account): the permissions boundary
-  redmine-boundary, the CloudFormation service role redmine-cfn-exec, the
-  role for deploying infrastructure redmine-infra-deploy and the role for
-  deploying code redmine-github-deploy (docs/iam.md). Applied once per
+  Serverless account roles (stack redmine-kit-account): the permissions boundary
+  redmine-kit-boundary, the CloudFormation service role redmine-kit-cfn-exec, the
+  role for deploying infrastructure redmine-kit-infra-deploy and the role for
+  deploying code redmine-kit-github-deploy (docs/iam.md). Applied once per
   account by an administrator (bin/deploy --account), before the other
   stacks.
 
@@ -14,22 +14,22 @@ Parameters:
     AllowedPattern: ^[\w+=,.@-]+$
     Description: >-
       The IAM Identity Center permission set whose users can assume
-      redmine-infra-deploy.
+      redmine-kit-infra-deploy.
   GitHubRepository:
     Type: String
     Default: ""
     AllowedPattern: ^([\w.-]+/[\w.-]+)?$
     Description: >-
       owner/repository of the workflows that deploy. Empty: no GitHub Actions
-      roles (redmine-github-deploy is not created).
+      roles (redmine-kit-github-deploy is not created).
   GitHubInfraEnvironment:
     Type: String
     Default: infrastructure
-    Description: The GitHub Environment (with required approvers) that can assume redmine-infra-deploy.
+    Description: The GitHub Environment (with required approvers) that can assume redmine-kit-infra-deploy.
   GitHubCodeEnvironment:
     Type: String
     Default: production
-    Description: The GitHub Environment that can assume redmine-github-deploy.
+    Description: The GitHub Environment that can assume redmine-kit-github-deploy.
   CreateTrail:
     Type: String
     Default: "true"
@@ -82,7 +82,7 @@ Resources:
   Boundary:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: redmine-boundary
+      ManagedPolicyName: redmine-kit-boundary
       Description: Permissions boundary of the roles that the Redmine stacks create
       PolicyDocument:
         Version: "2012-10-17"
@@ -162,7 +162,7 @@ Resources:
   CfnExecRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: redmine-cfn-exec
+      RoleName: redmine-kit-cfn-exec
       Description: CloudFormation service role of the Redmine stacks
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -207,7 +207,7 @@ Resources:
               - Sid: RolesWithBoundary
                 Effect: Allow
                 Action: [iam:CreateRole, iam:PutRolePermissionsBoundary, iam:AttachRolePolicy, iam:PutRolePolicy]
-                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/redmine/*
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/redmine-kit/*
                 Condition:
                   StringEquals:
                     iam:PermissionsBoundary: !Ref Boundary
@@ -233,8 +233,8 @@ Resources:
                   - iam:RemoveRoleFromInstanceProfile
                   - iam:TagInstanceProfile
                 Resource:
-                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/redmine/*
-                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/redmine/*
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/redmine-kit/*
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/redmine-kit/*
               - Sid: Policies
                 Effect: Allow
                 Action:
@@ -247,11 +247,11 @@ Resources:
                   - iam:ListPolicyVersions
                   - iam:TagPolicy
                   - iam:UntagPolicy
-                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine/*
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/redmine-kit/*
               - Sid: PassRoles
                 Effect: Allow
                 Action: iam:PassRole
-                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/redmine/*
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/redmine-kit/*
                 Condition:
                   StringEquals:
                     iam:PassedToService:
@@ -272,11 +272,11 @@ Resources:
                 Resource: "*"
 
   # What bin/deploy does besides the stacks; the stacks are applied by
-  # redmine-cfn-exec. The same as redmine-github-deploy, plus these.
+  # redmine-kit-cfn-exec. The same as redmine-kit-github-deploy, plus these.
   InfraDeployRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: redmine-infra-deploy
+      RoleName: redmine-kit-infra-deploy
       Description: Applies the Redmine stacks with bin/deploy
       MaxSessionDuration: 7200
       AssumeRolePolicyDocument:
@@ -306,7 +306,7 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              # Stacks only through change sets that use redmine-cfn-exec.
+              # Stacks only through change sets that use redmine-kit-cfn-exec.
               - Sid: ChangeSets
                 Effect: Allow
                 Action: cloudformation:CreateChangeSet
@@ -349,11 +349,11 @@ Resources:
               - Sid: Templates
                 Effect: Allow
                 Action: [s3:PutObject, s3:GetObject]
-                Resource: !Sub arn:${AWS::Partition}:s3:::redmine-templates-${AWS::AccountId}-*/*
+                Resource: !Sub arn:${AWS::Partition}:s3:::redmine-kit-templates-${AWS::AccountId}-*/*
               - Sid: EdgeLogRetention
                 Effect: Allow
                 Action: logs:PutRetentionPolicy
-                Resource: !Sub arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws/lambda/us-east-1.redmine-body-hash
+                Resource: !Sub arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws/lambda/us-east-1.redmine-kit-body-hash
               - Sid: Lookups
                 Effect: Allow
                 Action: [ec2:DescribeRegions, logs:DescribeLogGroups, ses:SetActiveReceiptRuleSet]
@@ -361,11 +361,11 @@ Resources:
 
   # bin/deploy --code-only (docs/iam.md#role-for-deploying-code-github-actions).
   # Functions and buckets of any instance in the account, found by their
-  # names and the tag redmine:instance.
+  # names and the tag redmine-kit:instance.
   CodeDeployPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: redmine-code-deploy
+      ManagedPolicyName: redmine-kit-code-deploy
       Description: Updates the image of the Redmine functions
       PolicyDocument:
         Version: "2012-10-17"
@@ -402,7 +402,7 @@ Resources:
             Resource: !Sub arn:${AWS::Partition}:lambda:*:${AWS::AccountId}:function:*
             Condition:
               "Null":
-                aws:ResourceTag/redmine:instance: "false"
+                aws:ResourceTag/redmine-kit:instance: "false"
           # The outputs of the stacks: the repository, the buckets and the
           # distribution.
           - Sid: StackOutputs
@@ -414,7 +414,7 @@ Resources:
     Type: AWS::IAM::Role
     Condition: UsesGitHub
     Properties:
-      RoleName: redmine-github-deploy
+      RoleName: redmine-kit-github-deploy
       Description: Updates the image of the Redmine functions from GitHub Actions
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -438,7 +438,7 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      BucketName: !Sub redmine-trail-${AWS::AccountId}-${AWS::Region}
+      BucketName: !Sub redmine-kit-trail-${AWS::AccountId}-${AWS::Region}
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -480,7 +480,7 @@ Resources:
             Resource: !GetAtt TrailBucket.Arn
             Condition:
               StringEquals:
-                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/redmine-trail
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/redmine-kit-trail
           - Sid: CloudTrailWrite
             Effect: Allow
             Principal:
@@ -490,13 +490,13 @@ Resources:
             Condition:
               StringEquals:
                 s3:x-amz-acl: bucket-owner-full-control
-                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/redmine-trail
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/redmine-kit-trail
   Trail:
     Type: AWS::CloudTrail::Trail
     Condition: CreatesTrail
     DependsOn: TrailBucketPolicy
     Properties:
-      TrailName: redmine-trail
+      TrailName: redmine-kit-trail
       S3BucketName: !Ref TrailBucket
       IsLogging: true
       IsMultiRegionTrail: true
@@ -510,13 +510,13 @@ Resources:
     Type: AWS::AccessAnalyzer::Analyzer
     Condition: CreatesAccessAnalyzer
     Properties:
-      AnalyzerName: redmine-external-access
+      AnalyzerName: redmine-kit-external-access
       Type: ACCOUNT
   UnusedAccessAnalyzer:
     Type: AWS::AccessAnalyzer::Analyzer
     Condition: CreatesUnusedAccessAnalyzer
     Properties:
-      AnalyzerName: redmine-unused-access
+      AnalyzerName: redmine-kit-unused-access
       Type: ACCOUNT_UNUSED_ACCESS
       AnalyzerConfiguration:
         UnusedAccessConfiguration:

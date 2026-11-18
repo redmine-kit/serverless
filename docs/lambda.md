@@ -298,7 +298,7 @@ A function URL is a URL that invokes Lambda directly over HTTPS. The custom doma
 ```mermaid
 flowchart LR
   b["Browser"] --> cf["CloudFront"]
-  cf --> edge["Lambda@Edge<br>redmine-body-hash<br>(origin request)"]
+  cf --> edge["Lambda@Edge<br>redmine-kit-body-hash<br>(origin request)"]
   edge -- "Body SHA256 into<br>x-amz-content-sha256" --> oac["OAC<br>signs with SigV4"]
   oac --> url["Function URL<br>(AWS_IAM)"]
   url --> app["Lambda<br>redmine-web"]
@@ -307,7 +307,7 @@ flowchart LR
 
 - **Function URL authentication:** `AuthType: AWS_IAM`. The function's resource-based policy allows CloudFront (`cloudfront.amazonaws.com`) both `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction`, only for requests from this distribution (`AWS:SourceArn`) (CloudFront documentation; [iam.md](iam.md#resource-based-policies)). Direct requests without a signature are rejected before the function is invoked, so they use neither cost nor concurrency.
 - **OAC:** Type Lambda, always sign (`SigningBehavior: always`, `sigv4`).
-- **Body hash:** Function URLs do not accept unsigned bodies (`UNSIGNED-PAYLOAD`), so PUT and POST must send the body's SHA256 in `x-amz-content-sha256` (CloudFront documentation). Forms in Redmine pages in the browser do not add it. So the Lambda@Edge function `redmine-body-hash`, which runs at the origin request, computes the hash from the body and adds it. OAC then signs the request.
+- **Body hash:** Function URLs do not accept unsigned bodies (`UNSIGNED-PAYLOAD`), so PUT and POST must send the body's SHA256 in `x-amz-content-sha256` (CloudFront documentation). Forms in Redmine pages in the browser do not add it. So the Lambda@Edge function `redmine-kit-body-hash`, which runs at the origin request, computes the hash from the body and adds it. OAC then signs the request.
 - **Not possible with CloudFront Functions:** The request data in CloudFront Functions has no body (only the method, URI, query string, headers and cookies). Only Lambda@Edge can read the body.
 - **`Host`:** The viewer's `Host` is not forwarded to the function URL (the origin request policy is `AllViewerExceptHostHeader`). OAC signs with the function URL's host name. The Redmine domain and the scheme are passed in the origin custom headers `X-Forwarded-Host` and `X-Forwarded-Proto` ("Host and scheme" below).
 - **Caching:** The default behavior (the function URL) is not cached (`CachingDisabled`). `/assets/*` is served from S3 and cached (see "Serving assets" below). Attachments use the behaviors `/files/*` and `/tmp/*` (thumbnails, zips and uploads), which go to the attachments bucket through OAC and require signed URLs ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#download)). They are not cached either (`CachingDisabled`), because no AWS-managed cache policy keeps the file name and type of the signed URL in the cache key (below). `/favicons/*`, the favicon of Redmine 7.1, goes to the function URL and is cached (see "The favicon" below).
@@ -334,7 +334,7 @@ CloudFront sends the function URL's own host name as `Host` to the function URL 
 
 | Item | Value | Reason |
 | --- | --- | --- |
-| Function | `redmine-body-hash`, attached to the origin request of the default behavior, with the body included (`IncludeBody`) | Only Lambda@Edge can read the body. At the origin request it can read up to 1 MB of the body (up to 40 KB at the viewer request) |
+| Function | `redmine-kit-body-hash`, attached to the origin request of the default behavior, with the body included (`IncludeBody`) | Only Lambda@Edge can read the body. At the origin request it can read up to 1 MB of the body (up to 40 KB at the viewer request) |
 | Runtime | Node.js 24 (`nodejs24.x`, the latest Lambda@Edge supports), x86_64, 128 MB, 5 seconds. Written with `node:crypto` only, without npm package dependencies. The code is inline in `infra/shared-edge.yaml` and is tested by `bin/test-edge` ([testing.md](testing.md#edge-function-tests)) | Lambda@Edge supports only Node.js and Python, and does not support container images or arm64 |
 | Architecture, memory, timeout | x86_64, 128 MB, 5 seconds | It only computes a hash |
 | Region | us-east-1 | Lambda@Edge functions must be created in us-east-1 |
@@ -348,7 +348,7 @@ The processing is as follows.
 
 Because of this function, request bodies that reach Redmine through CloudFront are limited to 1 MB. Attachments from pages go directly to S3, so they are not affected; what is affected is listed under ["The 6 MB limit"](#the-6-mb-limit) below.
 
-The function runs on the origin request, so it runs for every uncached page request. It is not attached to the attachments' behaviors: S3 computes the SHA256 of an upload itself when Redmine copies it ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#upload)). In ap-northeast-1 it costs $0.60 per million requests and $0.00005001 per GB-second (price list), which comes to less than $0.1 at 50,000 requests a month. It also works with the CloudFront flat-rate plans and is charged separately from the plan (AWS blog, 2026-03-24). Its logs go to CloudWatch Logs in the region near the edge where it ran (`/aws/lambda/us-east-1.redmine-body-hash`).
+The function runs on the origin request, so it runs for every uncached page request. It is not attached to the attachments' behaviors: S3 computes the SHA256 of an upload itself when Redmine copies it ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#upload)). In ap-northeast-1 it costs $0.60 per million requests and $0.00005001 per GB-second (price list), which comes to less than $0.1 at 50,000 requests a month. It also works with the CloudFront flat-rate plans and is charged separately from the plan (AWS blog, 2026-03-24). Its logs go to CloudWatch Logs in the region near the edge where it ran (`/aws/lambda/us-east-1.redmine-kit-body-hash`).
 
 Adding the body hash with Lambda@Edge and then signing with OAC is not described in the official documentation. A practical report says it works (a Classmethod article, 2024-07-29; not official information); it is the first thing to try.
 
@@ -407,7 +407,7 @@ The features the templates use, against the table of features per plan in the Cl
 | Origin request policies | AWS-managed only ("custom origin request rules" from Business) | `AllViewerExceptHostHeader` on Redmine; none on S3 and `/favicons/*` |
 | Response headers policies | AWS-managed only ("custom response header rules" from Business) | `SecurityHeadersPolicy` on every behavior; it also gives the attachments `nosniff`. Their sandbox CSP and file name come from a CloudFront Function |
 | CloudFront Functions | Included. A function used by another distribution cannot be attached | `<instance>-incoming-size` (viewer request) and `<instance>-attachment-headers` (viewer response), per instance |
-| Lambda@Edge | Can be used, charged per invocation outside the plan | `redmine-body-hash` (origin request of Redmine's behavior), shared by the instances |
+| Lambda@Edge | Can be used, charged per invocation outside the plan | `redmine-kit-body-hash` (origin request of Redmine's behavior), shared by the instances |
 | KeyValueStore | Not included | Not used |
 | Origin access control, signed URLs | Included | Function URL and S3 origins; the key group of the attachments |
 | Origins inside a VPC | Not included | Not used: the function URL and S3 are outside a VPC |

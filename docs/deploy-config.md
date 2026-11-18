@@ -20,19 +20,19 @@ This design uses one configuration file for each Redmine you set up, and the sam
 | SQS queues | `<instance>-jobs`, `<instance>-jobs-dlq`, `<instance>-task-failures` (destination for failed invocations from SES) |
 | Database | `<instance>` (the RDS instance identifier) |
 | Attachments through CloudFront | Behaviors on the instance's own distribution (no second distribution); the trusted key group `<instance>-attachments`, whose private key is a SecureString under `/<instance>/env/` |
-| CloudFormation stacks | `<instance>` (per instance), `<instance>-edge` (per instance; the CloudFront certificate in us-east-1), `redmine-shared` (shared base; below), `redmine-shared-edge` (shared base; Lambda@Edge in us-east-1) |
-| Tags | Every resource gets `redmine:instance=<instance>`. Cost can be viewed per instance |
+| CloudFormation stacks | `<instance>` (per instance), `<instance>-edge` (per instance; the CloudFront certificate in us-east-1), `redmine-kit-shared` (shared base; below), `redmine-kit-shared-edge` (shared base; Lambda@Edge in us-east-1) |
+| Tags | Every resource gets `redmine-kit:instance=<instance>`. Cost can be viewed per instance |
 
 Names in other pages (`redmine-web`, the stack `redmine`, etc.) assume the default instance name `redmine`.
 
 ## Shared base and per-instance resources
 
-When several instances are set up in the same account, resources that can be combined into one go in the shared base (CloudFormation stack `redmine-shared`).
+When several instances are set up in the same account, resources that can be combined into one go in the shared base (CloudFormation stack `redmine-kit-shared`).
 
 | Location | Resources | Reason |
 | --- | --- | --- |
 | Shared base | ECR repository | Reuse images of the same version across instances |
-| Shared base (us-east-1) | Lambda@Edge function `redmine-body-hash` (stack `redmine-shared-edge`) | Lambda@Edge functions must be created in us-east-1. The same code is reused across instances ([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge)) |
+| Shared base (us-east-1) | Lambda@Edge function `redmine-kit-body-hash` (stack `redmine-kit-shared-edge`) | Lambda@Edge functions must be created in us-east-1. The same code is reused across instances ([lambda.md](lambda.md#function-that-adds-the-body-hash-lambdaedge)) |
 | Shared base | VPC, private subnets, the S3 gateway endpoint, and VPC endpoints or a NAT instance (`network.shared`) | The endpoints and the NAT instance have a fixed monthly cost, so instances share them ([rds.md](rds.md#routes-out-of-the-vpc)) |
 | Shared base | SES receipt rule set | A Region has only one active rule set. Each instance adds its rules to the set ([mail.md](mail.md#receipt-rules)) |
 | Per instance | Lambda functions, RDS instance, security groups, S3 buckets, SQS queues, CloudFront, DNS records, SES identities, SSM parameters, alarms | Do not mix an instance's data and permissions with other instances |
@@ -83,7 +83,7 @@ Each instance's Lambda functions and RDS instance go into the shared private sub
 | `redmine.settingsMode` | | `initial` | `initial` (set only the settings not stored yet; can be changed on the page afterwards) or `enforce` (set again on every deployment) |
 | `redmine.pluginSettings` | | none | Setting values for the plugins, by plugin name. Of the plugins in Serverless's image, `redmine_kit_aws_s3` and `redmine_kit_aws_ses` have settings. They are merged into the plugin's stored settings. For example, `{"redmine_kit_aws_ses": {"import_spam": "0", "import_without_dmarc_pass": "0"}}` keeps spam and email that fails DMARC out (the defaults; [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/receiving.html#spoofing-and-spam)) |
 | `costExplorer.enabled` | | `false` | For an image that adds the plugin `redmine_kit_aws_costexplorer` (a derived image; Serverless's image does not include it): whether the plugin shows the account's costs from Cost Explorer on the administration pages. `redmine-web` and `redmine-task` get `REDMINE_COSTEXPLORER_ENABLED`, `redmine-task` gets `ce:GetCostAndUsage` and `ce:GetCostForecast`, and `redmine_kit_aws_costexplorer:refresh` runs once a day (the plugin's only fetch) ([tasks.md](tasks.md#scheduled-runs)). Cost Explorer's API (`ce.us-east-1.amazonaws.com`) is reached through the NAT instance (`network.mode` `nat`); the PrivateLink guide lists an interface endpoint `com.amazonaws.<region>.ce`, but whether it can be used from a VPC in another Region is unverified ([Redmine Kit AWS Cost Explorer](https://redmine-kit.github.io/redmine_aws_costexplorer/)). Each request costs USD 0.01 ([cost.md](cost.md#what-adds-cost)) |
-| `costExplorer.allocationTag` | | empty | A cost allocation tag (for example `redmine:instance`) to show the costs of this instance only; `redmine-task` gets it as `REDMINE_COSTEXPLORER_TAG_KEY`. The tag must be activated as a cost allocation tag in the Billing console |
+| `costExplorer.allocationTag` | | empty | A cost allocation tag (for example `redmine-kit:instance`) to show the costs of this instance only; `redmine-task` gets it as `REDMINE_COSTEXPLORER_TAG_KEY`. The tag must be activated as a cost allocation tag in the Billing console |
 | `schedule.timezone` | | `UTC` | The time zone of the scheduled rake ([tasks.md](tasks.md#scheduled-runs)) |
 | `schedule.sendReminders` | | `false` | Whether to send the reminder mails (`redmine:send_reminders`) on weekday mornings |
 | `logs.retentionDays` | | 90 | CloudWatch Logs retention in days (including Lambda@Edge log groups) |
@@ -105,7 +105,7 @@ The shape of the configuration file is defined by a JSON Schema (`schema/redmine
 ```json
 {
   "region": "ap-northeast-1",
-  "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-infra-deploy",
+  "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-kit-infra-deploy",
   "domain": "redmine.example.com",
   "dns": { "hostedZoneId": "Z0123456789ABCDEFGHIJ" },
   "database": { "majorVersion": "17" },
@@ -178,7 +178,7 @@ bin/deploy path/to/redmine.json --code-only  # update only the image
 | Step | What it does |
 | --- | --- |
 | 1 | Check the configuration file against the JSON Schema, then assume `deployRoleArn` (unless the credentials are already that role's) |
-| 2 | Create or update the shared base stacks (`redmine-shared`, and `redmine-shared-edge` in us-east-1). With `mail.receive`, make the shared receipt rule set the active one |
+| 2 | Create or update the shared base stacks (`redmine-kit-shared`, and `redmine-kit-shared-edge` in us-east-1). With `mail.receive`, make the shared receipt rule set the active one |
 | 3 | Create the secrets in SSM if they do not exist; existing ones are left unchanged ("Secrets" below). This comes before the instance stack, because RDS reads the database password from SSM when it is created |
 | 4 | Create or update `<instance>-edge` in us-east-1 (the certificate and the web ACL). Apply `logs.retentionDays` to the log groups that Lambda@Edge has created in each Region ([security.md](security.md#retention-periods)) |
 | 5 | Copy the image by digest into the account's ECR with crane (Lambda can use only images in ECR in the same Region), or push the derived image of `image.plugins` and `image.themes`, built and tested before step 1. The repository's tags are immutable, so the tag is made from the digest (`sha256-<hex>`). An image already there is not copied again |
@@ -193,7 +193,7 @@ bin/deploy path/to/redmine.json --code-only  # update only the image
 
 | Option | What it does |
 | --- | --- |
-| `--account` | Applies `infra/account.yaml` (the stack `redmine-account`) with the administrator's own credentials, because the role for deploying and the CloudFormation service role do not exist before it. Run it once per account, before the first deployment |
+| `--account` | Applies `infra/account.yaml` (the stack `redmine-kit-account`) with the administrator's own credentials, because the role for deploying and the CloudFormation service role do not exist before it. Run it once per account, before the first deployment |
 | `--dry-run` | Steps 1–4 and the instance stack make change sets, show them and delete them; a stack that would be created is deleted again. Nothing else changes: no secrets, image, assets or invocations (only a template too large to pass inline is uploaded to the templates bucket). A derived image is still built and tested on the local machine, so a plugin that does not build shows here |
 | `--code-only` | Steps 5–7, 9 and 11, without stack changes, with the credentials given (for example, the role for deploying code in GitHub Actions; [iam.md](iam.md#role-for-deploying-code-github-actions)). The functions are updated directly. It needs a deployed instance |
 
@@ -201,7 +201,7 @@ bin/deploy path/to/redmine.json --code-only  # update only the image
 
 Web and worker get the new image only after the migrations, so they never run code newer than the database. When a migration fails, the deployment stops there and web and worker keep their image.
 
-Every stack is applied through change sets with the service role `redmine-cfn-exec`; the role for deploying cannot create resources itself ([iam.md](iam.md#role-for-deploying-infrastructure)). Running the command again with the same configuration changes nothing: a change set without changes is deleted and the stack is left as it is, the image is not copied again, and the migrations do nothing. A derived image is the exception when Docker's build cache is gone (another machine, or a pruned cache): it is built again with a new digest, and the functions get it.
+Every stack is applied through change sets with the service role `redmine-kit-cfn-exec`; the role for deploying cannot create resources itself ([iam.md](iam.md#role-for-deploying-infrastructure)). Running the command again with the same configuration changes nothing: a change set without changes is deleted and the stack is left as it is, the image is not copied again, and the migrations do nothing. A derived image is the exception when Docker's build cache is gone (another machine, or a pruned cache): it is built again with a new digest, and the functions get it.
 
 This project's CI publishes the image to the GitHub Packages container registry (`ghcr.io`) ([architecture.md](architecture.md#distribution)). The deployment command copies it by digest, so the image in ECR has the same digest.
 
@@ -228,15 +228,15 @@ The stacks are written in CloudFormation in `infra/`. `bin/lint` checks them wit
 
 | File | Stack | Contents |
 | --- | --- | --- |
-| `infra/account.yaml` | `redmine-account` | The permissions boundary `redmine-boundary`, the CloudFormation service role `redmine-cfn-exec`, the roles `redmine-infra-deploy` and `redmine-github-deploy`, and the GitHub OIDC provider if needed ([iam.md](iam.md#account-roles)); the CloudTrail trail and the IAM Access Analyzers unless the account has them ([aws-security.md](aws-security.md)) |
-| `infra/shared.yaml` | `redmine-shared` | The ECR repository, the bucket for templates too large to pass inline, the VPC with two private subnets in two AZs, the S3 gateway endpoint, the shared SES receipt rule set, and the route out: the SSM, SQS and SES interface endpoints in one AZ (`network.mode` `endpoints`), or a NAT instance (`nat`: an internet gateway, a public subnet, and an Auto Scaling group of one instance that takes over an Elastic IP and the route at start; [rds.md](rds.md#setup-2-nat-instance)) |
-| `infra/shared-edge.yaml` | `redmine-shared-edge` (us-east-1) | The Lambda@Edge function `redmine-body-hash` (Node.js 24, code inline from `edge/body-hash/index.js`) and its version; a new version is made when the code changes |
+| `infra/account.yaml` | `redmine-kit-account` | The permissions boundary `redmine-kit-boundary`, the CloudFormation service role `redmine-kit-cfn-exec`, the roles `redmine-kit-infra-deploy` and `redmine-kit-github-deploy`, and the GitHub OIDC provider if needed ([iam.md](iam.md#account-roles)); the CloudTrail trail and the IAM Access Analyzers unless the account has them ([aws-security.md](aws-security.md)) |
+| `infra/shared.yaml` | `redmine-kit-shared` | The ECR repository, the bucket for templates too large to pass inline, the VPC with two private subnets in two AZs, the S3 gateway endpoint, the shared SES receipt rule set, and the route out: the SSM, SQS and SES interface endpoints in one AZ (`network.mode` `endpoints`), or a NAT instance (`nat`: an internet gateway, a public subnet, and an Auto Scaling group of one instance that takes over an Elastic IP and the route at start; [rds.md](rds.md#setup-2-nat-instance)) |
+| `infra/shared-edge.yaml` | `redmine-kit-shared-edge` (us-east-1) | The Lambda@Edge function `redmine-kit-body-hash` (Node.js 24, code inline from `edge/body-hash/index.js`) and its version; a new version is made when the code changes |
 | `infra/instance-edge.yaml` | `<instance>-edge` (us-east-1) | The ACM certificate of the domain (DNS validation), and the AWS WAF web ACL unless `cloudfront.webAclArn` is set ([security.md](security.md#rules)) |
 | `infra/instance.yaml` | `<instance>` | RDS for PostgreSQL; the attachment, assets and mail buckets; the job queue, its dead-letter queue and the queue of failed task invocations; the three functions, their roles and log groups; the worker's SQS event source; CloudFront with OAC, the body-hash function, the attachment behaviors with signed URLs, the CloudFront Function `<instance>-incoming-size` and the maintenance page; DNS records; the SES identity and receipt rule; the EventBridge Scheduler schedules; alarms; GuardDuty Malware Protection for S3 on `tmp/incoming/` and `imports/` ([aws-security.md](aws-security.md#malware-protection-for-s3)) |
 
 - **The image:** The instance stack takes the image in the account's ECR by digest (`ImageUri`).
 - **The PostgreSQL version:** `DbMajorVersion` has no default ([rds.md](rds.md#database)).
-- **Roles:** Every role the stacks create has the path `/redmine/` and the permissions boundary `redmine-boundary` ([iam.md](iam.md#account-roles)).
+- **Roles:** Every role the stacks create has the path `/redmine-kit/` and the permissions boundary `redmine-kit-boundary` ([iam.md](iam.md#account-roles)).
 
 ## To verify
 

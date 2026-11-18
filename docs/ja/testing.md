@@ -211,7 +211,7 @@ REDMINE_KIT_AWS_SSM_DIR=../redmine_kit_aws_ssm bin/test-image
 
 `bin/test-edge` が、Node.js のイメージ内で、`node:test` で `edge/` のテストを実行します。npm パッケージは使いません。
 
-- **`redmine-body-hash` (Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ (フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文 (1 MB を超えるもの) に 413 を返すこと、リクエストのほかの項目を変更しないこと、32 KB のファビコン (Redmine 7.1) を含む設定のフォームがハッシュを付けて通ること。
+- **`redmine-kit-body-hash` (Lambda@Edge):** 空の本文のハッシュ、base64 の本文の元のバイト列でのハッシュ (フォーム、バイナリー、multipart)、テキストの本文のハッシュ。偽の `x-amz-content-sha256` を置き換えること、切り詰められた本文 (1 MB を超えるもの) に 413 を返すこと、リクエストのほかの項目を変更しないこと、32 KB のファビコン (Redmine 7.1) を含む設定のフォームがハッシュを付けて通ること。
 - **`<instance>-incoming-size` (CloudFront Function):** CloudFront と同じく、上限を埋め込んだ通常のスクリプトとして実行します。`/tmp/incoming/` への上限以内の PUT は通過し、超えると 413、正しい `Content-Length` がないと 411、ほかのメソッドとパス (サムネイルと zip の署名付き GET) は通過すること。
 - **`<instance>-attachment-headers` (CloudFront Function):** 通常のスクリプトとして実行します。すべての応答に sandbox の CSP が付くこと、成功の応答では、デコードした `response-content-disposition` と `response-content-type` が `Content-Disposition` と `Content-Type` になること、それがなければ S3 のヘッダーのままであること、不正な値、印字可能な ASCII 以外の値 (改行など)、エラー応答では上書きしないこと。
 - **テンプレート:** コードはテンプレート (`infra/shared-edge.yaml`、`infra/instance.yaml`) に埋め込むので、テンプレートがファイルと同じ行を持つことも確認します。

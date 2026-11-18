@@ -88,7 +88,7 @@ test('the other parts of the request are kept', async () => {
 test('the template carries the same source', () => {
   const source = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
   const template = readFileSync(new URL('../../infra/shared-edge.yaml', import.meta.url), 'utf8');
-  const start = template.indexOf('// redmine-body-hash');
+  const start = template.indexOf('// redmine-kit-body-hash');
   assert.notEqual(start, -1, 'the function source is not in infra/shared-edge.yaml');
   const lines = source.trimEnd().split('\n');
   const inTemplate = template.slice(start).split('\n').slice(0, lines.length).map((line) => line.replace(/^ {10}/, ''));

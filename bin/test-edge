@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests of the functions that run at CloudFront (edge/): redmine-body-hash
+# Tests of the functions that run at CloudFront (edge/): redmine-kit-body-hash
 # (Lambda@Edge), redmine-incoming-size and redmine-attachment-headers
 # (CloudFront Functions), with
 # node:test in the Node.js image. No npm packages. The coverage of the files

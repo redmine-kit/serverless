@@ -1,7 +1,7 @@
 {
   "instance": "team-a",
   "region": "eu-west-1",
-  "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-infra-deploy",
+  "deployRoleArn": "arn:aws:iam::111122223333:role/redmine-kit-infra-deploy",
   "domain": "redmine.example.org",
   "dns": { "mode": "external" },
   "account": { "githubRepository": "example/redmine-deploy", "githubCodeEnvironment": "redmine" },
@@ -19,7 +19,7 @@
     "settingsMode": "enforce",
     "pluginSettings": { "redmine_kit_aws_s3": { "download_url_expiry": "600" } }
   },
-  "costExplorer": { "enabled": true, "allocationTag": "redmine:instance" },
+  "costExplorer": { "enabled": true, "allocationTag": "redmine-kit:instance" },
   "schedule": { "timezone": "Asia/Tokyo", "sendReminders": true },
   "logs": { "retentionDays": 365 },
   "retention": { "recordsDays": 60, "mailDays": 14, "noncurrentVersionDays": 60, "backupDays": 14 },

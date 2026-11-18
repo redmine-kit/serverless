@@ -1,4 +1,4 @@
-// redmine-body-hash: Lambda@Edge on the origin request of Redmine's behaviors
+// redmine-kit-body-hash: Lambda@Edge on the origin request of Redmine's behaviors
 // (docs/lambda.md#function-that-adds-the-body-hash-lambdaedge). CloudFront
 // signs requests to the Lambda function URL with origin access control,
 // which needs the SHA256 of the body in x-amz-content-sha256 for requests

@@ -34,11 +34,11 @@ case "$service $operation" in
       key=${key%%\'*}
       case "$key" in
         RepositoryUri) echo "$account.dkr.ecr.$region.amazonaws.com/redmine" ;;
-        ReceiptRuleSetName) echo redmine-shared ;;
-        TemplatesBucketName) echo "redmine-templates-$account-$region" ;;
+        ReceiptRuleSetName) echo redmine-kit-shared ;;
+        TemplatesBucketName) echo "redmine-kit-templates-$account-$region" ;;
         CertificateArn) echo "arn:aws:acm:us-east-1:$account:certificate/00000000-0000-0000-0000-000000000000" ;;
         WebAclArn) echo "arn:aws:wafv2:us-east-1:$account:global/webacl/$stack/1" ;;
-        FunctionVersionArn) echo "arn:aws:lambda:us-east-1:$account:function:redmine-body-hash:3" ;;
+        FunctionVersionArn) echo "arn:aws:lambda:us-east-1:$account:function:redmine-kit-body-hash:3" ;;
         AssetsBucketName) echo "$stack-assets-$account-$region" ;;
         DistributionDomainName) echo d111111abcdef8.cloudfront.net ;;
         *) echo None ;;

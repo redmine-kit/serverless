@@ -26,8 +26,8 @@ deploy_stack() {
   # (the tests lower the limit with TEMPLATE_BODY_LIMIT).
   local body=(--template-body "file://$template") key bucket
   if (($(wc -c <"$template") > ${TEMPLATE_BODY_LIMIT:-51200})); then
-    bucket=$(output redmine-shared "$region" TemplatesBucketName)
-    [[ -n "$bucket" && "$bucket" != None ]] || fail "$name: the template needs the templates bucket of redmine-shared"
+    bucket=$(output redmine-kit-shared "$region" TemplatesBucketName)
+    [[ -n "$bucket" && "$bucket" != None ]] || fail "$name: the template needs the templates bucket of redmine-kit-shared"
     key="$name/$(sha256sum "$template" | cut -c1-16).yaml"
     aws s3 cp "$template" "s3://$bucket/$key" --region "$region" --only-show-errors
     body=(--template-url "https://$bucket.s3.$region.amazonaws.com/$key")
@@ -111,7 +111,7 @@ create_secrets() {
 # CloudFormation cannot (docs/security.md#retention-periods).
 #   edge_log_retention <days>
 edge_log_retention() {
-  local group=/aws/lambda/us-east-1.redmine-body-hash region
+  local group=/aws/lambda/us-east-1.redmine-kit-body-hash region
   for region in $(aws ec2 describe-regions --query 'Regions[].RegionName' --output text); do
     if [[ "$(aws logs describe-log-groups --region "$region" --log-group-name-prefix "$group" \
       --query "logGroups[?logGroupName=='$group'] | length(@)" --output text)" == 1 ]]; then

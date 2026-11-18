@@ -64,6 +64,6 @@ def instance_params($image_uri; $certificate; $web_acl; $body_hash; $public_key)
     p("ScheduleTimezone"; .schedule.timezone // "UTC"),
     p("AlarmTopicArn"; .alarms.snsTopicArn // "") ];
 
-# Tags of every stack: redmine:instance and the tags of redmine.json.
+# Tags of every stack: redmine-kit:instance and the tags of redmine.json.
 def stack_tags:
-  [{Key: "redmine:instance", Value: instance}] + ((.tags // {}) | to_entries | map({Key: .key, Value: .value}));
+  [{Key: "redmine-kit:instance", Value: instance}] + ((.tags // {}) | to_entries | map({Key: .key, Value: .value}));

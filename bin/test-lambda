@@ -100,7 +100,7 @@ first=$(values)
 check "create_secrets keeps existing secrets" lib create_secrets
 check "the secrets are unchanged" test "$(values)" == "$first"
 check "SECRET_KEY_BASE and the private key are SecureString" test \
-  "$(awk '{ print $1, $2 }' <<<"$first" | grep -cE '(SECRET_KEY_BASE|REDMINE_CLOUDFRONT_PRIVATE_KEY|REDMINE_DB_PASSWORD) SecureString$')" == 3
+  "$(awk '{ print $1, $2 }' <<<"$first" | grep -cE '(SECRET_KEY_BASE|REDMINE_S3_CLOUDFRONT_PRIVATE_KEY|REDMINE_DB_PASSWORD) SecureString$')" == 3
 # PostgreSQL here does not check the password.
 aws ssm put-parameter --name "${ssm_path}REDMINE_DB_HOST" --type String --value postgres --overwrite >/dev/null
 
@@ -123,7 +123,7 @@ create() { # <role> <timeout>
     --code "ImageUri=$image_uri" --architectures "$architecture" \
     --role "arn:aws:iam::000000000000:role/$instance-$1" --memory-size 2048 --timeout "$2" \
     --environment "$(jq -nc --arg role "$1" --arg ssm "$ssm_path" --arg queue "$queue_url" '{Variables: {
-      REDMINE_ROLE: $role, REDMINE_SSM_PATH: $ssm, REDMINE_JOBS_QUEUE_URL: $queue,
+      REDMINE_ROLE: $role, REDMINE_SSM_PATH: $ssm, REDMINE_SQS_QUEUE_URL: $queue,
       REDMINE_DB_NAME: "postgres", REDMINE_DB_USERNAME: "postgres", REDMINE_DB_SSLMODE: "disable"}}')" >/dev/null
   if ! aws lambda wait function-active-v2 --function-name "$instance-$1"; then
     aws lambda get-function-configuration --function-name "$instance-$1" \

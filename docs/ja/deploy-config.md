@@ -241,7 +241,7 @@ CloudFormation は SecureString パラメーターを作成できないので、
 | --- | --- | --- |
 | `/<instance>/env/SECRET_KEY_BASE` | SecureString | 64 バイトの乱数の 16 進数 |
 | `/<instance>/env/REDMINE_DB_PASSWORD` | SecureString | 32 バイトの乱数の 16 進数 (RDS が受け付けない文字を含まない)。RDS は動的参照 (`{{resolve:ssm-secure:…}}`) で受け取る |
-| `/<instance>/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL 用のキーペアの秘密鍵 (RSA 2048) |
+| `/<instance>/env/REDMINE_S3_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL 用のキーペアの秘密鍵 (RSA 2048) |
 | `/<instance>/deploy/CLOUDFRONT_PUBLIC_KEY` | String | その公開鍵。インスタンスのスタックが CloudFront に登録する (キーグループ `<instance>-attachments`)。`env/` の下ではないので、関数は読み込まない |
 
 <a id="templates"></a>

@@ -94,7 +94,7 @@ run() {
     -e REDMINE_ROLE="$role" \
     -e REDMINE_DB_NAME=postgres -e REDMINE_DB_USERNAME=postgres -e REDMINE_DB_SSLMODE=disable \
     -e REDMINE_SSM_PATH="$ssm_path" "${aws_env[@]}" \
-    -e REDMINE_JOBS_QUEUE_URL="$queue_url" \
+    -e REDMINE_SQS_QUEUE_URL="$queue_url" \
     "$@" "$image" >/dev/null
 }
 
@@ -366,7 +366,7 @@ event=$(jq -nc --arg body "$job" --arg handle "$handle" --arg account "$account"
   body: $body, md5OfBody: "", messageAttributes: {}, eventSource: "aws:sqs",
   eventSourceARN: "arn:aws:sqs:us-east-1:\($account):redmine-jobs", awsRegion: "us-east-1"}]}')
 # After the job, redmine_kit_aws_sqs deletes the message at
-# REDMINE_JOBS_QUEUE_URL (the emulator here), not at the public host the gem
+# REDMINE_SQS_QUEUE_URL (the emulator here), not at the public host the gem
 # builds from the ARN, which the internal network does not reach. The runtime
 # may write the job's log after the invocation returns, so the log is read for
 # a few seconds.

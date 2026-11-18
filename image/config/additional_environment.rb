@@ -9,7 +9,7 @@
 
 config.cache_store = :memory_store, { size: 64 * 1024 * 1024 }
 # Jobs run in the request unless redmine_kit_aws_sqs switches them to SQS
-# (when REDMINE_JOBS_QUEUE_URL is set; docs/lambda.md#background-jobs).
+# (when REDMINE_SQS_QUEUE_URL is set; docs/lambda.md#background-jobs).
 config.active_job.queue_adapter = :inline
 config.active_record.dump_schema_after_migration = false
 config.hosts << ENV['REDMINE_HOST'] if ENV['REDMINE_HOST'].present?

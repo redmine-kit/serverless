@@ -48,7 +48,7 @@ Parameters:
     Type: String
     Description: >-
       The PEM public key whose private key Redmine uses to sign the URLs of
-      attachments (/<instance>/env/REDMINE_CLOUDFRONT_PRIVATE_KEY).
+      attachments (/<instance>/env/REDMINE_S3_CLOUDFRONT_PRIVATE_KEY).
   MaxUploadBytes:
     Type: Number
     Default: 104857600
@@ -814,19 +814,19 @@ Resources:
         Variables:
           REDMINE_ROLE: web
           # The image the function runs, for the Status tab (redmine_kit_aws_lambda).
-          REDMINE_IMAGE: !Ref ImageUri
+          REDMINE_LAMBDA_IMAGE: !Ref ImageUri
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
           REDMINE_DB_USERNAME: redmine
           REDMINE_HOST: !Ref Domain
-          REDMINE_JOBS_QUEUE_URL: !Ref JobQueue
+          REDMINE_SQS_QUEUE_URL: !Ref JobQueue
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
           REDMINE_COSTEXPLORER_ENABLED: !Ref CostExplorerEnabled
-          REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
-          REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
-          REDMINE_MAIL_BUCKET: !Ref MailBucket
+          REDMINE_S3_CLOUDFRONT_DOMAIN: !Ref Domain
+          REDMINE_S3_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
+          REDMINE_SES_MAIL_BUCKET: !Ref MailBucket
   # IAM authentication: only CloudFront, signing with origin access control,
   # can call it.
   WebUrl:
@@ -878,18 +878,18 @@ Resources:
         Variables:
           REDMINE_ROLE: worker
           # The image the function runs, for the Status tab (redmine_kit_aws_lambda).
-          REDMINE_IMAGE: !Ref ImageUri
+          REDMINE_LAMBDA_IMAGE: !Ref ImageUri
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
           REDMINE_DB_USERNAME: redmine
           REDMINE_HOST: !Ref Domain
-          REDMINE_JOBS_QUEUE_URL: !Ref JobQueue
+          REDMINE_SQS_QUEUE_URL: !Ref JobQueue
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
-          REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
-          REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
-          REDMINE_MAIL_BUCKET: !Ref MailBucket
+          REDMINE_S3_CLOUDFRONT_DOMAIN: !Ref Domain
+          REDMINE_S3_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
+          REDMINE_SES_MAIL_BUCKET: !Ref MailBucket
   # One job per invocation: the gem's handler deletes the messages that
   # succeeded, and a failure makes SQS deliver the job again.
   WorkerJobs:
@@ -945,20 +945,20 @@ Resources:
         Variables:
           REDMINE_ROLE: task
           # The image the function runs, for the Status tab (redmine_kit_aws_lambda).
-          REDMINE_IMAGE: !Ref ImageUri
+          REDMINE_LAMBDA_IMAGE: !Ref ImageUri
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
           REDMINE_DB_USERNAME: redmine
           REDMINE_HOST: !Ref Domain
-          REDMINE_JOBS_QUEUE_URL: !Ref JobQueue
+          REDMINE_SQS_QUEUE_URL: !Ref JobQueue
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
           REDMINE_COSTEXPLORER_ENABLED: !Ref CostExplorerEnabled
           REDMINE_COSTEXPLORER_TAG_KEY: !Ref CostExplorerTagKey
-          REDMINE_CLOUDFRONT_DOMAIN: !Ref Domain
-          REDMINE_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
-          REDMINE_MAIL_BUCKET: !Ref MailBucket
+          REDMINE_S3_CLOUDFRONT_DOMAIN: !Ref Domain
+          REDMINE_S3_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
+          REDMINE_SES_MAIL_BUCKET: !Ref MailBucket
   TaskAsync:
     Type: AWS::Lambda::EventInvokeConfig
     Properties:

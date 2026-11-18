@@ -100,7 +100,7 @@ create_secrets() {
   if ! aws ssm get-parameter --name "/$instance/deploy/CLOUDFRONT_PUBLIC_KEY" >/dev/null 2>&1; then
     openssl genrsa -out "$work/cloudfront.pem" 2048 2>/dev/null
     openssl rsa -in "$work/cloudfront.pem" -pubout -out "$work/cloudfront.pub" 2>/dev/null
-    put_new_parameter "/$instance/env/REDMINE_CLOUDFRONT_PRIVATE_KEY" SecureString <"$work/cloudfront.pem"
+    put_new_parameter "/$instance/env/REDMINE_S3_CLOUDFRONT_PRIVATE_KEY" SecureString <"$work/cloudfront.pem"
     rm -f "$work/cloudfront.pem"
     put_new_parameter "/$instance/deploy/CLOUDFRONT_PUBLIC_KEY" String <"$work/cloudfront.pub"
   fi

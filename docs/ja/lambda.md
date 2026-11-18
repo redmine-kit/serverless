@@ -199,11 +199,11 @@ Redmine は、起動時にアセットが古いと判断すると `public/assets
 | `/redmine/env/REDMINE_DB_HOST` | String | RDS のエンドポイント (`<インスタンスの ID>.<ランダムな文字>.ap-northeast-1.rds.amazonaws.com`)。シークレットではないが、Redmine の設定をまとめて読むためにここに置く | インスタンスのスタック |
 | `/redmine/env/REDMINE_DB_PASSWORD` | SecureString | データベースユーザーのパスワード ([rds.md](rds.md#settings)) | 初回の `bin/deploy` ([deploy-config.md](deploy-config.md#secrets)) |
 | `/redmine/env/SECRET_KEY_BASE` | SecureString | Rails のシークレットキー | 同上 |
-| `/redmine/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL の秘密鍵 ([Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/setup.html#configuration)) | 同上 |
+| `/redmine/env/REDMINE_S3_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL の秘密鍵 ([Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/setup.html#configuration)) | 同上 |
 
 インスタンスのスタックが、3 つの関数に環境変数 `REDMINE_SSM_PATH=/<instance>/env/` を渡し、実行ロールには、そのパスだけに対する `ssm:GetParametersByPath` を許可します ([iam.md](iam.md#permissions-common-to-the-three-functions))。十分早く読み込まれるように、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から追加します。イメージテストでは、データベースのホストを SSM (moto) だけに置いても、`db:migrate`、web の画面、worker のジョブが成功するので、`config/database.yml` より前に読み込めていることが分かります (2026-11-09。[testing.md](testing.md#image-tests))。
 
-秘密でない設定 (バケット名、ドメイン、リージョン、データベース名、データベースのユーザー名) は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME` (デフォルトは `redmine`)、`REDMINE_DB_USERNAME` (デフォルトは `redmine`)、`REDMINE_JOBS_QUEUE_URL` (ジョブキュー)、`REDMINE_HOST` (ドメイン) として読みます。`REDMINE_IMAGE` は、関数が動かすイメージの digest 付きの URI で、`redmine_kit_aws_lambda` が「ステータス」のタブに表示します。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE` (デフォルトは `verify-full`) は、ローカルのテストでだけ変更します。
+秘密でない設定 (バケット名、ドメイン、リージョン、データベース名、データベースのユーザー名) は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME` (デフォルトは `redmine`)、`REDMINE_DB_USERNAME` (デフォルトは `redmine`)、`REDMINE_SQS_QUEUE_URL` (ジョブキュー)、`REDMINE_HOST` (ドメイン) として読みます。`REDMINE_LAMBDA_IMAGE` は、関数が動かすイメージの digest 付きの URI で、`redmine_kit_aws_lambda` が「ステータス」のタブに表示します。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE` (デフォルトは `verify-full`) は、ローカルのテストでだけ変更します。
 
 SecureString は AWS マネージドキー (`aws/ssm`) で暗号化します。このキーで実行ロールに `kms:Decrypt` が必要かは、構築時に確認します。実行環境は起動時に 1 回だけパラメーターを読むので、値を変更したら、関数の設定を更新して新しい環境を起動させます。
 
@@ -225,7 +225,7 @@ Rails の設定は、どこに書くかで有効になるかどうかが変わ�
 | 項目 | 説明 | 値 | 設定場所 |
 | --- | --- | --- | --- |
 | `config.cache_store` | Rails 8.1 のデフォルトは `tmp/cache/` のファイル。`production.rb` は設定していない。キャッシュするデータ、調整、共有キャッシュは [cache.md](cache.md)、セッションは [session.md](session.md) | `:memory_store` (環境ごと、上限 64 MB) | `additional_environment.rb` |
-| `config.active_job.queue_adapter` | デフォルトの `:async` は、環境が停止するとジョブが失われる (下記)。`production.rb` は設定していない | `:inline`。`REDMINE_JOBS_QUEUE_URL` がある場合 (Lambda 上)、`redmine_kit_aws_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン |
+| `config.active_job.queue_adapter` | デフォルトの `:async` は、環境が停止するとジョブが失われる (下記)。`production.rb` は設定していない | `:inline`。`REDMINE_SQS_QUEUE_URL` がある場合 (Lambda 上)、`redmine_kit_aws_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン |
 | `config.active_record.dump_schema_after_migration` | migration 後の `db/schema.rb` の書き出しを無効にする。`production.rb` ではコメントアウトされている | `false` | `additional_environment.rb` |
 | `config.hosts` | Rails が受け付けるホスト名。Rails は `Host` と `X-Forwarded-Host` の両方をこれと照合する (下の「ホストとスキーム」) | Redmine のドメインだけ (`REDMINE_HOST`)。関数 URL のホスト名は入れない | `additional_environment.rb` |
 | `config.filter_redirect` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と記録させる ([security.md](security.md#logs)) | CloudFront のドメインの `/files/` と `/tmp/` の下の URL | `additional_environment.rb` |
@@ -284,7 +284,7 @@ sequenceDiagram
 | キュー | 標準キュー 1 つ (`redmine-jobs`)。デッドレターキュー (`redmine-jobs-dlq`) を設定し、3 回受信して失敗したメッセージを移動する |
 | ジョブ用の関数 | `redmine-worker`。`redmine-web` と同じイメージで、`REDMINE_ROLE=worker`。Puma は起動しない |
 | ハンドラー | gem のハンドラー (`redmine/config/environment.Aws::ActiveJob::SQS::LambdaHandler.job_handler`)。プラグインが、失敗を記録するためにラップする。Rails を読み込んでから、メッセージごとにジョブを実行し、成功したメッセージを削除する。gem は、イベントの ARN から組み立てたキューの URL で、メッセージを自分で削除する |
-| プラグイン | `redmine_kit_aws_sqs` が、キューアダプターを設定し (`REDMINE_JOBS_QUEUE_URL` がある場合だけ)、Redmine のキューを `redmine-jobs` に向け、Redmine とプラグインのジョブクラスだけを実行させ、最後に失敗したジョブを記録し、「ジョブ」画面を追加する ([プラグインの資料](https://redmine-kit.github.io/redmine_aws_sqs/ja/)) |
+| プラグイン | `redmine_kit_aws_sqs` が、キューアダプターを設定し (`REDMINE_SQS_QUEUE_URL` がある場合だけ)、Redmine のキューを `redmine-jobs` に向け、Redmine とプラグインのジョブクラスだけを実行させ、最後に失敗したジョブを記録し、「ジョブ」画面を追加する ([プラグインの資料](https://redmine-kit.github.io/redmine_aws_sqs/ja/)) |
 | バッチサイズ | 1。ハンドラーは、途中のジョブが失敗すると例外で終了するので、1 件ずつにして、失敗したものだけが再試行されるようにする |
 | 可視性タイムアウト | 関数のタイムアウト (900 秒) より長くする |
 

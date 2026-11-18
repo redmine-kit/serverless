@@ -219,7 +219,7 @@ CloudFormation cannot create SecureString parameters, so `bin/deploy` creates th
 | --- | --- | --- |
 | `/<instance>/env/SECRET_KEY_BASE` | SecureString | 64 random bytes in hex |
 | `/<instance>/env/REDMINE_DB_PASSWORD` | SecureString | 32 random bytes in hex (no characters that RDS refuses). RDS takes it with a dynamic reference (`{{resolve:ssm-secure:…}}`) |
-| `/<instance>/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | The private key (RSA 2048) of the key pair for signed attachment URLs |
+| `/<instance>/env/REDMINE_S3_CLOUDFRONT_PRIVATE_KEY` | SecureString | The private key (RSA 2048) of the key pair for signed attachment URLs |
 | `/<instance>/deploy/CLOUDFRONT_PUBLIC_KEY` | String | Its public key, which the instance stack registers in CloudFront (the key group `<instance>-attachments`). It is not under `env/`, so the functions do not load it |
 
 ### Templates

@@ -98,7 +98,7 @@ check "the behaviors fit the Free plan and /favicons/* is cached without cookies
 
 echo "== Functions"
 functions_problems=$(python3.13 test/deploy/functions.py infra/instance.yaml 2>&1)
-check "the three functions get their image in REDMINE_IMAGE" test -z "$functions_problems"
+check "the three functions get their image in REDMINE_LAMBDA_IMAGE" test -z "$functions_problems"
 [[ -z "$functions_problems" ]] || echo "$functions_problems"
 
 echo "== Roles"
@@ -175,16 +175,16 @@ check "first deployment: the checks go through the distribution" grep -q -- "--c
 check "secrets: SECRET_KEY_BASE is 128 hex digits" grep -qxE '[0-9a-f]{128}' "$state/ssm/_redmine_env_SECRET_KEY_BASE"
 check "secrets: the database password is 64 hex digits" grep -qxE '[0-9a-f]{64}' "$state/ssm/_redmine_env_REDMINE_DB_PASSWORD"
 check "secrets: SecureString" test "$(cat "$state"/ssm/_redmine_env_*.type | sort -u)" == SecureString
-check "secrets: the private key is an RSA key" openssl pkey -in "$state/ssm/_redmine_env_REDMINE_CLOUDFRONT_PRIVATE_KEY" -noout
+check "secrets: the private key is an RSA key" openssl pkey -in "$state/ssm/_redmine_env_REDMINE_S3_CLOUDFRONT_PRIVATE_KEY" -noout
 check "secrets: the public key in the stack is the private key's" test \
   "$(value "$(cat "$state/params/redmine.json")" CloudFrontPublicKey)" == \
-  "$(openssl pkey -in "$state/ssm/_redmine_env_REDMINE_CLOUDFRONT_PRIVATE_KEY" -pubout)"
+  "$(openssl pkey -in "$state/ssm/_redmine_env_REDMINE_S3_CLOUDFRONT_PRIVATE_KEY" -pubout)"
 no_secret_leaks() {
   local file
   for file in "$state"/ssm/_redmine_env_SECRET_KEY_BASE "$state"/ssm/_redmine_env_REDMINE_DB_PASSWORD; do
     ! grep -q -F -f "$file" "$state/calls" "$state/output" || return 1
   done
-  ! grep -q -F "$(sed -n 2p "$state/ssm/_redmine_env_REDMINE_CLOUDFRONT_PRIVATE_KEY")" "$state/calls" "$state/output"
+  ! grep -q -F "$(sed -n 2p "$state/ssm/_redmine_env_REDMINE_S3_CLOUDFRONT_PRIVATE_KEY")" "$state/calls" "$state/output"
 }
 check "secrets: on no command line and not in the output" no_secret_leaks
 check "secrets: no file of them is left" test -z "$(find /tmp -name parameter.json 2>/dev/null)"

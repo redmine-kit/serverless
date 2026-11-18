@@ -62,7 +62,7 @@ flowchart LR
 
 SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`) で暗号化します。このキーについて `kms:Decrypt` を IAM で付与する必要があるかは、構築時に確認します。
 
-各行は、いずれかのプラグインのための権限です。Serverless 以外で使うときの権限も、各プラグインの IAM 権限のページにあります。[Redmine AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/ja/iam.html) (ジョブと「ジョブ」画面)、[Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/setup.html#iam-permissions) (添付ファイル)、[Redmine AWS SES](https://redmine-kit.github.io/redmine_aws_ses/ja/iam.html) (メール)、[Redmine AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/ja/iam.html) (起動時の設定) です。[Redmine AWS](https://redmine-kit.github.io/redmine_aws/ja/iam.html) と [Redmine AWS Lambda](https://redmine-kit.github.io/redmine_aws_lambda/ja/iam.html) 自体には権限は不要です。このページは、それらを関数別にまとめたものです。
+各行は、いずれかのプラグインのための権限です。Serverless 以外で使うときの権限も、各プラグインの IAM 権限のページにあります。[Redmine Kit AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/ja/iam.html) (ジョブと「ジョブ」画面)、[Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/setup.html#iam-permissions) (添付ファイル)、[Redmine Kit AWS SES](https://redmine-kit.github.io/redmine_aws_ses/ja/iam.html) (メール)、[Redmine Kit AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/ja/iam.html) (起動時の設定) です。[Redmine Kit AWS](https://redmine-kit.github.io/redmine_aws/ja/iam.html) と [Redmine Kit AWS Lambda](https://redmine-kit.github.io/redmine_aws_lambda/ja/iam.html) 自体には権限は不要です。このページは、それらを関数別にまとめたものです。
 
 <a id="execution-role-of-redmine-web"></a>
 
@@ -82,7 +82,7 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 
 メールは、SES v2 の `SendEmail` に raw 形式で全文を渡して送信します。SES のドキュメントの例は、送信の権限として `ses:SendEmail` と `ses:SendRawEmail` の両方を許可しているので、この設計もそれに合わせます。v2 の raw 形式の送信に `ses:SendRawEmail` が必須かは、まだ確認していません。
 
-ブラウザーはこのロールを使いません。アップロードとダウンロードは、CloudFront の秘密鍵で署名した URL で CloudFront を経由します。関数は、この鍵をほかのシークレットと一緒に SSM Parameter Store から読み込みます ([Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/iam.html))。CloudFront は OAC でバケットにアクセスし、バケットポリシーがそれを許可します (下の「リソースベースのポリシー」)。
+ブラウザーはこのロールを使いません。アップロードとダウンロードは、CloudFront の秘密鍵で署名した URL で CloudFront を経由します。関数は、この鍵をほかのシークレットと一緒に SSM Parameter Store から読み込みます ([Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/iam.html))。CloudFront は OAC でバケットにアクセスし、バケットポリシーがそれを許可します (下の「リソースベースのポリシー」)。
 
 <a id="execution-role-of-redmine-worker"></a>
 
@@ -106,10 +106,10 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 | --- | --- | --- |
 | `s3:GetObject`<br>`s3:DeleteObject` | メール用バケットの `inbound/*` | 受信したメールの取り込み ([mail.md](mail.md#importing)) |
 | `s3:PutObject` | メール用バケットの `processed/*` | 取り込んだメールの移動 |
-| `s3:GetObject` | メール用バケットの `processed/*` | 取り込み済みのメールの再取り込み (`bin/rake redmine_aws_ses:receive_mail MESSAGE_ID=…`。[mail.md](mail.md#receipt-rules)) |
+| `s3:GetObject` | メール用バケットの `processed/*` | 取り込み済みのメールの再取り込み (`bin/rake redmine_kit_aws_ses:receive_mail MESSAGE_ID=…`。[mail.md](mail.md#receipt-rules)) |
 | `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | 添付ファイル用バケット (`redmine-web` と同じ範囲) | 未添付の添付ファイルの削除 (`redmine:attachments:prune`)、メールの添付ファイルの保存 |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元ドメインの SES ID | rake タスクのメール (期日通知など) |
-| `ses:GetEmailIdentity` | 送信元ドメインの SES ID | メールのタブに表示する SES の状態の、1 時間ごとの更新 (`redmine_aws_ses:refresh`、[tasks.md](tasks.md#scheduled-runs)) |
+| `ses:GetEmailIdentity` | 送信元ドメインの SES ID | メールのタブに表示する SES の状態の、1 時間ごとの更新 (`redmine_kit_aws_ses:refresh`、[tasks.md](tasks.md#scheduled-runs)) |
 | `ses:GetAccount`<br>`ses:ListSuppressedDestinations` | `*` (対象を絞り込めない) | 同上 |
 | `sqs:SendMessage` | ジョブキュー | rake の中で投入されるジョブ |
 | `sqs:SendMessage` | 失敗時の送信先キュー (`redmine-task-failures`) | SES からの非同期呼び出しが失敗したときの送信先。Lambda の送信先へは、実行ロールの権限で送信する |
@@ -118,7 +118,7 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 
 ## Cost Explorer (`costExplorer.enabled` のときだけ)
 
-プラグイン [Redmine AWS Cost Explorer](https://redmine-kit.github.io/redmine_aws_costexplorer/ja/) を追加したイメージ (派生イメージ。Serverless のイメージには含まれていません) では、このプラグインがアカウントの費用を読み取ります。ポリシー `costexplorer` で、`redmine-task` (毎日の更新。プラグインが呼ぶのはこれだけ) に、`*` に対する `ce:GetCostAndUsage` と `ce:GetCostForecast` を許可します。2 つのアクションは、請求ビューをリソースとします (サービス認可リファレンス、2026-11-10 に確認)。プラグインはプライマリ請求ビューを使います。その ARN にポリシーを絞り込めるかは未確認です。`redmine-web` と `redmine-worker` は Cost Explorer を呼びません。アクセス許可の境界 `redmine-boundary` も、この 2 つのアクションを許可します。
+プラグイン [Redmine Kit AWS Cost Explorer](https://redmine-kit.github.io/redmine_aws_costexplorer/ja/) を追加したイメージ (派生イメージ。Serverless のイメージには含まれていません) では、このプラグインがアカウントの費用を読み取ります。ポリシー `costexplorer` で、`redmine-task` (毎日の更新。プラグインが呼ぶのはこれだけ) に、`*` に対する `ce:GetCostAndUsage` と `ce:GetCostForecast` を許可します。2 つのアクションは、請求ビューをリソースとします (サービス認可リファレンス、2026-11-10 に確認)。プラグインはプライマリ請求ビューを使います。その ARN にポリシーを絞り込めるかは未確認です。`redmine-web` と `redmine-worker` は Cost Explorer を呼びません。アクセス許可の境界 `redmine-boundary` も、この 2 つのアクションを許可します。
 
 <a id="resource-based-policies"></a>
 

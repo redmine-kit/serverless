@@ -1,8 +1,8 @@
 """Checks the mail bucket permissions of the roles in infra/instance.yaml that
 import email: redmine-task (received email and re-imports with
-redmine_aws_ses:receive_mail MESSAGE_ID=…) and redmine-worker ("Fetch again"
+redmine_kit_aws_ses:receive_mail MESSAGE_ID=…) and redmine-worker ("Fetch again"
 on the "Email receiving" tab). They read both inbound/ and processed/, where
-redmine_aws_ses looks for a message, write processed/ and delete in inbound/
+redmine_kit_aws_ses looks for a message, write processed/ and delete in inbound/
 only (MailBucket#move_to_processed), and nothing more. Prints each problem; prints nothing when
 the template matches. Run by test/deploy/run.sh with python3.13 of the tools
 image, whose ruamel.yaml reads the CloudFormation tags."""

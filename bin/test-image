@@ -135,9 +135,9 @@ check "task handler" handler_tests
 ssm_tests() {
   docker run --rm --read-only --tmpfs /tmp --user 993:993 "${at_emulator[@]}" "${aws_env[@]}" \
     -w /var/task/redmine --entrypoint ruby "$image" \
-    -rbundler/setup -rredmine_aws_ssm/loader plugins/redmine_aws_ssm/test/loader_test.rb
+    -rbundler/setup -rredmine_kit_aws_ssm/loader plugins/redmine_kit_aws_ssm/test/loader_test.rb
 }
-check "SSM loading (redmine_aws_ssm)" ssm_tests
+check "SSM loading (redmine_kit_aws_ssm)" ssm_tests
 
 echo "== contents"
 check "arm64 Linux image" test "$(docker image inspect "$image" -f '{{.Os}}/{{.Architecture}}')" = linux/arm64
@@ -202,7 +202,7 @@ from_ssm() {
 }
 check "the secrets come from SSM" from_ssm
 plugins_loaded() {
-  task '{"command":"runner","args":["puts %w[redmine_aws redmine_aws_lambda redmine_aws_sqs redmine_aws_ses redmine_aws_s3 redmine_aws_ssm].reject { |id| Redmine::Plugin.installed?(id) }.join(%q(,)).presence || %q(all)"]}' |
+  task '{"command":"runner","args":["puts %w[redmine_kit_aws redmine_kit_aws_lambda redmine_kit_aws_sqs redmine_kit_aws_ses redmine_kit_aws_s3 redmine_kit_aws_ssm].reject { |id| Redmine::Plugin.installed?(id) }.join(%q(,)).presence || %q(all)"]}' |
     tail -n 1 | grep -qx all
 }
 check "the plugins are loaded (base, Lambda, SQS, SES, S3, SSM)" plugins_loaded
@@ -365,7 +365,7 @@ handle=$(jq -r '.Messages[0].ReceiptHandle' <<<"$received")
 event=$(jq -nc --arg body "$job" --arg handle "$handle" --arg account "$account" '{Records: [{messageId: "image-test", receiptHandle: $handle,
   body: $body, md5OfBody: "", messageAttributes: {}, eventSource: "aws:sqs",
   eventSourceARN: "arn:aws:sqs:us-east-1:\($account):redmine-jobs", awsRegion: "us-east-1"}]}')
-# After the job, redmine_aws_sqs deletes the message at
+# After the job, redmine_kit_aws_sqs deletes the message at
 # REDMINE_JOBS_QUEUE_URL (the emulator here), not at the public host the gem
 # builds from the ARN, which the internal network does not reach. The runtime
 # may write the job's log after the invocation returns, so the log is read for

@@ -13,7 +13,7 @@ The specifications on this page were checked against the Redmine 7.0.3 source as
 ```mermaid
 flowchart LR
   subgraph this["This project (Redmine)"]
-    redmine["Redmine and<br>redmine_aws_lambda"]
+    redmine["Redmine and<br>redmine_kit_aws_lambda"]
   end
   subgraph ai["AI project (separate)"]
     worker["AI<br>processing"]

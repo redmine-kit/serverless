@@ -15,7 +15,7 @@ AI 機能 (メールで受信したチケットの振り分け、長いチケッ
 ```mermaid
 flowchart LR
   subgraph this["このプロジェクト(Redmine)"]
-    redmine["Redmine と<br>redmine_aws_lambda"]
+    redmine["Redmine と<br>redmine_kit_aws_lambda"]
   end
   subgraph ai["AI のプロジェクト(別)"]
     worker["AI の処理"]

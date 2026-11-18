@@ -30,7 +30,7 @@ sequenceDiagram
 | --- | --- |
 | gem | `aws-actionmailer-ses` 1.2.0 (2026-05-21). Official from AWS (aws/aws-actionmailer-ses-ruby) |
 | Dependencies | `actionmailer` 7.1 or later, `aws-sdk-sesv2` |
-| Installation | A dependency of the plugin `redmine_aws_ses`, installed with it when the image is built |
+| Installation | A dependency of the plugin `redmine_kit_aws_ses`, installed with it when the image is built |
 | Delivery method | `:ses_v2` (SES v2 API). `:ses` (SES v1 API) also exists but is not used |
 | Bcc | The gem passes the message's Bcc to SES `bcc_addresses`. Bcc recipients do not appear in the message |
 
@@ -55,13 +55,13 @@ production:
 
 Verify Redmine's subdomain as an SES identity in the Region you use (DKIM), and request production access (leaving the sandbox) in advance. Both identities and production access are per Region ([Receiving domain](#receiving-domain)).
 
-`redmine-web`, `redmine-worker` and `redmine-task` are in the VPC, so they reach the SES API through an interface endpoint for the SES API or through the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)). The "Email sending" and "Email receiving" tabs of the administration pages show the state of SES that `redmine_aws_ses:refresh` stored, and do not call SES when they open: `redmine-task` reads it hourly ([tasks.md](tasks.md#scheduled-runs)), and `redmine-web` reads it again for the tabs' "Refresh" link, removes addresses from the suppression list and sends test email ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/admin.html#sending-email)). What the plugin calls, and the permissions it needs, are on the plugin's [setup page](https://redmine-kit.github.io/redmine_aws_ses/setup.html#network).
+`redmine-web`, `redmine-worker` and `redmine-task` are in the VPC, so they reach the SES API through an interface endpoint for the SES API or through the NAT instance ([rds.md](rds.md#routes-out-of-the-vpc)). The "Email sending" and "Email receiving" tabs of the administration pages show the state of SES that `redmine_kit_aws_ses:refresh` stored, and do not call SES when they open: `redmine-task` reads it hourly ([tasks.md](tasks.md#scheduled-runs)), and `redmine-web` reads it again for the tabs' "Refresh" link, removes addresses from the suppression list and sends test email ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/admin.html#sending-email)). What the plugin calls, and the permissions it needs, are on the plugin's [setup page](https://redmine-kit.github.io/redmine_aws_ses/setup.html#network).
 
 ### When sending fails
 
-Email for which the SES API call fails is retried automatically, and email that still cannot be sent is recorded and can be sent again from the administration screen. The plugin `redmine_aws_ses` raises delivery errors only in `redmine-worker` and handles each kind of SES error; the details, and the steps to send again, are in its [sending.md](https://redmine-kit.github.io/redmine_aws_ses/sending.html). In Serverless:
+Email for which the SES API call fails is retried automatically, and email that still cannot be sent is recorded and can be sent again from the administration screen. The plugin `redmine_kit_aws_ses` raises delivery errors only in `redmine-worker` and handles each kind of SES error; the details, and the steps to send again, are in its [sending.md](https://redmine-kit.github.io/redmine_aws_ses/sending.html). In Serverless:
 
-- **Retries in the queue:** Account errors and temporary errors that outlast the retries inside the job are raised; SQS redelivers the message and moves it to the dead-letter queue after 3 receives ([lambda.md](lambda.md#background-jobs)), where `redmine_aws_sqs` records it.
+- **Retries in the queue:** Account errors and temporary errors that outlast the retries inside the job are raised; SQS redelivers the message and moves it to the dead-letter queue after 3 receives ([lambda.md](lambda.md#background-jobs)), where `redmine_kit_aws_sqs` records it.
 - **Get notified:** A CloudWatch alarm notifies when the dead-letter queue or the failure records have 1 or more items. Sending errors are also logged, and a metric filter counts them.
 - **Send again:** "Email sending" (SES) and "Jobs" (SQS) in the administration screen.
 
@@ -90,7 +90,7 @@ sequenceDiagram
   E->>B: Store the full message (inbound/message ID)
   E->>T: Asynchronous invocation (SES event)
   T->>B: GetObject
-  T->>T: rake redmine_aws_ses:receive_mail
+  T->>T: rake redmine_kit_aws_ses:receive_mail
   T->>B: Move to processed/
 ```
 
@@ -136,14 +136,14 @@ SES receipt rules are grouped in rule sets, and only one rule set can be active 
 - **Retention period:** Email moved to `processed/` and email left in `inbound/` (discarded or failed) are both deleted after 30 days by a lifecycle rule ([security.md](security.md#retention-periods)). Re-imports must be done within this period. A re-import is run from the "Email receiving" tab of the administration pages, where it runs in `redmine-worker` as a job ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/admin.html#receiving-email)), or locally with this command, which runs in `redmine-task`:
 
   ```sh
-  bin/rake redmine_aws_ses:receive_mail MESSAGE_ID=<message ID>
+  bin/rake redmine_kit_aws_ses:receive_mail MESSAGE_ID=<message ID>
   ```
 
 ### Importing
 
-The receipt rule invokes `redmine-task` asynchronously with the SES event. Its handler runs the rake task `redmine_aws_ses:receive_mail` with the message ID, the envelope recipients, the envelope sender and SES's verdicts from the event ([tasks.md](tasks.md#kinds-of-events)). The task reads the message from the mail bucket, chooses the project from the recipients, passes the message to Redmine's `MailHandler`, and moves it to `processed/`; the steps and the options are in the plugin's [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/receiving.html#importing).
+The receipt rule invokes `redmine-task` asynchronously with the SES event. Its handler runs the rake task `redmine_kit_aws_ses:receive_mail` with the message ID, the envelope recipients, the envelope sender and SES's verdicts from the event ([tasks.md](tasks.md#kinds-of-events)). The task reads the message from the mail bucket, chooses the project from the recipients, passes the message to Redmine's `MailHandler`, and moves it to `processed/`; the steps and the options are in the plugin's [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/receiving.html#importing).
 
-Attachments in email are saved as Redmine attachments, and the plugin `redmine_aws_s3` stores them in S3 ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#uploads-through-lambda)). SES invokes Lambda asynchronously, so on failure Lambda retries up to 2 times. Events that still fail go to the failure destination (SQS), and an alarm reports the count.
+Attachments in email are saved as Redmine attachments, and the plugin `redmine_kit_aws_s3` stores them in S3 ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/attachments.html#uploads-through-lambda)). SES invokes Lambda asynchronously, so on failure Lambda retries up to 2 times. Events that still fail go to the failure destination (SQS), and an alarm reports the count.
 
 ### Spoofing and spam
 

@@ -5,21 +5,21 @@
 # Redmine lists puma only in its test group. Bundler warns that it is listed
 # twice; this entry puts it in the default group too.
 gem 'puma'
-# The Redmine AWS plugins, as gems from GitHub Packages
+# The Redmine Kit AWS plugins, as gems from GitHub Packages
 # (docs/architecture.md#distribution). Installing from there needs a token
 # with read:packages (bin/lib/plugin.sh). The image links each installed gem
 # into plugins/, where Redmine loads plugins from. Bundler requires the gems
-# that must act before Rails initializes: redmine_aws_ssm reads SSM Parameter
+# that must act before Rails initializes: redmine_kit_aws_ssm reads SSM Parameter
 # Store before Rails reads the configuration, and the boot/ files of
-# redmine_aws_lambda (the /events middleware), redmine_aws_sqs (the queue
-# adapter) and redmine_aws_ses (the SES delivery method). Redmine loads
-# redmine_aws, which every other plugin requires, and redmine_aws_s3 from
+# redmine_kit_aws_lambda (the /events middleware), redmine_kit_aws_sqs (the queue
+# adapter) and redmine_kit_aws_ses (the SES delivery method). Redmine loads
+# redmine_kit_aws, which every other plugin requires, and redmine_kit_aws_s3 from
 # plugins/ like any plugin.
 source 'https://rubygems.pkg.github.com/redmine-kit' do
-  gem 'redmine_aws', '>= 0.1.0', require: false
-  gem 'redmine_aws_ssm', '>= 0.1.0'
-  gem 'redmine_aws_lambda', '>= 0.1.0'
-  gem 'redmine_aws_sqs', '>= 0.1.0'
-  gem 'redmine_aws_ses', '>= 0.1.0'
-  gem 'redmine_aws_s3', '>= 0.1.0', require: false
+  gem 'redmine_kit_aws', '>= 0.1.0', require: false
+  gem 'redmine_kit_aws_ssm', '>= 0.1.0'
+  gem 'redmine_kit_aws_lambda', '>= 0.1.0'
+  gem 'redmine_kit_aws_sqs', '>= 0.1.0'
+  gem 'redmine_kit_aws_ses', '>= 0.1.0'
+  gem 'redmine_kit_aws_s3', '>= 0.1.0', require: false
 end

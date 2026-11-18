@@ -120,7 +120,7 @@ Resources:
               - sqs:*
               - ses:*
               - lambda:InvokeFunction
-              # redmine_aws_costexplorer
+              # redmine_kit_aws_costexplorer
               - ce:GetCostAndUsage
               - ce:GetCostForecast
             Resource: "*"

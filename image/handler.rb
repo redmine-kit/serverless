@@ -56,7 +56,7 @@ module TaskHandler
     message_id = ses.dig('mail', 'messageId')
     raise ArgumentError, 'SES event without messageId' unless message_id.is_a?(String) && !message_id.empty?
 
-    ['rake', ['redmine_aws_ses:receive_mail'], { 'MESSAGE_ID' => message_id }.merge(ses_receipt(ses))]
+    ['rake', ['redmine_kit_aws_ses:receive_mail'], { 'MESSAGE_ID' => message_id }.merge(ses_receipt(ses))]
   end
 
   # The envelope sender (mail.source) lets the plugin match a registered

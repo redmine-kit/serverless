@@ -42,10 +42,10 @@ GitHub Actions も同じ `bin/test` の手順を順に呼び出すので、ロ�
 
 ### プラグインの同時修正
 
-イメージは、プラグインを `image/Gemfile.lock` のバージョンの gem として、GitHub Packages からインストールします ([architecture.md](architecture.md#distribution))。`REDMINE_AWS_DIR`、`REDMINE_AWS_LAMBDA_DIR`、`REDMINE_AWS_SSM_DIR`、`REDMINE_AWS_SQS_DIR`、`REDMINE_AWS_SES_DIR`、`REDMINE_AWS_S3_DIR` のいずれかにプラグインのチェックアウトを指定すると、イメージをビルドするスクリプトは、インストールした gem をその作業ツリーで置き換えます (`bin/lib/plugin.sh`)。たとえば、このリポジトリの隣にある SSM プラグインのチェックアウトでイメージをテストするときは、次のようにします。
+イメージは、プラグインを `image/Gemfile.lock` のバージョンの gem として、GitHub Packages からインストールします ([architecture.md](architecture.md#distribution))。`REDMINE_KIT_AWS_DIR`、`REDMINE_KIT_AWS_LAMBDA_DIR`、`REDMINE_KIT_AWS_SSM_DIR`、`REDMINE_KIT_AWS_SQS_DIR`、`REDMINE_KIT_AWS_SES_DIR`、`REDMINE_KIT_AWS_S3_DIR` のいずれかにプラグインのチェックアウトを指定すると、イメージをビルドするスクリプトは、インストールした gem をその作業ツリーで置き換えます (`bin/lib/plugin.sh`)。たとえば、このリポジトリの隣にある SSM プラグインのチェックアウトでイメージをテストするときは、次のようにします。
 
 ```sh
-REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
+REDMINE_KIT_AWS_SSM_DIR=../redmine_kit_aws_ssm bin/test-image
 ```
 
 スクリプトは、GitHub Packages 用の Bundler の認証情報を、`gh` のログインか `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` から取得します (CI はそれを `GITHUB_TOKEN` から設定します)。
@@ -73,35 +73,35 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 
 ## プラグインテスト
 
-プラグインの機能ごとに、テストを書きます。共有の「AWS」メニューと AWS クライアントは `redmine_aws` ([機能](https://redmine-kit.github.io/redmine_aws/ja/#features))、Lambda での実行は `redmine_aws_lambda` ([機能](https://redmine-kit.github.io/redmine_aws_lambda/ja/#features))、S3 の添付ファイルは `redmine_aws_s3` ([資料](https://redmine-kit.github.io/redmine_aws_s3/ja/))、SES でのメールの送信と受信は `redmine_aws_ses` ([資料](https://redmine-kit.github.io/redmine_aws_ses/ja/)) です。テストは、それぞれのプラグインが持ちます。機能を有効にする条件がそろわないときに、Redmine 標準のまま動くことも確認します。
+プラグインの機能ごとに、テストを書きます。共有の「AWS」メニューと AWS クライアントは `redmine_kit_aws` ([機能](https://redmine-kit.github.io/redmine_aws/ja/#features))、Lambda での実行は `redmine_kit_aws_lambda` ([機能](https://redmine-kit.github.io/redmine_aws_lambda/ja/#features))、S3 の添付ファイルは `redmine_kit_aws_s3` ([資料](https://redmine-kit.github.io/redmine_aws_s3/ja/))、SES でのメールの送信と受信は `redmine_kit_aws_ses` ([資料](https://redmine-kit.github.io/redmine_aws_ses/ja/)) です。テストは、それぞれのプラグインが持ちます。機能を有効にする条件がそろわないときに、Redmine 標準のまま動くことも確認します。
 
-<a id="attachments-in-s3-redmine_aws_s3"></a>
+<a id="attachments-in-s3-redmine_kit_aws_s3"></a>
 
-### S3 の添付ファイル (`redmine_aws_s3`)
+### S3 の添付ファイル (`redmine_kit_aws_s3`)
 
 プラグインは、置き換えるコードと AWS への呼び出しを、すべて自分のリポジトリと CI でテストします。S3 の応答ごとのスタブ、リクエスト用の moto、テストが付ける GuardDuty のタグ、公開鍵で検証する CloudFront 署名付き URL を使います。テストで確認すること、ローカルで再現できないこと (CloudFront、GuardDuty、一致しないチェックサムを S3 が拒否すること) は、プラグインの [setup.md](https://redmine-kit.github.io/redmine_aws_s3/ja/setup.html#what-the-tests-check) にあります。Serverless は、デプロイ後の動作を確認します (下記)。
 
-<a id="the-aws-menu-redmine_aws"></a>
+<a id="the-aws-menu-redmine_kit_aws"></a>
 
-### AWS メニュー (`redmine_aws`)
+### AWS メニュー (`redmine_kit_aws`)
 
 プラグインは、「AWS」メニュー、「ステータス」のタブ、AWS クライアントの設定を、自分のリポジトリと CI で、Redmine のすべてのテストと一緒にテストします ([その README](https://redmine-kit.github.io/redmine_aws/ja/#tests))。
 
-<a id="running-on-lambda-redmine_aws_lambda"></a>
+<a id="running-on-lambda-redmine_kit_aws_lambda"></a>
 
-### Lambda での実行 (`redmine_aws_lambda`)
+### Lambda での実行 (`redmine_kit_aws_lambda`)
 
 プラグインは、`/events`、転送されたホスト、アセットの設定、固定する設定、「ステータス」のタブの項目を、自分のリポジトリと CI で、Redmine のすべてのテストと一緒にテストします ([その README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#tests))。
 
-<a id="email-redmine_aws_ses"></a>
+<a id="email-redmine_kit_aws_ses"></a>
 
-### メール (`redmine_aws_ses`)
+### メール (`redmine_kit_aws_ses`)
 
 プラグインは、SES v2 での送信、SES の各エラー、SES イベントの判定と宛先を使うメールバケットからの取り込み、プロジェクトのアドレス、画面を、自分のリポジトリと CI で、LocalStack (トークンがなければ moto) に対してテストします ([sending.md](https://redmine-kit.github.io/redmine_aws_ses/ja/sending.html#tests)、[receiving.md](https://redmine-kit.github.io/redmine_aws_ses/ja/receiving.html#tests))。
 
-<a id="jobs-redmine_aws_sqs"></a>
+<a id="jobs-redmine_kit_aws_sqs"></a>
 
-### ジョブ (`redmine_aws_sqs`)
+### ジョブ (`redmine_kit_aws_sqs`)
 
 プラグインは、`aws-activejob-sqs` を通した SQS でのジョブ、許可リスト、失敗の記録、再送信、デッドレターキューの再処理を、自分のリポジトリと CI で、AWS Emulator に対してテストします ([setup.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/setup.html#tests))。
 
@@ -111,7 +111,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 
 | 対象 | 確認内容 | ツール |
 | --- | --- | --- |
-| SSM の読み込み (`redmine_aws_ssm`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。既存の環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM に接続できなければ失敗する。イメージテストでは、3 つの役割が、データベースホスト、そのパスワード、`SECRET_KEY_BASE` を SSM だけから読み、`config/database.yml` より前に読めていることを確認する | Minitest、AWS Emulator (プラグインの `test/loader_test.rb`、`bin/test-image`) |
+| SSM の読み込み (`redmine_kit_aws_ssm`) | `/<instance>/env/` の下を読み、10 件を超えても続きを読み、SecureString を復号する。既存の環境変数を上書きしない。環境変数にできない名前と、下の階層は読まない。SSM に接続できなければ失敗する。イメージテストでは、3 つの役割が、データベースホスト、そのパスワード、`SECRET_KEY_BASE` を SSM だけから読み、`config/database.yml` より前に読めていることを確認する | Minitest、AWS Emulator (プラグインの `test/loader_test.rb`、`bin/test-image`) |
 | タスクハンドラー | 決められた `command` と `env` だけを受け付ける。SES イベントを判別し、メッセージ ID、宛先、エンベロープの送信者、判定を渡す。形式が正しくない値は設定せず、コマンドのイベントでは SES の変数を渡せない。子プロセスの終了コードと出力の末尾を返す。日本語を文字の途中で切らない | Minitest |
 | 拡張機能のスクリプト | `REDMINE_ROLE` によって、実際の Lambda Web Adapter を起動するか、何もしない拡張機能として登録するかが変わる | ShellCheck、イメージテスト |
 | webhook | `webhook_blocklist` の範囲 (プライベート、リンクローカル) の送信先に送らない。送信先のエラーでジョブが失敗し、再配信される | Minitest、moto |
@@ -127,7 +127,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 
 ### 実行方法
 
-`bin/test-core` は、イメージの Dockerfile の `core-test` ステージで実行します。このステージは、イメージと同じ Redmine のソース、`config/` のファイル、`Gemfile.lock` に、テスト用の gem、ImageMagick と、イメージと同じ Subversion と Git のクライアントを追加したものです。Redmine の `master` は、クライアントがインストールされているリポジトリの種類だけを有効にします ([#43209](https://www.redmine.org/issues/43209))。Redmine のテストのフィクスチャのリポジトリは Subversion で、Git がないとスキップされるテストもあります。テストは、イメージのプラグイン (`redmine_aws`、`redmine_aws_lambda`、`redmine_aws_s3`、`redmine_aws_ses`、`redmine_aws_sqs`、`redmine_aws_ssm`) をインストールした状態で実行します。データベースは `bin/test-services` の PostgreSQL で、プロセッサー数と同じ数のワーカーで並列に実行します (数は `PARALLEL_WORKERS` で変更できます)。
+`bin/test-core` は、イメージの Dockerfile の `core-test` ステージで実行します。このステージは、イメージと同じ Redmine のソース、`config/` のファイル、`Gemfile.lock` に、テスト用の gem、ImageMagick と、イメージと同じ Subversion と Git のクライアントを追加したものです。Redmine の `master` は、クライアントがインストールされているリポジトリの種類だけを有効にします ([#43209](https://www.redmine.org/issues/43209))。Redmine のテストのフィクスチャのリポジトリは Subversion で、Git がないとスキップされるテストもあります。テストは、イメージのプラグイン (`redmine_kit_aws`、`redmine_kit_aws_lambda`、`redmine_kit_aws_s3`、`redmine_kit_aws_ses`、`redmine_kit_aws_sqs`、`redmine_kit_aws_ssm`) をインストールした状態で実行します。データベースは `bin/test-services` の PostgreSQL で、プロセッサー数と同じ数のワーカーで並列に実行します (数は `PARALLEL_WORKERS` で変更できます)。
 
 イメージは、Lambda のファイルシステムが読み取り専用なので、migration の後に `db/schema.rb` を書き出しません。しかし並列テストはこのファイルを読むので、`bin/test-core` が、Redmine とプラグインの migration (デプロイと同じく `redmine:plugins:migrate` も) の後、テストの前に書き出します。SCM リポジトリや LDAP サーバーが必要なテストは、このステージで用意しないので、Redmine がスキップします。
 
@@ -143,7 +143,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 
 プラグインは、有効にする条件がそろわないとき (S3 バケットの設定、`REDMINE_ROLE`、SES の設定がない) は、差し替えを有効にしません。そのため、プラグインをインストールした状態でも、Redmine のユニットテスト、機能テスト、統合テストがすべて通る必要があります。
 
-`redmine_aws_s3` を有効にしたときは、Redmine の添付ファイルのテスト (`test/unit/attachment_test.rb`、`test/unit/attachment_transaction_test.rb`、`test/functional/attachments_controller_test.rb`、`test/functional/attachments_visibility_test.rb`、`test/integration/attachments_test.rb`) を moto 上で実行します。ローカルファイルを前提にするもの (ディスク上のパスを直接確認するもの) は、除外する理由を書いて除外します。
+`redmine_kit_aws_s3` を有効にしたときは、Redmine の添付ファイルのテスト (`test/unit/attachment_test.rb`、`test/unit/attachment_transaction_test.rb`、`test/functional/attachments_controller_test.rb`、`test/functional/attachments_visibility_test.rb`、`test/integration/attachments_test.rb`) を moto 上で実行します。ローカルファイルを前提にするもの (ディスク上のパスを直接確認するもの) は、除外する理由を書いて除外します。
 
 <a id="watching-the-replaced-code"></a>
 
@@ -174,7 +174,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 | シークレット (SSM の値、`SECRET_KEY_BASE`、データベースパスワード) が、画面の HTML に出力されない | 機能テスト |
 | SES、SQS、S3 の状態が、SDK の応答のスタブのとおりに表示される。API がエラーのときも画面を開ける | 機能テスト |
 | 再送信、削除、デッドレターキューの再処理、サプレッションリストからの削除の操作が、確認の後で実行され、ログに記録される | 機能テスト、システムテスト |
-| 受信設定を変更すると、`redmine_aws_ses:receive_mail` が次の実行から新しい設定を使う | 機能テスト |
+| 受信設定を変更すると、`redmine_kit_aws_ses:receive_mail` が次の実行から新しい設定を使う | 機能テスト |
 | 突き合わせがジョブとしてキューに追加され、結果が画面に表示される | 機能テスト、統合テスト (moto) |
 
 <a id="system-tests"></a>
@@ -201,7 +201,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 - **条件:** arm64、読み取り専用のファイルシステム (`--read-only`)、書き込めるのは `/tmp` だけ (`--tmpfs /tmp`)、非特権ユーザー (`--user` で、root 以外の任意の番号)。データベースは、RDS と同じメジャーバージョンの PostgreSQL コンテナです。AWS (SSM と SQS) は `bin/test-services` の AWS Emulator で、ローカルでも、CI でも、フォークからのプルリクエストでも同じです。モックは使いません。テストが使う API は、エミュレーターにすべてあります。コンテナは、PostgreSQL とエミュレーターにしか接続できない Docker の内部ネットワークで動かし、役割のコンテナから AWS に接続できるときは、チェックが失敗します。エミュレーターの証明書には `127.0.0.1` と `localhost` しか含まれないので、コンテナは `https://127.0.0.1:9297` でエミュレーターに接続します。短時間だけ動くコンテナはエミュレーターのネットワーク名前空間で動かし、役割のコンテナは、それぞれ転送用のコンテナのネットワーク名前空間を共有して接続します (役割のコンテナは同時に動き、TLS は端から端まで保たれます)。証明書は、非特権ユーザーが読めるようにエミュレーターからコピーし、`AWS_CA_BUNDLE` で渡します。SQS は、エミュレーターが対応する唯一のプロトコルである JSON プロトコルで呼び出します。
 - **`web`:** リクエストは、CloudFront が関数 URL を通して送る形で送ります。`Host` に関数 URL のホスト名、`X-Forwarded-Host` にドメイン、`X-Forwarded-Proto` に `https` を入れ、`REDMINE_HOST` にドメインを設定します ([lambda.md](lambda.md#host-and-scheme))。Puma が起動し、ログイン画面が 200 を返し、セッション Cookie に `Secure` が付くこと ([session.md](session.md#the-secure-attribute-of-the-session-cookie))、`X-Forwarded-Host` がないとき、ほかのホストや関数 URL のホスト名が入っているときに Rails が 403 を返すこと、リダイレクト先が `https://` とドメインになること、ログインフォームの POST でログインでき、CSRF トークンが違う POST は 422 になること、アセットの `.manifest.json` があること、起動後に `/tmp` 以外に書き込んでいないことを確認します。Redmine 7.1 (master) では、設定したファビコンを `Cache-Control: max-age=31556952, public, immutable` で返すことも確認します。CloudFront のキャッシュビヘイビア `/favicons/*` がキャッシュするレスポンスです ([lambda.md](lambda.md#the-favicon))。Puma は `127.0.0.1` だけで待ち受けるので、画面はコンテナ内から開きます。ランタイムインターフェイスエミュレーターはリクエストを Lambda Web Adapter に通さないので、その経路は Lambda 結合テストで確認します。
 - **`task`:** ベースイメージにあるランタイムインターフェイスエミュレーター (`aws-lambda-rie`) でハンドラーを呼び出し、`rake db:migrate`、`redmine:load_default_data`、`rake -T`、`rails runner` が動くこと、Redmine が Subversion と Git のクライアントを見つけ、`/tmp` に作成した Subversion と Git のリポジトリを読めること ([lambda.md](lambda.md#repositories))、失敗したタスクが終了コードを返すこと、許可していないコマンドと `env` の名前を拒否することを確認します。メールの取り込みは、プラグインと一緒に追加します。
-- **`worker`:** 同じくランタイムインターフェイスエミュレーターで実行します。ジョブをキューに送信して受信し、そのメッセージの受信ハンドルを付けた SQS 形式のイベントで worker に渡します。呼び出しが成功すること、ジョブが実行されること (プロジェクトが削除され、その通知メールが SQS に追加される)、worker がメッセージを削除すること (処理中のメッセージが残らない。`redmine_aws_sqs` は `REDMINE_JOBS_QUEUE_URL` で削除する。[setup.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/setup.html))、許可していないジョブクラスが実行されないことを確認します。
+- **`worker`:** 同じくランタイムインターフェイスエミュレーターで実行します。ジョブをキューに送信して受信し、そのメッセージの受信ハンドルを付けた SQS 形式のイベントで worker に渡します。呼び出しが成功すること、ジョブが実行されること (プロジェクトが削除され、その通知メールが SQS に追加される)、worker がメッセージを削除すること (処理中のメッセージが残らない。`redmine_kit_aws_sqs` は `REDMINE_JOBS_QUEUE_URL` で削除する。[setup.md](https://redmine-kit.github.io/redmine_aws_sqs/ja/setup.html))、許可していないジョブクラスが実行されないことを確認します。
 - **内容:** ImageMagick の `convert`、Ghostscript、Pandoc (3.8.3 以上)、Subversion と Git のクライアント (`svn`、`git`) が動くこと、`/var/task` と `/opt` のすべてを非特権ユーザーが読めること、ビルドしたアセットがあることを確認します。タスクハンドラーの単体テストも、イメージ内で実行します。push したマニフェストが arm64 だけで、インデックス形式になっていないかは、イメージを push するときに確認します。
 - **派生イメージ:** `bin/test-image <イメージ> <redmine.json>` は、`image.plugins` と `image.themes` の派生イメージ ([architecture.md](architecture.md#derived-images)) に同じテストを実行し、追加したプラグインが読み込まれてマイグレーション済みであること、追加したテーマが見つかり、そのアセットがコンパイル済みであることも確認します。`bin/deploy` は、派生イメージをプッシュする前にこれを実行します。`bin/test-derived-image [ベースイメージ]` は、`test/derived/` の派生イメージをビルドしてテストします。1 つは GitHub Packages の gem、コミットを指定した Git のプラグイン、ディレクトリのプラグインとテーマ、プラグインの設定を含むもの、1 つは RubyGems の gem を含み、GitHub のトークンなしでビルドするものです。ほかの 2 つは、わかりやすいメッセージで失敗する必要があるもので、ベースイメージの gem の別のバージョンを必要とするプラグインと、認証情報が必要な Git の取得元です。CI では、Redmine のリリースのイメージのジョブが、ビルドしたばかりのイメージに対して実行します。
 
@@ -226,7 +226,7 @@ REDMINE_AWS_SSM_DIR=../redmine_aws_ssm bin/test-image
 - **スタックパラメーター:** 正しい設定のそれぞれで、`deploy/params.jq` がテンプレートごとに作るパラメーターが、そのテンプレートのパラメーターであり、デフォルト値のないパラメーターがすべて渡されること。デフォルト値と、渡した値も比較します。
 - **CloudFront のキャッシュビヘイビア:** `test/deploy/behaviors.py` が `infra/instance.yaml` を読み、キャッシュビヘイビアがデフォルトのものを含めて 5 つ以下 (無料プラン) であること、`/favicons/*` が Redmine に転送され、GET と HEAD だけで、`CachingOptimized` と `SecurityHeadersPolicy` を使い、オリジンリクエストポリシー (Cookie の転送)、関数、署名付き URL がないことを確認します ([lambda.md](lambda.md#the-favicon))。オリジン `redmine` に、オリジンカスタムヘッダー `X-Forwarded-Host` (パラメーター `Domain`) と `X-Forwarded-Proto` (`https`) があることも確認します ([lambda.md](lambda.md#host-and-scheme))。
 - **関数の環境変数:** `test/deploy/functions.py` が `infra/instance.yaml` を読み、`redmine-web`、`redmine-worker`、`redmine-task` の `REDMINE_IMAGE` が、パラメーター `ImageUri` (イメージの digest 付きの URI) であることを確認します ([lambda.md](lambda.md#settings-and-secrets-ssm-parameter-store))。
-- **ロール:** `test/deploy/roles.py` が `infra/instance.yaml` を読み、`redmine-task` と `redmine-worker` のロールに、`redmine_aws_ses` が使うメール用バケットの権限が過不足なく付いていることを確認します。`inbound/*` と `processed/*` の両方への `s3:GetObject` (取り込みと再取り込みで、この両方からメッセージを探す)、`processed/*` への `s3:PutObject`、`inbound/*` だけへの `s3:DeleteObject` (削除するのは `inbound/` からの移動だけ) です ([iam.md](iam.md))。
+- **ロール:** `test/deploy/roles.py` が `infra/instance.yaml` を読み、`redmine-task` と `redmine-worker` のロールに、`redmine_kit_aws_ses` が使うメール用バケットの権限が過不足なく付いていることを確認します。`inbound/*` と `processed/*` の両方への `s3:GetObject` (取り込みと再取り込みで、この両方からメッセージを探す)、`processed/*` への `s3:PutObject`、`inbound/*` だけへの `s3:DeleteObject` (削除するのは `inbound/` からの移動だけ) です ([iam.md](iam.md))。
 - **手順:** すべての呼び出しを記録するフェイクの `aws`、`crane`、`curl` (`test/deploy/fake/`) に対して、`deploy/deploy.sh` を実行します。初回と 2 回目以降の手順の順序 (web と worker が新しいイメージになる前に、タスクがマイグレーションを実行する)、`--dry-run` (何も実行せず、書き込まず、呼び出さない)、`--code-only`、`--account`、変更のないスタック、デプロイを止めるマイグレーションの失敗、確認の失敗、どの呼び出しよりも前に止まる不正な設定。`image.plugins` と `image.themes` があれば、レジストリからコピーする代わりに派生イメージの tarball を digest でプッシュすること、tarball がなければ手順を実行しないこと。秘密の値は、形式、SecureString であること、スタックの公開鍵が秘密鍵と一致すること、コマンドラインにも出力にも表示されないことを確認します。
 - **設定のコード:** 設定を適用する Ruby のコードを、Redmine の `Setting` の代替オブジェクトに対して Ruby で実行します (`initial` と `enforce`、プラグインの設定のマージ)。
 
@@ -334,7 +334,7 @@ flowchart TD
 
 Dependabot が、Actions (`.github/workflows/actions.lock` も)、Docker イメージ、検査用の gem について、公開から 3 日 (パッチ) か 7 日 (その他) 経過したバージョンへの更新の PR を毎週作成します。
 
-`image/Gemfile.lock` は Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージ内で解決するためです。代わりに、毎週のワークフロー (`.github/workflows/update-gems.yml`) が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作成し、そのブランチで CI を実行します。cooldown で保留されるのは、gem のサーバーが公開日 (compact index の `created_at`。rubygems.org は返す) を返すバージョンだけで、返さないバージョンは、Bundler がすぐに採用します。GitHub Packages は `created_at` を返さないので (2026-11-12 に確認。[sources.md](sources.md#gems-and-tools))、Redmine AWS のプラグインの新しいバージョンは、公開されるとすぐに採用されます。lock をコミットしておくのは、どのビルドも、確認済みの同じバージョンの gem をチェックサムと一緒にインストールするためです。
+`image/Gemfile.lock` は Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージ内で解決するためです。代わりに、毎週のワークフロー (`.github/workflows/update-gems.yml`) が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作成し、そのブランチで CI を実行します。cooldown で保留されるのは、gem のサーバーが公開日 (compact index の `created_at`。rubygems.org は返す) を返すバージョンだけで、返さないバージョンは、Bundler がすぐに採用します。GitHub Packages は `created_at` を返さないので (2026-11-12 に確認。[sources.md](sources.md#gems-and-tools))、Redmine Kit AWS のプラグインの新しいバージョンは、公開されるとすぐに採用されます。lock をコミットしておくのは、どのビルドも、確認済みの同じバージョンの gem をチェックサムと一緒にインストールするためです。
 
 <a id="services-and-credentials"></a>
 

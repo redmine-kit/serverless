@@ -108,8 +108,8 @@ ENTRYPOINT ["/var/task/bin/start"]
 | --- | --- | --- |
 | 配置場所 | `/var/task/redmine` | Lambda のベースイメージは、関数のコードを `/var/task` (`LAMBDA_TASK_ROOT`) に置く |
 | `config/database.yml` | ビルド時に追加する。`adapter:` はリテラルで `postgresql` と書く。接続先、データベース名、ユーザー名、パスワードは、環境変数から ERB で読む (`REDMINE_DB_HOST`、`REDMINE_DB_NAME`、`REDMINE_DB_USERNAME`、`REDMINE_DB_PASSWORD`)。TLS は、イメージ内の RDS の CA 証明書バンドルで `verify-full` にする (`sslrootcert: /var/task/rds-global-bundle.pem`) | Redmine の `Gemfile` は、`config/database.yml` の `adapter:` の値で、インストールするデータベースの gem を決める。`adapter:` の値を ERB にすると、Gemfile も ERB を評価するので、リテラルで書いておく方が確実。RDS for PostgreSQL なので、`pg` gem を使う |
-| `Gemfile.local` | `puma` (Redmine はテスト用のグループにしか含めていない) と、GitHub Packages のプラグインの gem。Bundler が早い段階で読み込む (その `boot/` のファイル) `redmine_aws_ssm`、`redmine_aws_lambda`、`redmine_aws_sqs`、`redmine_aws_ses` と、`require: false` の `redmine_aws` (どのプラグインも必要とする) と `redmine_aws_s3` ([architecture.md](architecture.md#distribution)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem (`redmine_aws_sqs` の `aws-activejob-sqs`、`redmine_aws_ses` の `aws-actionmailer-ses`、`redmine_aws_s3` の `aws-sdk-s3` など) は、そのプラグインの gemspec の依存関係にする |
-| 独自のプラグイン | `redmine_aws`、`redmine_aws_lambda`、`redmine_aws_s3`、`redmine_aws_ses`、`redmine_aws_sqs`、`redmine_aws_ssm`。どれも GitHub Packages の gem で、インストールしたディレクトリを、アセットのビルド前に `plugins/` にリンクし、プラグインのスクリプトがマニフェストに含まれるようにする | 拡張は独自のプラグインにする ([architecture.md](architecture.md#the-plugins)) |
+| `Gemfile.local` | `puma` (Redmine はテスト用のグループにしか含めていない) と、GitHub Packages のプラグインの gem。Bundler が早い段階で読み込む (その `boot/` のファイル) `redmine_kit_aws_ssm`、`redmine_kit_aws_lambda`、`redmine_kit_aws_sqs`、`redmine_kit_aws_ses` と、`require: false` の `redmine_kit_aws` (どのプラグインも必要とする) と `redmine_kit_aws_s3` ([architecture.md](architecture.md#distribution)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem (`redmine_kit_aws_sqs` の `aws-activejob-sqs`、`redmine_kit_aws_ses` の `aws-actionmailer-ses`、`redmine_kit_aws_s3` の `aws-sdk-s3` など) は、そのプラグインの gemspec の依存関係にする |
+| 独自のプラグイン | `redmine_kit_aws`、`redmine_kit_aws_lambda`、`redmine_kit_aws_s3`、`redmine_kit_aws_ses`、`redmine_kit_aws_sqs`、`redmine_kit_aws_ssm`。どれも GitHub Packages の gem で、インストールしたディレクトリを、アセットのビルド前に `plugins/` にリンクし、プラグインのスクリプトがマニフェストに含まれるようにする | 拡張は独自のプラグインにする ([architecture.md](architecture.md#the-plugins)) |
 | gem | ビルド時に `vendor/bundle` にインストールし、実行時にはインストールしない (`BUNDLE_DEPLOYMENT`、`BUNDLE_WITHOUT=development:test`) | 実行時には書き込めない |
 | ファイルのアクセス権限 | どのユーザーからも読めるようにする | Lambda は、デフォルトの権限の少ないユーザーで実行する。このユーザーが、実行に必要なすべてのファイルを読める必要がある |
 | `HOME` | `/tmp` | Bundler、ImageMagick、Pandoc がホームディレクトリに書き込むことがある (推測) |
@@ -192,18 +192,18 @@ Redmine は、起動時にアセットが古いと判断すると `public/assets
 
 ### パラメーター
 
-プラグインの [Redmine AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/ja/) が、Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`/<instance>/env/` 直下のパラメーターを、すべて環境変数に読み込みます。読み込み方とタイミング、読み込まないものは、プラグインの資料にあります。パラメーターを追加すれば、コードを変更せずに環境変数が増えます。下の表は、インスタンス名が `redmine` の場合の例です。
+プラグインの [Redmine Kit AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/ja/) が、Rails が `config/database.yml` と `SECRET_KEY_BASE` を読む前に、`/<instance>/env/` 直下のパラメーターを、すべて環境変数に読み込みます。読み込み方とタイミング、読み込まないものは、プラグインの資料にあります。パラメーターを追加すれば、コードを変更せずに環境変数が増えます。下の表は、インスタンス名が `redmine` の場合の例です。
 
 | パラメーター | タイプ | 内容 | 書き込み元 |
 | --- | --- | --- | --- |
 | `/redmine/env/REDMINE_DB_HOST` | String | RDS のエンドポイント (`<インスタンスの ID>.<ランダムな文字>.ap-northeast-1.rds.amazonaws.com`)。シークレットではないが、Redmine の設定をまとめて読むためにここに置く | インスタンスのスタック |
 | `/redmine/env/REDMINE_DB_PASSWORD` | SecureString | データベースユーザーのパスワード ([rds.md](rds.md#settings)) | 初回の `bin/deploy` ([deploy-config.md](deploy-config.md#secrets)) |
 | `/redmine/env/SECRET_KEY_BASE` | SecureString | Rails のシークレットキー | 同上 |
-| `/redmine/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL の秘密鍵 ([Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/setup.html#configuration)) | 同上 |
+| `/redmine/env/REDMINE_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL の秘密鍵 ([Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/setup.html#configuration)) | 同上 |
 
 インスタンスのスタックが、3 つの関数に環境変数 `REDMINE_SSM_PATH=/<instance>/env/` を渡し、実行ロールには、そのパスだけに対する `ssm:GetParametersByPath` を許可します ([iam.md](iam.md#permissions-common-to-the-three-functions))。十分早く読み込まれるように、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から追加します。イメージテストでは、データベースのホストを SSM (moto) だけに置いても、`db:migrate`、web の画面、worker のジョブが成功するので、`config/database.yml` より前に読み込めていることが分かります (2026-11-09。[testing.md](testing.md#image-tests))。
 
-秘密でない設定 (バケット名、ドメイン、リージョン、データベース名、データベースのユーザー名) は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME` (デフォルトは `redmine`)、`REDMINE_DB_USERNAME` (デフォルトは `redmine`)、`REDMINE_JOBS_QUEUE_URL` (ジョブキュー)、`REDMINE_HOST` (ドメイン) として読みます。`REDMINE_IMAGE` は、関数が動かすイメージの digest 付きの URI で、`redmine_aws_lambda` が「ステータス」のタブに表示します。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE` (デフォルトは `verify-full`) は、ローカルのテストでだけ変更します。
+秘密でない設定 (バケット名、ドメイン、リージョン、データベース名、データベースのユーザー名) は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME` (デフォルトは `redmine`)、`REDMINE_DB_USERNAME` (デフォルトは `redmine`)、`REDMINE_JOBS_QUEUE_URL` (ジョブキュー)、`REDMINE_HOST` (ドメイン) として読みます。`REDMINE_IMAGE` は、関数が動かすイメージの digest 付きの URI で、`redmine_kit_aws_lambda` が「ステータス」のタブに表示します。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE` (デフォルトは `verify-full`) は、ローカルのテストでだけ変更します。
 
 SecureString は AWS マネージドキー (`aws/ssm`) で暗号化します。このキーで実行ロールに `kms:Decrypt` が必要かは、構築時に確認します。実行環境は起動時に 1 回だけパラメーターを読むので、値を変更したら、関数の設定を更新して新しい環境を起動させます。
 
@@ -225,12 +225,12 @@ Rails の設定は、どこに書くかで有効になるかどうかが変わ�
 | 項目 | 説明 | 値 | 設定場所 |
 | --- | --- | --- | --- |
 | `config.cache_store` | Rails 8.1 のデフォルトは `tmp/cache/` のファイル。`production.rb` は設定していない。キャッシュするデータ、調整、共有キャッシュは [cache.md](cache.md)、セッションは [session.md](session.md) | `:memory_store` (環境ごと、上限 64 MB) | `additional_environment.rb` |
-| `config.active_job.queue_adapter` | デフォルトの `:async` は、環境が停止するとジョブが失われる (下記)。`production.rb` は設定していない | `:inline`。`REDMINE_JOBS_QUEUE_URL` がある場合 (Lambda 上)、`redmine_aws_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン |
+| `config.active_job.queue_adapter` | デフォルトの `:async` は、環境が停止するとジョブが失われる (下記)。`production.rb` は設定していない | `:inline`。`REDMINE_JOBS_QUEUE_URL` がある場合 (Lambda 上)、`redmine_kit_aws_sqs` が `:sqs` にする | `additional_environment.rb` とプラグイン |
 | `config.active_record.dump_schema_after_migration` | migration 後の `db/schema.rb` の書き出しを無効にする。`production.rb` ではコメントアウトされている | `false` | `additional_environment.rb` |
 | `config.hosts` | Rails が受け付けるホスト名。Rails は `Host` と `X-Forwarded-Host` の両方をこれと照合する (下の「ホストとスキーム」) | Redmine のドメインだけ (`REDMINE_HOST`)。関数 URL のホスト名は入れない | `additional_environment.rb` |
 | `config.filter_redirect` | 添付ファイルの署名付き URL へのリダイレクトを、ログに `[FILTERED]` と記録させる ([security.md](security.md#logs)) | CloudFront のドメインの `/files/` と `/tmp/` の下の URL | `additional_environment.rb` |
-| `config.action_mailer.raise_delivery_errors` | `production.rb` が `false` にしている。送信エラーでジョブを失敗させ、再試行できるようにする ([sending.md](https://redmine-kit.github.io/redmine_aws_ses/ja/sending.html#raising-errors)) | `redmine-worker` でだけ `true` | プラグイン `redmine_aws_ses` |
-| `config.assets.redmine_detect_update` | `production.rb` が `true` にしている | `false` | プラグイン `redmine_aws_lambda` ([その README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#running-on-lambda)) |
+| `config.action_mailer.raise_delivery_errors` | `production.rb` が `false` にしている。送信エラーでジョブを失敗させ、再試行できるようにする ([sending.md](https://redmine-kit.github.io/redmine_aws_ses/ja/sending.html#raising-errors)) | `redmine-worker` でだけ `true` | プラグイン `redmine_kit_aws_ses` |
+| `config.assets.redmine_detect_update` | `production.rb` が `true` にしている | `false` | プラグイン `redmine_kit_aws_lambda` ([その README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#running-on-lambda)) |
 | `attachments_storage_path` | [attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#the-tmp-cache) | `/tmp/redmine/files` | `configuration.yml` |
 | `email_delivery` | [mail.md](mail.md) | `:ses_v2` (SES の API) | `configuration.yml` |
 | `webhook_blocklist` | webhook を、内部のアドレスや、メタデータサービスに使われるアドレス範囲に送らせない ([ai.md](ai.md#event-notifications-redmines-standard-webhooks))。VPC エンドポイント構成では、すべてのアドレスにする ([rds.md](rds.md)) | プライベートアドレス (`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`fc00::/7`)、ループバックアドレス (`127.0.0.0/8`、`::1/128`)、リンクローカルアドレス (`169.254.0.0/16`、`fe80::/10`) | `configuration.yml` |
@@ -284,7 +284,7 @@ sequenceDiagram
 | キュー | 標準キュー 1 つ (`redmine-jobs`)。デッドレターキュー (`redmine-jobs-dlq`) を設定し、3 回受信して失敗したメッセージを移動する |
 | ジョブ用の関数 | `redmine-worker`。`redmine-web` と同じイメージで、`REDMINE_ROLE=worker`。Puma は起動しない |
 | ハンドラー | gem のハンドラー (`redmine/config/environment.Aws::ActiveJob::SQS::LambdaHandler.job_handler`)。プラグインが、失敗を記録するためにラップする。Rails を読み込んでから、メッセージごとにジョブを実行し、成功したメッセージを削除する。gem は、イベントの ARN から組み立てたキューの URL で、メッセージを自分で削除する |
-| プラグイン | `redmine_aws_sqs` が、キューアダプターを設定し (`REDMINE_JOBS_QUEUE_URL` がある場合だけ)、Redmine のキューを `redmine-jobs` に向け、Redmine とプラグインのジョブクラスだけを実行させ、最後に失敗したジョブを記録し、「ジョブ」画面を追加する ([プラグインの資料](https://redmine-kit.github.io/redmine_aws_sqs/ja/)) |
+| プラグイン | `redmine_kit_aws_sqs` が、キューアダプターを設定し (`REDMINE_JOBS_QUEUE_URL` がある場合だけ)、Redmine のキューを `redmine-jobs` に向け、Redmine とプラグインのジョブクラスだけを実行させ、最後に失敗したジョブを記録し、「ジョブ」画面を追加する ([プラグインの資料](https://redmine-kit.github.io/redmine_aws_sqs/ja/)) |
 | バッチサイズ | 1。ハンドラーは、途中のジョブが失敗すると例外で終了するので、1 件ずつにして、失敗したものだけが再試行されるようにする |
 | 可視性タイムアウト | 関数のタイムアウト (900 秒) より長くする |
 
@@ -371,7 +371,7 @@ CloudFront は、関数 URL 自身のホスト名を `Host` として関数 URL 
 | `X-Forwarded-Proto` | `https` | スキーム。`Secure` の Cookie ([session.md](session.md#the-secure-attribute-of-the-session-cookie)) と URL の `https://`。CloudFront はビューワーの `X-Forwarded-Proto` を削除するので (CloudFront のドキュメント)、このヘッダーがなければ、スキームは関数 URL が追加するものに左右される |
 
 - **ビューワーが送るヘッダー:** ビューワーのリクエストに、オリジンカスタムヘッダーと同じ名前のヘッダーがあれば、CloudFront はオリジンに送る前にその値を上書きします (CloudFront のドキュメント、2026-11-10 に確認)。ビューワーは、これらのヘッダーで、Redmine から見えるホストやスキームを選べません。どちらのヘッダーも、CloudFront が追加できないヘッダーの一覧には入っていません。
-- **Rails は `Host` も照合する:** Rails のホストの認可 (`ActionDispatch::HostAuthorization`) は、`Host` が `config.hosts` にないとき、または `X-Forwarded-Host` があってそれが `config.hosts` にないときに、リクエストを 403 でブロックします (Rails 8.1.4 の `blocked_hosts`)。`config.hosts` はドメインだけなので、`Host` が関数 URL のホスト名のままだと、CloudFront を通るリクエストがすべてブロックされます。Lambda では、`redmine_aws_lambda` の Rack のミドルウェアが、ホストの認可より前に、`X-Forwarded-Host` の最後の値を `Host` に入れます ([README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#running-on-lambda))。これで Rails は、ドメインだけで照合し、URL を生成します。
+- **Rails は `Host` も照合する:** Rails のホストの認可 (`ActionDispatch::HostAuthorization`) は、`Host` が `config.hosts` にないとき、または `X-Forwarded-Host` があってそれが `config.hosts` にないときに、リクエストを 403 でブロックします (Rails 8.1.4 の `blocked_hosts`)。`config.hosts` はドメインだけなので、`Host` が関数 URL のホスト名のままだと、CloudFront を通るリクエストがすべてブロックされます。Lambda では、`redmine_kit_aws_lambda` の Rack のミドルウェアが、ホストの認可より前に、`X-Forwarded-Host` の最後の値を `Host` に入れます ([README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#running-on-lambda))。これで Rails は、ドメインだけで照合し、URL を生成します。
 - **関数 URL のホスト名は受け付けない:** `config.hosts` に入っていません。`X-Forwarded-Host` がないリクエスト、ほかのホストや関数 URL のホスト名が入ったリクエストは、Rails が 403 を返します。関数 URL への直接のリクエストは、関数の呼び出し前に IAM 認証で拒否されます (上記)。ホストの認可は、CloudFront を通らずに Redmine に届いたリクエストに対する 2 つ目の確認です。
 - **`Forwarded` ヘッダー:** `AllViewerExceptHostHeader` は、標準の `Forwarded` を含め、ビューワーのほかのヘッダーを転送します。Rails はホストを `X-Forwarded-Host` と `Host` からだけ取るので、`Forwarded` でホストは変わりません。Rack はスキームを `X-Forwarded-Proto` より先に `Forwarded` から読むので (Rack 3.2.8 の `forwarded_priority`)、`Forwarded: proto=http` を送ったビューワーは、自分のリクエストだけを HTTP に見せることになります。そのリクエストにはセッション Cookie が付かず、ログインできません。
 - **CSRF 対策:** Redmine は Rails のオリジンの確認を有効にしていません (Redmine は `load_defaults` を呼ばないので、`forgery_protection_origin_check` は `false` のまま。Rails 8.1.4)。CSRF 対策はセッションのトークンを確認し、ホストは関係しません。
@@ -406,7 +406,7 @@ Lambda@Edge で本文のハッシュを追加してから OAC が署名する構
 
 ### Lambda Web Adapter の `/events`
 
-関数 URL を経由せずに関数を呼び出すイベント (業務時間のウォームアップなど) は、Lambda Web Adapter が `/events` への POST として Puma に渡します (`AWS_LWA_PASS_THROUGH_PATH`)。プラグイン `redmine_aws_lambda` が、データベースにアクセスせずに 204 を返します ([その README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#running-on-lambda))。CloudFront から `/events` に来たリクエストにも、同じく 204 を返すだけです。
+関数 URL を経由せずに関数を呼び出すイベント (業務時間のウォームアップなど) は、Lambda Web Adapter が `/events` への POST として Puma に渡します (`AWS_LWA_PASS_THROUGH_PATH`)。プラグイン `redmine_kit_aws_lambda` が、データベースにアクセスせずに 204 を返します ([その README](https://redmine-kit.github.io/redmine_aws_lambda/ja/#running-on-lambda))。CloudFront から `/events` に来たリクエストにも、同じく 204 を返すだけです。
 
 <a id="serving-assets"></a>
 
@@ -482,7 +482,7 @@ CloudFront は、定額料金プランの無料プラン (月 0 ドル) を使�
 
 ## リポジトリ
 
-イメージには、Subversion のクライアント (`svn`) と Git のクライアント (`git`) があります。Lambda では、プラグイン `redmine_aws_lambda` が、「管理」›「設定」›「リポジトリ」の「使用するバージョン管理システム」で、この 2 つだけを有効にできるようにします。ほかの種類は、クライアントがイメージにないので無効のままです ([admin.md](https://redmine-kit.github.io/redmine_aws_lambda/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
+イメージには、Subversion のクライアント (`svn`) と Git のクライアント (`git`) があります。Lambda では、プラグイン `redmine_kit_aws_lambda` が、「管理」›「設定」›「リポジトリ」の「使用するバージョン管理システム」で、この 2 つだけを有効にできるようにします。ほかの種類は、クライアントがイメージにないので無効のままです ([admin.md](https://redmine-kit.github.io/redmine_aws_lambda/ja/admin.html#redmine-settings-that-cannot-work-on-lambda))。
 
 コマンドは、ビルドステージでインストールした Amazon Linux のパッケージ `subversion` と `git-core` のものです。イメージには、コマンド (`svn`、`git` と、イメージテストがリポジトリの作成に使う `svnadmin`) と、それがリンクする共有ライブラリのうちイメージにないもの (Subversion のライブラリ、APR、serf など。`git` には不要) だけをコピーします。パッケージそのものをインストールすると、`git-core` が `openssh-clients` を必要とし、それが systemd、PAM なども追加するので、約 176 MB 増えます。Redmine が実行するのはコマンドだけで、Git の組み込みコマンド (Redmine 7.0.3 では `branch`、`tag`、`ls-tree`、`log`、`diff`、`show`、`blame`) だけを使います。そのため、`/usr/libexec/git-core` にある Git のヘルパー (HTTPS のリモートなどに使う) はコピーしません。Redmine は、リモートの Git のリポジトリから取得しません。
 
@@ -508,7 +508,7 @@ Redmine は、ファイルと差分を毎回リポジトリから読み、コミ
 | 機能 | 理由 |
 | --- | --- |
 | Git のリポジトリ | Redmine はローカルのディスクから読むが、Lambda の `/tmp` は実行環境が停止すると失われる。保存先は未決定 ([リポジトリ](#repositories))。Subversion のリポジトリは使用できる。GitHub などとの連携は、このプロジェクトでは扱わず、ローカルのリポジトリを置き換える別のプラグインとして、別途検討する |
-| 受信メール用の Web サービス | メールは SES で受信する。設定はプラグイン `redmine_aws_lambda` が無効に固定する ([admin.md](https://redmine-kit.github.io/redmine_aws_lambda/ja/admin.html#redmine-settings-that-cannot-work-on-lambda)) |
+| 受信メール用の Web サービス | メールは SES で受信する。設定はプラグイン `redmine_kit_aws_lambda` が無効に固定する ([admin.md](https://redmine-kit.github.io/redmine_aws_lambda/ja/admin.html#redmine-settings-that-cannot-work-on-lambda)) |
 | 6 MB を超えるレスポンス、1 MB を超えるリクエスト本文 | 下記 |
 
 <a id="the-6-mb-limit"></a>

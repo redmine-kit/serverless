@@ -36,7 +36,7 @@ sequenceDiagram
 | --- | --- |
 | gem | `aws-actionmailer-ses` 1.2.0 (2026-05-21)。AWS 公式 (aws/aws-actionmailer-ses-ruby) |
 | 依存関係 | `actionmailer` 7.1 以上、`aws-sdk-sesv2` |
-| インストール | プラグイン `redmine_aws_ses` の依存関係として、イメージのビルド時に一緒にインストールする |
+| インストール | プラグイン `redmine_kit_aws_ses` の依存関係として、イメージのビルド時に一緒にインストールする |
 | 配信方法 | `:ses_v2` (SES v2 の API)。`:ses` (SES v1 の API) もあるが使わない |
 | Bcc | gem が、メールの Bcc を SES の `bcc_addresses` に渡す。Bcc の宛先は、メールの本文には表示されない |
 
@@ -65,15 +65,15 @@ production:
 
 Redmine のサブドメインを、使用するリージョンの SES の ID として検証し (DKIM)、本番稼働 (サンドボックスの解除) を事前に申請します。SES の ID と本番稼働は、どちらもリージョンごとです ([受信ドメイン](#receiving-domain))。
 
-`redmine-web`、`redmine-worker`、`redmine-task` は VPC 内にあるので、SES の API 用のインターフェイスエンドポイントか NAT インスタンスを経由して SES の API に接続します ([rds.md](rds.md#routes-out-of-the-vpc))。管理画面の「メール送信」と「メール受信」のタブは、`redmine_aws_ses:refresh` が保存した SES の状態を表示し、開いたときには SES を呼び出しません。`redmine-task` が 1 時間ごとに読み込み ([tasks.md](tasks.md#scheduled-runs))、`redmine-web` は、タブの「最新の情報に更新」のリンクでの読み込み直し、サプレッションリストからの削除、テストメールで SES の API を使います ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/ja/admin.html#sending-email))。プラグインが呼び出す API と必要な権限は、プラグインの[導入のページ](https://redmine-kit.github.io/redmine_aws_ses/ja/setup.html#network)にあります。
+`redmine-web`、`redmine-worker`、`redmine-task` は VPC 内にあるので、SES の API 用のインターフェイスエンドポイントか NAT インスタンスを経由して SES の API に接続します ([rds.md](rds.md#routes-out-of-the-vpc))。管理画面の「メール送信」と「メール受信」のタブは、`redmine_kit_aws_ses:refresh` が保存した SES の状態を表示し、開いたときには SES を呼び出しません。`redmine-task` が 1 時間ごとに読み込み ([tasks.md](tasks.md#scheduled-runs))、`redmine-web` は、タブの「最新の情報に更新」のリンクでの読み込み直し、サプレッションリストからの削除、テストメールで SES の API を使います ([admin.md](https://redmine-kit.github.io/redmine_aws_ses/ja/admin.html#sending-email))。プラグインが呼び出す API と必要な権限は、プラグインの[導入のページ](https://redmine-kit.github.io/redmine_aws_ses/ja/setup.html#network)にあります。
 
 <a id="when-sending-fails"></a>
 
 ### 送信の失敗
 
-SES の API の呼び出しに失敗したメールは、自動で再試行し、それでも送信できないメールは記録して、管理画面から再送信できます。プラグイン `redmine_aws_ses` が、`redmine-worker` でだけ配信エラーを発生させ、SES のエラーを種類別に処理します。詳細と再送信の手順は、プラグインの [sending.md](https://redmine-kit.github.io/redmine_aws_ses/ja/sending.html) にあります。Serverless では、次のとおりです。
+SES の API の呼び出しに失敗したメールは、自動で再試行し、それでも送信できないメールは記録して、管理画面から再送信できます。プラグイン `redmine_kit_aws_ses` が、`redmine-worker` でだけ配信エラーを発生させ、SES のエラーを種類別に処理します。詳細と再送信の手順は、プラグインの [sending.md](https://redmine-kit.github.io/redmine_aws_ses/ja/sending.html) にあります。Serverless では、次のとおりです。
 
-- **キューでの再試行:** アカウントのエラーと、ジョブ内の再試行を使い切った一時的なエラーは、例外を発生させます。SQS がメッセージを再配信し、3 回受信したあとにデッドレターキューに移動し ([lambda.md](lambda.md#background-jobs))、`redmine_aws_sqs` が記録します。
+- **キューでの再試行:** アカウントのエラーと、ジョブ内の再試行を使い切った一時的なエラーは、例外を発生させます。SQS がメッセージを再配信し、3 回受信したあとにデッドレターキューに移動し ([lambda.md](lambda.md#background-jobs))、`redmine_kit_aws_sqs` が記録します。
 - **通知:** デッドレターキューか失敗の記録が 1 件以上になると、CloudWatch アラームが通知します。送信エラーはログにも出力し、メトリクスフィルターでカウントします。
 - **再送信:** 管理画面の「メール送信」(SES) と「ジョブ」(SQS) で行います。
 
@@ -106,7 +106,7 @@ sequenceDiagram
   E->>B: 全文を置く(inbound/メッセージ ID)
   E->>T: 非同期の呼び出し(SES のイベント)
   T->>B: GetObject
-  T->>T: rake redmine_aws_ses:receive_mail
+  T->>T: rake redmine_kit_aws_ses:receive_mail
   T->>B: processed/ に移す
 ```
 
@@ -158,16 +158,16 @@ SES の受信ルールは受信ルールセットにまとめ、リージョン�
 - **保持期間:** `processed/` に移動したメールも、`inbound/` に残ったメール (破棄したもの、失敗したもの) も、ライフサイクルで 30 日後に削除します ([security.md](security.md#retention-periods))。取り込みのやり直しは、この期間内に行います。やり直しは、管理画面の「メール受信」のタブから行うか (ジョブとして `redmine-worker` で実行される。[admin.md](https://redmine-kit.github.io/redmine_aws_ses/ja/admin.html#receiving-email))、ローカルから次のコマンドで行います (`redmine-task` で実行される)。
 
   ```sh
-  bin/rake redmine_aws_ses:receive_mail MESSAGE_ID=<メッセージ ID>
+  bin/rake redmine_kit_aws_ses:receive_mail MESSAGE_ID=<メッセージ ID>
   ```
 
 <a id="importing"></a>
 
 ### 取り込み
 
-受信ルールは、SES のイベントを付けて `redmine-task` を非同期で呼び出します。そのハンドラーが、イベントのメッセージ ID、エンベロープの宛先、エンベロープの送信者、SES の判定結果を付けて、rake タスク `redmine_aws_ses:receive_mail` を実行します ([tasks.md](tasks.md#kinds-of-events))。タスクは、メール用バケットからメッセージを読み、宛先からプロジェクトを決め、Redmine の `MailHandler` に渡し、`processed/` に移動します。手順とオプションは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/ja/receiving.html#importing) にあります。
+受信ルールは、SES のイベントを付けて `redmine-task` を非同期で呼び出します。そのハンドラーが、イベントのメッセージ ID、エンベロープの宛先、エンベロープの送信者、SES の判定結果を付けて、rake タスク `redmine_kit_aws_ses:receive_mail` を実行します ([tasks.md](tasks.md#kinds-of-events))。タスクは、メール用バケットからメッセージを読み、宛先からプロジェクトを決め、Redmine の `MailHandler` に渡し、`processed/` に移動します。手順とオプションは、プラグインの [receiving.md](https://redmine-kit.github.io/redmine_aws_ses/ja/receiving.html#importing) にあります。
 
-メールの添付ファイルは Redmine の添付ファイルとして保存し、プラグイン `redmine_aws_s3` が S3 に保存します ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#uploads-through-lambda))。SES は Lambda を非同期で呼び出すので、失敗すると Lambda が 2 回まで再試行します。それでも失敗したイベントは失敗時の送信先 (SQS) に送り、件数をアラームで通知します。
+メールの添付ファイルは Redmine の添付ファイルとして保存し、プラグイン `redmine_kit_aws_s3` が S3 に保存します ([attachments.md](https://redmine-kit.github.io/redmine_aws_s3/ja/attachments.html#uploads-through-lambda))。SES は Lambda を非同期で呼び出すので、失敗すると Lambda が 2 回まで再試行します。それでも失敗したイベントは失敗時の送信先 (SQS) に送り、件数をアラームで通知します。
 
 <a id="spoofing-and-spam"></a>
 

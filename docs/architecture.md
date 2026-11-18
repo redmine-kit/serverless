@@ -69,7 +69,7 @@ flowchart LR
 | Item | Decision | Reason | Details |
 | --- | --- | --- | --- |
 | Redmine | 7.0.3 (latest stable version). No external plugins, default theme | As requested | [lambda.md](lambda.md) |
-| Extensions | The project's own plugins: `redmine_aws` (shared by the others: the "AWS" administration menu and the AWS clients), `redmine_aws_lambda` (running on Lambda), `redmine_aws_s3` (attachments in S3), `redmine_aws_ses` (mail through SES), `redmine_aws_sqs` (jobs on SQS) and `redmine_aws_ssm` (settings and secrets from SSM Parameter Store) | Redmine's standard extension mechanism; Redmine's own files are not modified | "The plugins" below |
+| Extensions | The project's own plugins: `redmine_kit_aws` (shared by the others: the "AWS" administration menu and the AWS clients), `redmine_kit_aws_lambda` (running on Lambda), `redmine_kit_aws_s3` (attachments in S3), `redmine_kit_aws_ses` (mail through SES), `redmine_kit_aws_sqs` (jobs on SQS) and `redmine_kit_aws_ssm` (settings and secrets from SSM Parameter Store) | Redmine's standard extension mechanism; Redmine's own files are not modified | "The plugins" below |
 | Runtime | Event Functions, container image, arm64 | Can run Ruby. Web Functions support only Node.js (see below) | [lambda.md](lambda.md) |
 | Image | Lambda's Ruby base image (`public.ecr.aws/lambda/ruby:4.0`) with Redmine, dependencies such as ImageMagick, the Subversion and Git clients ([lambda.md](lambda.md#repositories)), and Lambda Web Adapter | Same OS and Ruby as Lambda, built to run on Lambda. The HTTP server (Puma) can be used as is | [lambda.md](lambda.md#choosing-the-base) |
 | Three functions | `redmine-web` (pages), `redmine-worker` (jobs), `redmine-task` (rake and mail import). The same image, switched by the environment variable `REDMINE_ROLE`; `REDMINE_IMAGE` gives each function the image's digest URI for the "Status" tab. Only `redmine-web` starts Puma | One build, and the same code runs everywhere | [tasks.md](tasks.md#how-one-image-runs-everything) |
@@ -136,12 +136,12 @@ Extensions for Lambda and AWS are the project's own plugins, built with Redmine'
 
 | Plugin | What it does | Enabled when | Documentation |
 | --- | --- | --- | --- |
-| [`redmine_aws`](https://github.com/redmine-kit/redmine_aws) | Shared by the other plugins, which require it: the "AWS" item of the administration menu and its tabs, the "Status" tab with the connection test, the shared settings of the AWS clients | Always | [Redmine AWS](https://redmine-kit.github.io/redmine_aws/) |
-| [`redmine_aws_lambda`](https://github.com/redmine-kit/redmine_aws_lambda) | Running on Lambda: the Rack middleware for Lambda Web Adapter's `/events`, the setting that stops automatic asset compilation, Redmine settings that cannot work on Lambda fixed to disabled, the Lambda sections of the "Status" tab | `REDMINE_ROLE` exists | [Redmine AWS Lambda](https://redmine-kit.github.io/redmine_aws_lambda/) |
-| [`redmine_aws_s3`](https://github.com/redmine-kit/redmine_aws_s3) | Attachments in S3: storage, uploads through CloudFront to S3, redirects to CloudFront signed URLs with the sandbox CSP, the `/tmp` cache, the "S3" administration tab | S3 bucket settings exist | [Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/) |
-| [`redmine_aws_ses`](https://github.com/redmine-kit/redmine_aws_ses) | Mail through SES: retries of sending, importing received mail, addresses per project, the mail administration pages | SES settings exist | [Redmine AWS SES](https://redmine-kit.github.io/redmine_aws_ses/) |
-| [`redmine_aws_sqs`](https://github.com/redmine-kit/redmine_aws_sqs) | Jobs on SQS: the settings of `aws-activejob-sqs` (queues and the job classes it may run), records of jobs that fail for the last time, the "Jobs" administration page | `REDMINE_JOBS_QUEUE_URL` is set | [Redmine AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/) |
-| [`redmine_aws_ssm`](https://github.com/redmine-kit/redmine_aws_ssm) | Settings and secrets: reads the parameters under `REDMINE_SSM_PATH` into environment variables before Rails reads `config/database.yml` and `SECRET_KEY_BASE`. So that it runs that early, Bundler requires its gem (from GitHub Packages, listed in `image/Gemfile.local`, [below](#distribution)) before Rails starts | `REDMINE_SSM_PATH` is set | [Redmine AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/) |
+| [`redmine_kit_aws`](https://github.com/redmine-kit/redmine_aws) | Shared by the other plugins, which require it: the "AWS" item of the administration menu and its tabs, the "Status" tab with the connection test, the shared settings of the AWS clients | Always | [Redmine Kit AWS](https://redmine-kit.github.io/redmine_aws/) |
+| [`redmine_kit_aws_lambda`](https://github.com/redmine-kit/redmine_aws_lambda) | Running on Lambda: the Rack middleware for Lambda Web Adapter's `/events`, the setting that stops automatic asset compilation, Redmine settings that cannot work on Lambda fixed to disabled, the Lambda sections of the "Status" tab | `REDMINE_ROLE` exists | [Redmine Kit AWS Lambda](https://redmine-kit.github.io/redmine_aws_lambda/) |
+| [`redmine_kit_aws_s3`](https://github.com/redmine-kit/redmine_aws_s3) | Attachments in S3: storage, uploads through CloudFront to S3, redirects to CloudFront signed URLs with the sandbox CSP, the `/tmp` cache, the "S3" administration tab | S3 bucket settings exist | [Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/) |
+| [`redmine_kit_aws_ses`](https://github.com/redmine-kit/redmine_aws_ses) | Mail through SES: retries of sending, importing received mail, addresses per project, the mail administration pages | SES settings exist | [Redmine Kit AWS SES](https://redmine-kit.github.io/redmine_aws_ses/) |
+| [`redmine_kit_aws_sqs`](https://github.com/redmine-kit/redmine_aws_sqs) | Jobs on SQS: the settings of `aws-activejob-sqs` (queues and the job classes it may run), records of jobs that fail for the last time, the "Jobs" administration page | `REDMINE_JOBS_QUEUE_URL` is set | [Redmine Kit AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/) |
+| [`redmine_kit_aws_ssm`](https://github.com/redmine-kit/redmine_aws_ssm) | Settings and secrets: reads the parameters under `REDMINE_SSM_PATH` into environment variables before Rails reads `config/database.yml` and `SECRET_KEY_BASE`. So that it runs that early, Bundler requires its gem (from GitHub Packages, listed in `image/Gemfile.local`, [below](#distribution)) before Rails starts | `REDMINE_SSM_PATH` is set | [Redmine Kit AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/) |
 
 S3 attachments, mail through SES, jobs on SQS and the SSM settings also work outside Lambda; jobs then run with the gem's poller instead of a Lambda event source. Separate plugins let a Redmine on an ordinary server use one of them without the parts for Lambda. On Lambda, the image installs all six, because Lambda cannot write to the file system and has no mailbox.
 
@@ -156,10 +156,10 @@ The plugins are published as gems on the GitHub Packages RubyGems registry (`htt
 | What | Location | How to use |
 | --- | --- | --- |
 | Redmine image for Lambda | `ghcr.io/redmine-kit/serverless` (arm64, one architecture, no index). CI pushes it for each commit on main whose release tests pass (the `publish` job in `.github/workflows/ci.yml`, with the version read by `bin/redmine-version`). Tags: the Redmine version (`7.0.3`), the Redmine minor version (`7.0`) and `main`. Use the Redmine version: the tag moves to each new build of that version (updated gems and plugins), and `bin/deploy` uses it by default. `7.0` also follows Redmine's patch releases. Older builds stay without a tag and can be pulled by digest; the label `org.opencontainers.image.revision` holds the commit | `bin/deploy` pulls it by digest and copies it to ECR in the account where the instance is deployed ([deploy-config.md](deploy-config.md#deployment-commands)). Lambda can only use images in ECR in the same Region |
-| Plugins | The gem of each plugin (`redmine_aws`, `redmine_aws_<name>`) on GitHub Packages, published by each repository's workflow for every version tag. It holds the plugin's run-time files | Add it in `Gemfile.local` from the GitHub Packages source, run `bundle install`, and link the installed gem into `plugins/` (each plugin's setup page) |
+| Plugins | The gem of each plugin (`redmine_kit_aws`, `redmine_kit_aws_<name>`) on GitHub Packages, published by each repository's workflow for every version tag. It holds the plugin's run-time files | Add it in `Gemfile.local` from the GitHub Packages source, run `bundle install`, and link the installed gem into `plugins/` (each plugin's setup page) |
 | Plugins (without the gem) | A checkout of the repository | Clone into `plugins/` |
 
-The plugins are gems so that Bundler installs them with the other gems and records each version and checksum in `image/Gemfile.lock`. A plugin update then reaches the image through the weekly gem update, like any other gem ([testing.md](testing.md#order-in-ci)). `redmine_aws_ssm` has to be a gem anyway, because it reads SSM Parameter Store before Rails reads the configuration.
+The plugins are gems so that Bundler installs them with the other gems and records each version and checksum in `image/Gemfile.lock`. A plugin update then reaches the image through the weekly gem update, like any other gem ([testing.md](testing.md#order-in-ci)). `redmine_kit_aws_ssm` has to be a gem anyway, because it reads SSM Parameter Store before Rails reads the configuration.
 
 Redmine 7.0.3 loads plugins only from the `plugins/` directory (`lib/redmine/plugin_loader.rb`) and has no way to load them from gems, so the image links each installed plugin gem there (`link-plugins` in `image/Dockerfile`). The gem does not contain the plugin's `Gemfile`, so Redmine's `Gemfile` does not load the plugin twice.
 
@@ -194,7 +194,7 @@ The following are not in the plugins, because they must load before plugins or t
 | `bin/rake`<br>`bin/rails` | `bin/` | Used locally against the deployed Redmine |
 | `bin/test`<br>`bin/check-migrations` | `bin/` | Used locally and in CI for tests and migration review |
 
-Mail sending (`aws-actionmailer-ses`) and jobs (`aws-activejob-sqs`) use AWS's official gems; no delivery method or queue adapter is written. The jobs' settings belong to `redmine_aws_sqs`.
+Mail sending (`aws-actionmailer-ses`) and jobs (`aws-activejob-sqs`) use AWS's official gems; no delivery method or queue adapter is written. The jobs' settings belong to `redmine_kit_aws_sqs`.
 
 ## Repository layout
 
@@ -225,10 +225,10 @@ Work starts with the points that decide whether it works at all. At each stage, 
 | 2 | Image (Lambda's Ruby base image, Redmine, dependencies, switching between the three roles) | Image tests (read-only, low-privilege user, startup of the three roles), Redmine's own tests |
 | 3 | Startup on Lambda (VPC, RDS, SSM, `redmine-task`, opening `redmine-web` through the function URL) | Tests for SSM loading and the task handler. Measuring startup time |
 | 4 | CloudFront and assets (domain, S3 for `/assets/*`, OAC and the Lambda@Edge `redmine-body-hash`) | Tests for `redmine-body-hash`. Checking that POST passes with OAC. The first checks after deployment |
-| 5 | Attachments (`redmine_aws_s3`) | The plugin's unit, functional, integration and system tests. Redmine's own attachment tests pass with S3 |
-| 6 | Jobs and mail sending (SQS, `redmine-worker`, SES and the sending part of `redmine_aws_ses`, resending) | Tests for jobs and mail sending, retry tests per error type. Checks with the mailbox simulator |
+| 5 | Attachments (`redmine_kit_aws_s3`) | The plugin's unit, functional, integration and system tests. Redmine's own attachment tests pass with S3 |
+| 6 | Jobs and mail sending (SQS, `redmine-worker`, SES and the sending part of `redmine_kit_aws_ses`, resending) | Tests for jobs and mail sending, retry tests per error type. Checks with the mailbox simulator |
 | 7 | Administration pages (state and connections, mail sending, jobs, S3 attachments) | Functional and system tests per page. Non-administrators cannot open them |
-| 8 | Mail receiving (MX, receipt rules, import in `redmine_aws_ses`, the "Email receiving" administration tab) | Import tests (spoofing, spam, auto-replies). Checking real mail receiving |
+| 8 | Mail receiving (MX, receipt rules, import in `redmine_kit_aws_ses`, the "Email receiving" administration tab) | Import tests (spoofing, spam, auto-replies). Checking real mail receiving |
 | 9 | Migration (if data from an old Redmine is moved) | The checks after deployment pass with the migrated data |
 
 ## Open questions

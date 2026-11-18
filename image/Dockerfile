@@ -37,7 +37,7 @@ RUN bundle config set --local path vendor/bundle \
 # into plugins/, where Redmine loads plugins from, after a local checkout
 # (plugin-overrides) has replaced it if one is given. Bundler's credential for
 # GitHub Packages is a build secret (bin/lib/plugin.sh), never in a layer.
-ENV PLUGIN_GEMS="redmine_aws redmine_aws_ssm redmine_aws_lambda redmine_aws_sqs redmine_aws_ses redmine_aws_s3"
+ENV PLUGIN_GEMS="redmine_kit_aws redmine_kit_aws_ssm redmine_kit_aws_lambda redmine_kit_aws_sqs redmine_kit_aws_ses redmine_kit_aws_s3"
 RUN printf '%s\n' '#!/bin/sh' 'set -e' \
     'for gem in $PLUGIN_GEMS; do' \
     '  dir="$(bundle info --path "$gem")"' \
@@ -53,7 +53,7 @@ RUN printf '%s\n' '#!/bin/sh' 'set -e' \
 # for the other dependencies, but only from a server that gives each version's
 # publication date (created_at in its compact index), such as rubygems.org.
 # Bundler takes versions without it at once, and GitHub Packages gives none, so
-# new versions of the redmine_aws gems are not held back (docs/testing.md).
+# new versions of the redmine_kit_aws gems are not held back (docs/testing.md).
 FROM source AS lock
 COPY image/Gemfile.lock ./
 ARG UPDATE=
@@ -112,7 +112,7 @@ FROM base AS runtime
 RUN dnf install -y ImageMagick ghostscript urw-base35-fonts libpq ipa-gothic-fonts && dnf clean all
 
 # The Subversion and Git clients, for the repository types that
-# redmine_aws_lambda allows on Lambda (docs/lambda.md#repositories), without
+# redmine_kit_aws_lambda allows on Lambda (docs/lambda.md#repositories), without
 # the rest of their packages: git-core requires openssh-clients, which brings
 # in systemd, PAM and more. Redmine runs only the commands, and only git's
 # built-in commands, so git's helpers (/usr/libexec/git-core) are left out.

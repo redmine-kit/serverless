@@ -56,7 +56,7 @@ The roles that the stacks create are under the path `/redmine/` (for example `ar
 
 SecureString parameters are encrypted with the default SSM key (`aws/ssm`). Whether `kms:Decrypt` must be granted in IAM for this key will be checked when building it.
 
-Each row belongs to one of the plugins, and the plugin's IAM page also explains the permissions for use outside Serverless: [Redmine AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/iam.html) (jobs and the "Jobs" page), [Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/setup.html#iam-permissions) (attachments), [Redmine AWS SES](https://redmine-kit.github.io/redmine_aws_ses/iam.html) (email) and [Redmine AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/iam.html) (settings at start-up). [Redmine AWS](https://redmine-kit.github.io/redmine_aws/iam.html) and [Redmine AWS Lambda](https://redmine-kit.github.io/redmine_aws_lambda/iam.html) need none of their own. This page puts them together per function.
+Each row belongs to one of the plugins, and the plugin's IAM page also explains the permissions for use outside Serverless: [Redmine Kit AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/iam.html) (jobs and the "Jobs" page), [Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/setup.html#iam-permissions) (attachments), [Redmine Kit AWS SES](https://redmine-kit.github.io/redmine_aws_ses/iam.html) (email) and [Redmine Kit AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/iam.html) (settings at start-up). [Redmine Kit AWS](https://redmine-kit.github.io/redmine_aws/iam.html) and [Redmine Kit AWS Lambda](https://redmine-kit.github.io/redmine_aws_lambda/iam.html) need none of their own. This page puts them together per function.
 
 ## Execution role of `redmine-web`
 
@@ -74,7 +74,7 @@ Each row belongs to one of the plugins, and the plugin's IAM page also explains 
 
 Email is sent by passing the full message (raw) to SES v2 `SendEmail`. The examples in the AWS SES documentation allow both `ses:SendEmail` and `ses:SendRawEmail` as sending permissions, and this design follows them. Whether `ses:SendRawEmail` is required for raw sending with v2 has not been checked yet.
 
-Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([Redmine AWS S3](https://redmine-kit.github.io/redmine_aws_s3/iam.html)). CloudFront reaches the bucket through OAC, which the bucket policy allows ("Resource-based policies" below).
+Browsers do not use this role. Uploads and downloads go through CloudFront with URLs signed by the CloudFront private key, which the functions read from SSM Parameter Store with the other secrets ([Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/iam.html)). CloudFront reaches the bucket through OAC, which the bucket policy allows ("Resource-based policies" below).
 
 ## Execution role of `redmine-worker`
 
@@ -94,17 +94,17 @@ Browsers do not use this role. Uploads and downloads go through CloudFront with 
 | --- | --- | --- |
 | `s3:GetObject`<br>`s3:DeleteObject` | `inbound/*` in the mail bucket | Importing received email ([mail.md](mail.md#importing)) |
 | `s3:PutObject` | `processed/*` in the mail bucket | Moving imported email |
-| `s3:GetObject` | `processed/*` in the mail bucket | Re-importing email that was already imported (`bin/rake redmine_aws_ses:receive_mail MESSAGE_ID=…`, [mail.md](mail.md#receipt-rules)) |
+| `s3:GetObject` | `processed/*` in the mail bucket | Re-importing email that was already imported (`bin/rake redmine_kit_aws_ses:receive_mail MESSAGE_ID=…`, [mail.md](mail.md#receipt-rules)) |
 | `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting unattached attachments (`redmine:attachments:prune`), storing attachments from email |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Email from rake tasks (due date reminders, etc.) |
-| `ses:GetEmailIdentity` | The SES identity of the sender domain | The hourly refresh of the state of SES that the email tabs show (`redmine_aws_ses:refresh`, [tasks.md](tasks.md#scheduled-runs)) |
+| `ses:GetEmailIdentity` | The SES identity of the sender domain | The hourly refresh of the state of SES that the email tabs show (`redmine_kit_aws_ses:refresh`, [tasks.md](tasks.md#scheduled-runs)) |
 | `ses:GetAccount`<br>`ses:ListSuppressedDestinations` | `*` (cannot be scoped) | Same as above |
 | `sqs:SendMessage` | The job queue | Jobs enqueued within rake |
 | `sqs:SendMessage` | The failure destination queue (`redmine-task-failures`) | The destination for failed asynchronous invocations from SES. Lambda sends to destinations with the execution role's permissions |
 
 ## Cost Explorer (only with `costExplorer.enabled`)
 
-For an image that adds the plugin [Redmine AWS Cost Explorer](https://redmine-kit.github.io/redmine_aws_costexplorer/) (a derived image; Serverless's image does not include it), the plugin reads the account's costs. The policy `costexplorer` gives `redmine-task` (the daily refresh, the plugin's only call) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`. The two actions take a billing view as their resource (the AWS service reference, checked 2026-11-10) and the plugin uses the primary billing view; whether the policy can be narrowed to its ARN is unverified. `redmine-web` and `redmine-worker` do not call Cost Explorer. The boundary `redmine-boundary` allows these two actions.
+For an image that adds the plugin [Redmine Kit AWS Cost Explorer](https://redmine-kit.github.io/redmine_aws_costexplorer/) (a derived image; Serverless's image does not include it), the plugin reads the account's costs. The policy `costexplorer` gives `redmine-task` (the daily refresh, the plugin's only call) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`. The two actions take a billing view as their resource (the AWS service reference, checked 2026-11-10) and the plugin uses the primary billing view; whether the policy can be narrowed to its ARN is unverified. `redmine-web` and `redmine-worker` do not call Cost Explorer. The boundary `redmine-boundary` allows these two actions.
 
 ## Resource-based policies
 

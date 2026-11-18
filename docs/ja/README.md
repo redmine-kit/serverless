@@ -40,7 +40,7 @@ Serverless の設計資料です。最新の Redmine を AWS Lambda で動かし
 | [rds.md](rds.md) | データベース (RDS for PostgreSQL) と VPC。設定、VPC 外への経路 (VPC エンドポイントか NAT インスタンス)、Systems Manager での接続、費用 |
 | [tasks.md](tasks.md) | 同じイメージで 3 つの役割を切り替える仕組み。タスク用の関数での migration、任意の rake、`rails runner`、メールの取り込み |
 | [mail.md](mail.md) | Rails の ActionMailer から SES の API で送信するメールと、SES で受信して取り込むメール |
-| [admin.md](https://redmine-kit.github.io/redmine_aws/ja/admin.html) | プラグインが追加する管理画面。共有の「AWS」メニュー項目の下のタブ (`redmine_aws` のステータスと接続テスト、`redmine_aws_sqs` のジョブ、`redmine_aws_ses` のメールの送信と受信、`redmine_aws_s3` の添付ファイルの S3) |
+| [admin.md](https://redmine-kit.github.io/redmine_aws/ja/admin.html) | プラグインが追加する管理画面。共有の「AWS」メニュー項目の下のタブ (`redmine_kit_aws` のステータスと接続テスト、`redmine_kit_aws_sqs` のジョブ、`redmine_kit_aws_ses` のメールの送信と受信、`redmine_kit_aws_s3` の添付ファイルの S3) |
 | [iam.md](iam.md) | 実行ロール、リソースベースのポリシー、デプロイ用ロール、ユーザーの権限 |
 | [security.md](security.md) | 保護対象、脅威と対策、エントリーポイントと AWS WAF、Redmine の設定、データ保護、保持期間、ログ、サプライチェーン、残存リスク、インシデント対応 |
 | [aws-security.md](aws-security.md) | AWS 側のセキュリティ設定。それぞれの保護対象、設定の担当者、費用、デフォルト (GuardDuty とアップロードのマルウェアスキャン、CloudTrail、IAM Access Analyzer、Security Hub、Config、パブリックアクセスブロック、EBS の暗号化、ルートユーザー、予算) |

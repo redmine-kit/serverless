@@ -122,7 +122,7 @@ Parameters:
     AllowedValues: ["true", "false"]
     Description: >-
       costExplorer.enabled in redmine.json, for an image that adds the plugin
-      redmine_aws_costexplorer (a derived image): it reads the
+      redmine_kit_aws_costexplorer (a derived image): it reads the
       account's costs from Cost Explorer. Off by default.
   CostExplorerTagKey:
     Type: String
@@ -678,7 +678,7 @@ Resources:
                 Action: sqs:GetQueueAttributes
                 Resource: [!GetAtt JobQueue.Arn, !GetAtt JobDeadLetterQueue.Arn]
               # Moving the dead-letter queue back: AWS's minimum for a redrive
-              # (redmine_aws_sqs docs/iam.md); SendMessage on the job
+              # (redmine_kit_aws_sqs docs/iam.md); SendMessage on the job
               # queue is in CommonPolicy.
               - Effect: Allow
                 Action:
@@ -768,7 +768,7 @@ Resources:
                 Action: s3:PutObject
                 Resource: !Sub ${MailBucket.Arn}/processed/*
               # Re-importing email that was already imported
-              # (redmine_aws_ses:receive_mail with MESSAGE_ID).
+              # (redmine_kit_aws_ses:receive_mail with MESSAGE_ID).
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub ${MailBucket.Arn}/processed/*
@@ -777,7 +777,7 @@ Resources:
                 Action: sqs:SendMessage
                 Resource: !GetAtt TaskFailureQueue.Arn
               # The scheduled refresh of the SES state for the email tabs
-              # (redmine_aws_ses:refresh).
+              # (redmine_kit_aws_ses:refresh).
               - Effect: Allow
                 Action: ses:GetEmailIdentity
                 Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${Domain}
@@ -813,7 +813,7 @@ Resources:
       Environment:
         Variables:
           REDMINE_ROLE: web
-          # The image the function runs, for the Status tab (redmine_aws_lambda).
+          # The image the function runs, for the Status tab (redmine_kit_aws_lambda).
           REDMINE_IMAGE: !Ref ImageUri
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
@@ -877,7 +877,7 @@ Resources:
       Environment:
         Variables:
           REDMINE_ROLE: worker
-          # The image the function runs, for the Status tab (redmine_aws_lambda).
+          # The image the function runs, for the Status tab (redmine_kit_aws_lambda).
           REDMINE_IMAGE: !Ref ImageUri
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
@@ -900,7 +900,7 @@ Resources:
       BatchSize: 1
       Enabled: true
 
-  # Cost Explorer for redmine_aws_costexplorer (in a derived image):
+  # Cost Explorer for redmine_kit_aws_costexplorer (in a derived image):
   # only the daily refresh in the task calls it. The actions take the billing
   # view as resource; narrowing to the primary billing view's ARN is
   # unverified, so the resource is "*".
@@ -944,7 +944,7 @@ Resources:
       Environment:
         Variables:
           REDMINE_ROLE: task
-          # The image the function runs, for the Status tab (redmine_aws_lambda).
+          # The image the function runs, for the Status tab (redmine_kit_aws_lambda).
           REDMINE_IMAGE: !Ref ImageUri
           REDMINE_SSM_PATH: !Sub /${InstanceName}/env/
           REDMINE_DB_NAME: redmine
@@ -1124,7 +1124,7 @@ Resources:
             OriginAccessControlId: !GetAtt FunctionUrlAccess.Id
             # Host is the function URL's own host name, which the function URL
             # and origin access control need. Redmine takes the domain from
-            # X-Forwarded-Host (redmine_aws_lambda makes it the Host, and
+            # X-Forwarded-Host (redmine_kit_aws_lambda makes it the Host, and
             # config.hosts holds only the domain) and the scheme from
             # X-Forwarded-Proto. CloudFront replaces headers of these names
             # sent by the viewer (docs/lambda.md#cloudfront-and-function-urls).
@@ -1371,7 +1371,7 @@ Resources:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: '{"command": "rake", "args": ["redmine:attachments:prune"]}'
-  # The costs of the account, daily (redmine_aws_costexplorer; one Cost
+  # The costs of the account, daily (redmine_kit_aws_costexplorer; one Cost
   # Explorer request costs USD 0.01).
   CostExplorerRefreshSchedule:
     Type: AWS::Scheduler::Schedule
@@ -1385,7 +1385,7 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: '{"command": "rake", "args": ["redmine_aws_costexplorer:refresh"]}'
+        Input: '{"command": "rake", "args": ["redmine_kit_aws_costexplorer:refresh"]}'
   SendRemindersSchedule:
     Type: AWS::Scheduler::Schedule
     Condition: SendsReminders
@@ -1400,7 +1400,7 @@ Resources:
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: '{"command": "rake", "args": ["redmine:send_reminders"]}'
   # The state of SES and of the domain's MX record that the email tabs show
-  # (redmine_aws_ses; the pages do not call SES). Hourly, as the plugin
+  # (redmine_kit_aws_ses; the pages do not call SES). Hourly, as the plugin
   # suggests; the tabs' "Refresh" link reads it at once.
   SesRefreshSchedule:
     Type: AWS::Scheduler::Schedule
@@ -1412,10 +1412,10 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: '{"command": "rake", "args": ["redmine_aws_ses:refresh"]}'
+        Input: '{"command": "rake", "args": ["redmine_kit_aws_ses:refresh"]}'
   # The plugins' records older than retention.recordsDays, daily
-  # (docs/security.md#retention-periods): received email (redmine_aws_ses)
-  # and failed jobs (redmine_aws_sqs).
+  # (docs/security.md#retention-periods): received email (redmine_kit_aws_ses)
+  # and failed jobs (redmine_kit_aws_sqs).
   SesPruneRecordsSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
@@ -1427,7 +1427,7 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: !Sub '{"command": "rake", "args": ["redmine_aws_ses:prune_records[${RecordsDays}]"]}'
+        Input: !Sub '{"command": "rake", "args": ["redmine_kit_aws_ses:prune_records[${RecordsDays}]"]}'
   SqsPruneRecordsSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
@@ -1439,7 +1439,7 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: !Sub '{"command": "rake", "args": ["redmine_aws_sqs:prune_records[${RecordsDays}]"]}'
+        Input: !Sub '{"command": "rake", "args": ["redmine_kit_aws_sqs:prune_records[${RecordsDays}]"]}'
 
   # Alarms (docs/security.md): jobs that used up their tries, failed tasks,
   # and errors of the functions.

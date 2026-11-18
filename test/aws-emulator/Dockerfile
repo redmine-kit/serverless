@@ -12,10 +12,10 @@
 # image's digest.
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023-minimal@sha256:61cf86a8168c2e0b8fc6b6badaac64968044c947718508d88fac06e61a596e6d
 ARG TARGETARCH
-# 1.0.322, both packages' signatures checked on 2026-11-12.
-ARG VERSION=1.0.322
-ARG SHA256_X86_64=edbc25a9ebcf7f5acaa15a8d6409bdb4c7de25f3860a69ccfc65f9b01dfec8a0
-ARG SHA256_AARCH64=32ff11c5fe88527e6f647cb99c1011ff594f73d75dad7e7e576ea99bf09e1e55
+# 1.0.512, both packages' signatures checked on 2026-11-19.
+ARG VERSION=1.0.512
+ARG SHA256_X86_64=b629550782a65a9f7ab59d350345c31cd44b9799383e235d35f5d1eb6739913f
+ARG SHA256_AARCH64=4786ff7ba2bb60b81dbdd1929c470de3fd79c552c1a7854bd960a45a95a5d375
 RUN case "$TARGETARCH" in \
       amd64) arch=x86_64 sha256=$SHA256_X86_64 ;; \
       arm64) arch=aarch64 sha256=$SHA256_AARCH64 ;; \

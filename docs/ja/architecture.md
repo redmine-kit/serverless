@@ -159,7 +159,7 @@ Lambda と AWS のための拡張機能は、Redmine 標準の拡張の仕組み
 | [`redmine_kit_aws_s3`](https://github.com/redmine-kit/redmine_aws_s3) | S3 の添付ファイル。保存、CloudFront 経由の S3 へのアップロード、sandbox の CSP を付ける CloudFront 署名付き URL へのリダイレクト、`/tmp` のキャッシュ、管理画面の「S3」のタブ | S3 バケットの設定がある | [Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/) |
 | [`redmine_kit_aws_ses`](https://github.com/redmine-kit/redmine_aws_ses) | SES でのメール。送信の再試行、受信したメールの取り込み、プロジェクト別のアドレス、メールの管理画面 | SES の設定がある | [Redmine Kit AWS SES](https://redmine-kit.github.io/redmine_aws_ses/ja/) |
 | [`redmine_kit_aws_sqs`](https://github.com/redmine-kit/redmine_aws_sqs) | SQS でのジョブ。`aws-activejob-sqs` の設定 (キューと、実行を許可するジョブクラス)、最後に失敗したジョブの記録、管理画面の「ジョブ」 | `REDMINE_SQS_QUEUE_URL` がある | [Redmine Kit AWS SQS](https://redmine-kit.github.io/redmine_aws_sqs/ja/) |
-| [`redmine_kit_aws_ssm`](https://github.com/redmine-kit/redmine_aws_ssm) | 設定とシークレット。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読み込む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。そのタイミングで動作するように、Rails の起動前に Bundler が gem を読み込む (GitHub Packages の gem で、`image/Gemfile.local` に記載する。[下記](#distribution)) | `REDMINE_SSM_PATH` がある | [Redmine Kit AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/ja/) |
+| [`redmine_kit_aws_ssm`](https://github.com/redmine-kit/redmine_aws_ssm) | 設定とシークレット。Rails が `config/database.yml` と `SECRET_KEY_BASE` を読み込む前に、`REDMINE_SSM_PATH` の下のパラメーターを環境変数に読み込む。そのタイミングで動作するように、Rails の起動前に Bundler が gem を読み込む (Git リポジトリの gem で、`image/Gemfile.local` に記載する。[下記](#distribution)) | `REDMINE_SSM_PATH` がある | [Redmine Kit AWS SSM](https://redmine-kit.github.io/redmine_aws_ssm/ja/) |
 
 S3 の添付ファイル、SES でのメール、SQS でのジョブ、SSM の設定は、Lambda 以外でも動作します。その場合、ジョブは Lambda のイベントソースの代わりに gem のポーラーで実行します。プラグインを分けておくと、一般的なサーバー上の Redmine でも、Lambda 向けの部分なしで必要なものだけを使えます。Lambda ではファイルシステムに書き込めず、メールの受信箱もないので、イメージには 6 つともインストールします。
 
@@ -173,21 +173,21 @@ S3 の添付ファイル、SES でのメール、SQS でのジョブ、SSM の�
 
 ### 配布
 
-プラグインは、GitHub Packages の RubyGems レジストリ (`https://rubygems.pkg.github.com/redmine-kit`) に gem として公開します。Redmine の Lambda 用イメージは、GitHub Packages のコンテナレジストリ (`ghcr.io`) で公開します。どちらも、所有者は redmine-kit 組織です。
+プラグインは、GitHub の公開の Git リポジトリにある gem です。Redmine の Lambda 用イメージは、GitHub Packages のコンテナレジストリ (`ghcr.io`) で公開します。どちらも、所有者は redmine-kit 組織です。
 
 | 対象 | 保存先 | 使い方 |
 | --- | --- | --- |
 | Redmine の Lambda 用イメージ | `ghcr.io/redmine-kit/serverless` (arm64 の単一アーキテクチャで、イメージインデックスにしない)。main へのコミットで、リリースバージョンのテストに合格したものを、CI が push する (`.github/workflows/ci.yml` の `publish` ジョブ。バージョンは `bin/redmine-version` で取得する)。タグは、Redmine のバージョン (`7.0.3`)、Redmine のマイナーバージョン (`7.0`)、`main`。基本は Redmine のバージョンタグを使う。このタグはそのバージョンの新しいビルド (gem とプラグインの更新) に付け替わり、`bin/deploy` もデフォルトでこれを使う。`7.0` は Redmine のパッチリリースにも追従する。古いビルドはタグなしで残り、digest で取得できる。コミットは `org.opencontainers.image.revision` ラベルにある | `bin/deploy` が digest で取得し、デプロイ先アカウントの ECR にコピーする ([deploy-config.md](deploy-config.md#deployment-commands))。Lambda は、同じリージョンの ECR イメージしか使えない |
-| プラグイン | GitHub Packages の各プラグインの gem (`redmine_kit_aws`、`redmine_kit_aws_<名前>`)。プラグインごとに 1 つで、各リポジトリのワークフローが、バージョンタグごとに公開する。プラグインの実行に必要なファイルを含む | `Gemfile.local` で GitHub Packages の source から追加し、`bundle install` を実行して、インストールした gem を `plugins/` にリンクする (各プラグインの導入ページ) |
+| プラグイン | 各プラグインの Git リポジトリ (`https://github.com/redmine-kit/redmine_aws`、`…/redmine_aws_<名前>`。リポジトリ名は当面、以前のまま) にある gem (`redmine_kit_aws`、`redmine_kit_aws_<名前>`)。各リポジトリのワークフローは、バージョンタグで GitHub Packages にも gem を公開できる | `Gemfile.local` で Bundler の `git:` の source から追加し、`bundle install` を実行して、インストールした gem を `plugins/` にリンクする (各プラグインの導入ページ) |
 | プラグイン (gem を使わない場合) | リポジトリのチェックアウト | `plugins/` に clone する |
 
-プラグインを gem にするのは、ほかの gem と一緒に Bundler でインストールし、バージョンとチェックサムを `image/Gemfile.lock` に記録するためです。プラグインの更新も、ほかの gem と同じく、毎週の gem の更新でイメージに反映されます ([testing.md](testing.md#order-in-ci))。`redmine_kit_aws_ssm` は、Rails が設定を読み込む前に SSM Parameter Store を読むので、もともと gem である必要があります。
+プラグインを gem にするのは、ほかの gem と一緒に Bundler でインストールし、それぞれのコミットを `image/Gemfile.lock` に記録するためです。プラグインの更新も、ほかの gem と同じく、毎週の gem の更新でイメージに反映されます ([testing.md](testing.md#order-in-ci))。`redmine_kit_aws_ssm` は、Rails が設定を読み込む前に SSM Parameter Store を読むので、もともと gem である必要があります。
 
 Redmine 7.0.3 は、`plugins/` ディレクトリにあるプラグインだけを読み込み (`lib/redmine/plugin_loader.rb`)、gem のプラグインを読み込む仕組みはありません。そこでイメージでは、インストールしたプラグインの gem を `plugins/` にリンクします (`image/Dockerfile` の `link-plugins`)。gem にはプラグインの `Gemfile` を含めないので、Redmine の `Gemfile` がプラグインを 2 回読み込むことはありません。
 
-GitHub Packages の RubyGems レジストリからインストールするには、公開されている gem でも、`read:packages` 権限を持つトークンが必要です (GitHub のドキュメント、2026-11-09 に確認)。CI はそのジョブの `GITHUB_TOKEN` を、ローカルのビルドは `gh` のログイントークンを使います。トークンはビルドにシークレットとして渡し、レイヤーには残しません (`bin/lib/plugin.sh`)。
+イメージは、プラグインを GitHub Packages の RubyGems レジストリではなく、Git リポジトリから取得します。RubyGems レジストリからのインストールには、公開されている gem でも `read:packages` 権限を持つトークンが必要ですが (GitHub のドキュメント、2026-11-09 に確認)、公開リポジトリには認証情報が不要で、push したコミットはパッケージを公開しなくても使えるからです。`image/Gemfile.local` は、プラグインのリリースまでは各リポジトリの main ブランチを、リリース後はバージョンタグを指定し、`image/Gemfile.lock` がコミットを固定します。非公開リポジトリの認証情報 (`BUNDLE_GITHUB__COM`、`x-access-token:<トークン>`) は、ビルドにシークレットとして渡し、レイヤーには残しません (`bin/lib/plugin.sh`)。
 
-各プラグインは、バージョンを gemspec、`init.rb` の `version`、Git のタグでそろえ (公開用のワークフローが確認します)、対応する Redmine のバージョンを `requires_redmine` で指定します。アダプタは、Redmine のイメージをタグではなく digest で参照します ([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
+各プラグインは、バージョンを gemspec、`init.rb` の `version`、Git のタグでそろえ (gem のワークフローが確認します)、対応する Redmine のバージョンを `requires_redmine` で指定します。アダプタは、Redmine のイメージをタグではなく digest で参照します ([AGENTS.md](../../AGENTS.md) の「digest で固定する」と同じ考え方)。
 
 <a id="derived-images"></a>
 

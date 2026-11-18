@@ -1,0 +1,3 @@
+Clones of local plugin checkouts that stand for the plugins' Git repositories
+when bin/update-gems --local writes image/Gemfile.lock. Not committed except
+this file.

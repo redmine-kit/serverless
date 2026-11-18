@@ -36,13 +36,13 @@ Until `bin/test` is put together, the stages built so far are separate scripts: 
 
 ### Working on a plugin at the same time
 
-The image installs the plugins as gems from GitHub Packages at the versions in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)). With `REDMINE_KIT_AWS_DIR`, `REDMINE_KIT_AWS_LAMBDA_DIR`, `REDMINE_KIT_AWS_SSM_DIR`, `REDMINE_KIT_AWS_SQS_DIR`, `REDMINE_KIT_AWS_SES_DIR` or `REDMINE_KIT_AWS_S3_DIR` set to a checkout of the plugin, the scripts that build the image replace the installed gem with its working tree (`bin/lib/plugin.sh`). For example, to test the image with a checkout of the SSM plugin next to this repository:
+The image installs the plugins as gems from their Git repositories at the commits in `image/Gemfile.lock` ([architecture.md](architecture.md#distribution)). With `REDMINE_KIT_AWS_DIR`, `REDMINE_KIT_AWS_LAMBDA_DIR`, `REDMINE_KIT_AWS_SSM_DIR`, `REDMINE_KIT_AWS_SQS_DIR`, `REDMINE_KIT_AWS_SES_DIR` or `REDMINE_KIT_AWS_S3_DIR` set to a checkout of the plugin, the scripts that build the image take the gem from its working tree instead (`bin/lib/plugin.sh` copies it into `image/plugin-overrides/`, inside the build context, and Bundler resolves those gems again in that build); `PLUGIN_CHECKOUTS=..` takes every plugin from the checkouts next to this repository. For example, to test the image with a checkout of the SSM plugin next to this repository:
 
 ```sh
 REDMINE_KIT_AWS_SSM_DIR=../redmine_kit_aws_ssm bin/test-image
 ```
 
-The scripts take Bundler's credential for GitHub Packages from the `gh` login, or from `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` (CI sets it from `GITHUB_TOKEN`).
+The public repositories need no credential. Before the plugins' commits are pushed, `bin/update-gems --local` writes `image/Gemfile.lock` with the commits of the local checkouts (`PLUGIN_CHECKOUTS`, default `..`), which Bundler uses in place of the repositories; the lock works in CI once those commits are pushed.
 
 ## Kinds of tests
 
@@ -274,7 +274,7 @@ The image tests and Redmine's own tests run twice (a matrix): on the Redmine rel
 
 Dependabot opens weekly pull requests for the actions (with `.github/workflows/actions.lock`), the Docker images and the lint gems, for versions published at least 3 days ago (patches) or 7 days ago (others).
 
-Dependabot cannot update `image/Gemfile.lock`, because it is resolved inside the image from Redmine's Gemfile, which is not in this repository, together with `image/Gemfile.local` and the plugins' Gemfiles. Instead, a weekly workflow (`.github/workflows/update-gems.yml`) runs `bin/update-gems --update` with Bundler's `--cooldown=7`, opens a pull request and starts CI on its branch. The cooldown holds back only versions whose publication date the gem server gives (`created_at` in the compact index, as rubygems.org does); Bundler takes versions without it at once. GitHub Packages gives no `created_at` (checked on 2026-11-12, [sources.md](sources.md#gems-and-tools)), so new versions of the Redmine Kit AWS plugins are taken as soon as they are published. The lock is committed so that every build installs the same, reviewed gem versions with their checksums.
+Dependabot cannot update `image/Gemfile.lock`, because it is resolved inside the image from Redmine's Gemfile, which is not in this repository, together with `image/Gemfile.local` and the plugins' Gemfiles. Instead, a weekly workflow (`.github/workflows/update-gems.yml`) runs `bin/update-gems --update` with Bundler's `--cooldown=7`, opens a pull request and starts CI on its branch. The cooldown holds back only versions whose publication date the gem server gives (`created_at` in the compact index, as rubygems.org does); Bundler takes versions without it at once. The Redmine Kit AWS plugins come from Git repositories, which have no publication dates, so the update takes the newest commit of each one's branch at once. The lock is committed so that every build installs the same, reviewed gem versions with their checksums.
 
 ### Services and credentials
 

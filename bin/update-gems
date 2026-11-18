@@ -3,10 +3,26 @@
 # and the plugin's Gemfile, starting from the current lock.
 #   bin/update-gems            # add what is new, keep the other versions
 #   bin/update-gems --update   # update every gem (versions at least 7 days old)
+#   bin/update-gems --local    # the plugins at the commits of local checkouts
+#                              # (PLUGIN_CHECKOUTS, default ..), before they are
+#                              # pushed: the lock names those commits
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . bin/lib/plugin.sh
-update=()
-[[ "${1:-}" == "--update" ]] && update=(--build-arg UPDATE=1)
-docker buildx build --platform linux/arm64 "${plugin_context[@]}" "${update[@]}" \
+# Not checkouts that replace gems: the lock is of the repositories.
+find image/plugin-overrides -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+find image/plugin-git -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+trap 'find image/plugin-git -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +' EXIT
+args=()
+case "${1:-}" in
+  --update) args=(--build-arg UPDATE=1) ;;
+  --local)
+    # A clone of each checkout at its committed HEAD, on its branch, which
+    # Bundler uses in place of the repository (local Git overrides).
+    for gem in "${plugin_gems[@]}"; do
+      git clone --quiet --no-hardlinks "${PLUGIN_CHECKOUTS:-..}/$gem" "image/plugin-git/$gem"
+    done
+    ;;
+esac
+docker buildx build --platform linux/arm64 ${build_secrets[@]+"${build_secrets[@]}"} ${args[@]+"${args[@]}"} \
   -f image/Dockerfile --target lockfile --output type=local,dest=image .

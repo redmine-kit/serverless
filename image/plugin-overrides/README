@@ -1,0 +1,3 @@
+Local checkouts of plugins that replace their gems in the image, one directory
+per gem, written by bin/lib/plugin.sh (REDMINE_KIT_AWS*_DIR, PLUGIN_CHECKOUTS).
+Not committed except this file.

@@ -6,6 +6,11 @@ AllCops:
     - '**/*.rb'
     - '**/Gemfile'
     - 'image/Gemfile.local'
+  # Local checkouts of the plugins (bin/lib/plugin.sh), checked in their own
+  # repositories.
+  Exclude:
+    - 'image/plugin-overrides/**/*'
+    - 'image/plugin-git/**/*'
 
 Style/Documentation:
   Enabled: false

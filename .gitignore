@@ -1,2 +1,6 @@
 .DS_Store
 /coverage/
+/image/plugin-overrides/*
+!/image/plugin-overrides/README
+/image/plugin-git/*
+!/image/plugin-git/README

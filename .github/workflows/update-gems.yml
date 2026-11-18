@@ -16,7 +16,6 @@ permissions:
   contents: write
   pull-requests: write
   actions: write
-  packages: read
 
 concurrency:
   group: update-gems
@@ -29,8 +28,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - run: bin/update-gems --update
-        env:
-          BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ github.token }}
       - name: Open a pull request
         env:
           GH_TOKEN: ${{ github.token }}

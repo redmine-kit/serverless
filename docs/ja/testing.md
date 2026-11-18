@@ -42,13 +42,13 @@ GitHub Actions も同じ `bin/test` の手順を順に呼び出すので、ロ�
 
 ### プラグインの同時修正
 
-イメージは、プラグインを `image/Gemfile.lock` のバージョンの gem として、GitHub Packages からインストールします ([architecture.md](architecture.md#distribution))。`REDMINE_KIT_AWS_DIR`、`REDMINE_KIT_AWS_LAMBDA_DIR`、`REDMINE_KIT_AWS_SSM_DIR`、`REDMINE_KIT_AWS_SQS_DIR`、`REDMINE_KIT_AWS_SES_DIR`、`REDMINE_KIT_AWS_S3_DIR` のいずれかにプラグインのチェックアウトを指定すると、イメージをビルドするスクリプトは、インストールした gem をその作業ツリーで置き換えます (`bin/lib/plugin.sh`)。たとえば、このリポジトリの隣にある SSM プラグインのチェックアウトでイメージをテストするときは、次のようにします。
+イメージは、プラグインを `image/Gemfile.lock` のコミットの gem として、それぞれの Git リポジトリからインストールします ([architecture.md](architecture.md#distribution))。`REDMINE_KIT_AWS_DIR`、`REDMINE_KIT_AWS_LAMBDA_DIR`、`REDMINE_KIT_AWS_SSM_DIR`、`REDMINE_KIT_AWS_SQS_DIR`、`REDMINE_KIT_AWS_SES_DIR`、`REDMINE_KIT_AWS_S3_DIR` のいずれかにプラグインのチェックアウトを指定すると、イメージをビルドするスクリプトは、gem の代わりにその作業ツリーを使います (`bin/lib/plugin.sh` がビルドコンテキストの中の `image/plugin-overrides/` にコピーし、そのビルドでは Bundler がそれらの gem を解決し直します)。`PLUGIN_CHECKOUTS=..` は、このリポジトリの隣のチェックアウトからすべてのプラグインを使います。たとえば、このリポジトリの隣にある SSM プラグインのチェックアウトでイメージをテストするときは、次のようにします。
 
 ```sh
 REDMINE_KIT_AWS_SSM_DIR=../redmine_kit_aws_ssm bin/test-image
 ```
 
-スクリプトは、GitHub Packages 用の Bundler の認証情報を、`gh` のログインか `BUNDLE_RUBYGEMS__PKG__GITHUB__COM` から取得します (CI はそれを `GITHUB_TOKEN` から設定します)。
+公開リポジトリには認証情報が不要です。プラグインのコミットを push する前は、`bin/update-gems --local` が、ローカルのチェックアウト (`PLUGIN_CHECKOUTS`。デフォルトは `..`) のコミットで `image/Gemfile.lock` を書きます。Bundler はチェックアウトをリポジトリの代わりに使います。このロックは、それらのコミットを push すれば CI でも使えます。
 
 <a id="kinds-of-tests"></a>
 
@@ -334,7 +334,7 @@ flowchart TD
 
 Dependabot が、Actions (`.github/workflows/actions.lock` も)、Docker イメージ、検査用の gem について、公開から 3 日 (パッチ) か 7 日 (その他) 経過したバージョンへの更新の PR を毎週作成します。
 
-`image/Gemfile.lock` は Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージ内で解決するためです。代わりに、毎週のワークフロー (`.github/workflows/update-gems.yml`) が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作成し、そのブランチで CI を実行します。cooldown で保留されるのは、gem のサーバーが公開日 (compact index の `created_at`。rubygems.org は返す) を返すバージョンだけで、返さないバージョンは、Bundler がすぐに採用します。GitHub Packages は `created_at` を返さないので (2026-11-12 に確認。[sources.md](sources.md#gems-and-tools))、Redmine Kit AWS のプラグインの新しいバージョンは、公開されるとすぐに採用されます。lock をコミットしておくのは、どのビルドも、確認済みの同じバージョンの gem をチェックサムと一緒にインストールするためです。
+`image/Gemfile.lock` は Dependabot では更新できません。このリポジトリにない Redmine の Gemfile に、`image/Gemfile.local` とプラグインの Gemfile を合わせて、イメージ内で解決するためです。代わりに、毎週のワークフロー (`.github/workflows/update-gems.yml`) が、Bundler の `--cooldown=7` で `bin/update-gems --update` を実行して PR を作成し、そのブランチで CI を実行します。cooldown で保留されるのは、gem のサーバーが公開日 (compact index の `created_at`。rubygems.org は返す) を返すバージョンだけで、返さないバージョンは、Bundler がすぐに採用します。Redmine Kit AWS のプラグインは公開日のない Git リポジトリから取得するので、更新では、それぞれのブランチの最新のコミットをすぐに採用します。lock をコミットしておくのは、どのビルドも、確認済みの同じバージョンの gem をチェックサムと一緒にインストールするためです。
 
 <a id="services-and-credentials"></a>
 

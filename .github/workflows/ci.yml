@@ -17,8 +17,6 @@ on:
 
 permissions:
   contents: read
-  # The plugin gems on GitHub Packages (image/Gemfile.local).
-  packages: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -91,11 +89,9 @@ jobs:
     continue-on-error: ${{ matrix.redmine == 'master' }}
     permissions:
       contents: read
-      packages: read
       id-token: write
     env:
       REDMINE_BRANCH: ${{ matrix.redmine == 'master' && 'master' || '' }}
-      BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ github.token }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -139,7 +135,6 @@ jobs:
     continue-on-error: ${{ matrix.redmine == 'master' }}
     env:
       REDMINE_BRANCH: ${{ matrix.redmine == 'master' && 'master' || '' }}
-      BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ github.token }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -158,7 +153,6 @@ jobs:
       contents: read
       packages: write
     env:
-      BUNDLE_RUBYGEMS__PKG__GITHUB__COM: x-access-token:${{ github.token }}
       IMAGE: ghcr.io/redmine-kit/serverless
     steps:
       - uses: actions/checkout@v7.0.1

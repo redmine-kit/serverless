@@ -75,7 +75,7 @@ FROM public.ecr.aws/lambda/ruby:4.0@sha256:<digest> AS build
 # Redmine 7.0.3 の tar.gz を redmine.org からダウンロードし、SHA256 を確認して /var/task/redmine に展開する
 # 設定ファイル (config/database.yml など) と Gemfile.local を追加する
 # Gemfile.lock の gem を vendor/bundle にインストールする (開発用とテスト用は除く)。
-# 独自のプラグインも、GitHub Packages の gem としてインストールする
+# 独自のプラグインも、Git リポジトリの gem としてインストールする
 # プラグインの gem を、Redmine がプラグインを読み込む plugins/ にリンクする (link-plugins)
 # アセットを書き出し (bin/rails assets:precompile)、tmp を /tmp/redmine へのシンボリックリンクにする
 # RDS の CA 証明書バンドル (global-bundle.pem) と Pandoc の実行ファイルをダウンロードし、SHA256 を確認する
@@ -108,8 +108,8 @@ ENTRYPOINT ["/var/task/bin/start"]
 | --- | --- | --- |
 | 配置場所 | `/var/task/redmine` | Lambda のベースイメージは、関数のコードを `/var/task` (`LAMBDA_TASK_ROOT`) に置く |
 | `config/database.yml` | ビルド時に追加する。`adapter:` はリテラルで `postgresql` と書く。接続先、データベース名、ユーザー名、パスワードは、環境変数から ERB で読む (`REDMINE_DB_HOST`、`REDMINE_DB_NAME`、`REDMINE_DB_USERNAME`、`REDMINE_DB_PASSWORD`)。TLS は、イメージ内の RDS の CA 証明書バンドルで `verify-full` にする (`sslrootcert: /var/task/rds-global-bundle.pem`) | Redmine の `Gemfile` は、`config/database.yml` の `adapter:` の値で、インストールするデータベースの gem を決める。`adapter:` の値を ERB にすると、Gemfile も ERB を評価するので、リテラルで書いておく方が確実。RDS for PostgreSQL なので、`pg` gem を使う |
-| `Gemfile.local` | `puma` (Redmine はテスト用のグループにしか含めていない) と、GitHub Packages のプラグインの gem。Bundler が早い段階で読み込む (その `boot/` のファイル) `redmine_kit_aws_ssm`、`redmine_kit_aws_lambda`、`redmine_kit_aws_sqs`、`redmine_kit_aws_ses` と、`require: false` の `redmine_kit_aws` (どのプラグインも必要とする) と `redmine_kit_aws_s3` ([architecture.md](architecture.md#distribution)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem (`redmine_kit_aws_sqs` の `aws-activejob-sqs`、`redmine_kit_aws_ses` の `aws-actionmailer-ses`、`redmine_kit_aws_s3` の `aws-sdk-s3` など) は、そのプラグインの gemspec の依存関係にする |
-| 独自のプラグイン | `redmine_kit_aws`、`redmine_kit_aws_lambda`、`redmine_kit_aws_s3`、`redmine_kit_aws_ses`、`redmine_kit_aws_sqs`、`redmine_kit_aws_ssm`。どれも GitHub Packages の gem で、インストールしたディレクトリを、アセットのビルド前に `plugins/` にリンクし、プラグインのスクリプトがマニフェストに含まれるようにする | 拡張は独自のプラグインにする ([architecture.md](architecture.md#the-plugins)) |
+| `Gemfile.local` | `puma` (Redmine はテスト用のグループにしか含めていない) と、Git リポジトリのプラグインの gem。Bundler が早い段階で読み込む (その `boot/` のファイル) `redmine_kit_aws_ssm`、`redmine_kit_aws_lambda`、`redmine_kit_aws_sqs`、`redmine_kit_aws_ses` と、`require: false` の `redmine_kit_aws` (どのプラグインも必要とする) と `redmine_kit_aws_s3` ([architecture.md](architecture.md#distribution)) | Redmine は `Gemfile.local` の gem も読み込む。プラグインが使う gem (`redmine_kit_aws_sqs` の `aws-activejob-sqs`、`redmine_kit_aws_ses` の `aws-actionmailer-ses`、`redmine_kit_aws_s3` の `aws-sdk-s3` など) は、そのプラグインの gemspec の依存関係にする |
+| 独自のプラグイン | `redmine_kit_aws`、`redmine_kit_aws_lambda`、`redmine_kit_aws_s3`、`redmine_kit_aws_ses`、`redmine_kit_aws_sqs`、`redmine_kit_aws_ssm`。どれも Git リポジトリの gem で、インストールしたディレクトリを、アセットのビルド前に `plugins/` にリンクし、プラグインのスクリプトがマニフェストに含まれるようにする | 拡張は独自のプラグインにする ([architecture.md](architecture.md#the-plugins)) |
 | gem | ビルド時に `vendor/bundle` にインストールし、実行時にはインストールしない (`BUNDLE_DEPLOYMENT`、`BUNDLE_WITHOUT=development:test`) | 実行時には書き込めない |
 | ファイルのアクセス権限 | どのユーザーからも読めるようにする | Lambda は、デフォルトの権限の少ないユーザーで実行する。このユーザーが、実行に必要なすべてのファイルを読める必要がある |
 | `HOME` | `/tmp` | Bundler、ImageMagick、Pandoc がホームディレクトリに書き込むことがある (推測) |
@@ -201,7 +201,7 @@ Redmine は、起動時にアセットが古いと判断すると `public/assets
 | `/redmine/env/SECRET_KEY_BASE` | SecureString | Rails のシークレットキー | 同上 |
 | `/redmine/env/REDMINE_S3_CLOUDFRONT_PRIVATE_KEY` | SecureString | 添付ファイルの署名付き URL の秘密鍵 ([Redmine Kit AWS S3](https://redmine-kit.github.io/redmine_aws_s3/ja/setup.html#configuration)) | 同上 |
 
-インスタンスのスタックが、3 つの関数に環境変数 `REDMINE_SSM_PATH=/<instance>/env/` を渡し、実行ロールには、そのパスだけに対する `ssm:GetParametersByPath` を許可します ([iam.md](iam.md#permissions-common-to-the-three-functions))。十分早く読み込まれるように、プラグインは gem でもあり、`image/Gemfile.local` が GitHub Packages から追加します。イメージテストでは、データベースのホストを SSM (moto) だけに置いても、`db:migrate`、web の画面、worker のジョブが成功するので、`config/database.yml` より前に読み込めていることが分かります (2026-11-09。[testing.md](testing.md#image-tests))。
+インスタンスのスタックが、3 つの関数に環境変数 `REDMINE_SSM_PATH=/<instance>/env/` を渡し、実行ロールには、そのパスだけに対する `ssm:GetParametersByPath` を許可します ([iam.md](iam.md#permissions-common-to-the-three-functions))。十分早く読み込まれるように、プラグインは gem でもあり、`image/Gemfile.local` が Git リポジトリから追加します。イメージテストでは、データベースのホストを SSM (moto) だけに置いても、`db:migrate`、web の画面、worker のジョブが成功するので、`config/database.yml` より前に読み込めていることが分かります (2026-11-09。[testing.md](testing.md#image-tests))。
 
 秘密でない設定 (バケット名、ドメイン、リージョン、データベース名、データベースのユーザー名) は、CloudFormation から関数の環境変数で渡します。イメージは、`REDMINE_DB_NAME` (デフォルトは `redmine`)、`REDMINE_DB_USERNAME` (デフォルトは `redmine`)、`REDMINE_SQS_QUEUE_URL` (ジョブキュー)、`REDMINE_HOST` (ドメイン) として読みます。`REDMINE_LAMBDA_IMAGE` は、関数が動かすイメージの digest 付きの URI で、`redmine_kit_aws_lambda` が「ステータス」のタブに表示します。`REDMINE_DB_PORT` と `REDMINE_DB_SSLMODE` (デフォルトは `verify-full`) は、ローカルのテストでだけ変更します。
 

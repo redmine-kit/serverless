@@ -442,10 +442,13 @@ queued() {
   queue_attribute ApproximateNumberOfMessages | grep -qvx 0
 }
 check "the job queued its notification mail in SQS" queued
+# redmine_kit_aws_sqs records a message that can never run and lets the
+# invocation succeed, so that Lambda deletes it instead of retrying it.
 not_allowed() {
   local response
   response=$(invoke worker "$(jq -c '.Records[0].body |= (fromjson | .job_class = "ApplicationJob" | tojson)' <<<"$event")")
-  grep -q 'not in the configured job_class_allowlist' <<<"$response"
+  jq -e 'type == "string" and test("^Dropped 1 job\\(s\\): Aws::ActiveJob::SQS::InvalidJobClassError$")' <<<"$response" >/dev/null ||
+    { echo "$response" >&2; return 1; }
 }
 check "a job class outside the allowlist is not run" not_allowed
 

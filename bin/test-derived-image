@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Tests of derived images (docs/testing.md#derived-images), on top of a base
 # image built here (bin/build-image) or published:
-#   - test/derived: a gem from GitHub Packages, a plugin from Git at a commit,
-#     a plugin and a theme from directories; built and put through the image
+#   - test/derived: two plugins from Git at a commit (one of them a Redmine
+#     Kit AWS plugin, whose gem the base image's plugins depend on), a plugin
+#     and a theme from directories; built and put through the image
 #     tests with the checks of what it adds
 #   - test/derived/rubygems: a plugin with a gem from RubyGems, built without
 #     a GitHub token, and put through the image tests

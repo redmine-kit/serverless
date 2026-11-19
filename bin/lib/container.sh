@@ -49,3 +49,61 @@ container_address() {
 container_running() {
   container inspect "$1" 2>/dev/null | grep -q '"state" : "running"'
 }
+
+# The networks of the tests in Apple container, shared by every Redmine Kit
+# repository: one NAT network and one internal network (no way out, for the
+# AWS tests), each with an anchor container that runs all the time. Apple
+# container on macOS before 27.3 can give two NAT networks the same host
+# bridge and deletes it when the last container of one of them stops, which
+# leaves the other without its gateway: no DNS, no way out
+# (apple/container#2051). Few networks whose bridges are never deleted avoid
+# it. Container names stay per repository; the scripts never remove these
+# networks or their anchors. Docker keeps a network per repository (Compose).
+# shellcheck disable=SC2034 # used by the scripts that source this file
+kit_test_network=redmine-kit-test
+# shellcheck disable=SC2034
+kit_test_internal_network=redmine-kit-test-internal
+
+# ensure_shared_network <network> [--internal]: creates the network and starts
+# its anchor (anchor-<network>) unless they exist and run, starts the anchor of
+# the default network (image builds, the other scripts) too, and checks the network
+# (check_network). Safe when several runs call it at once.
+ensure_shared_network() {
+  local network=$1
+  shift
+  container network inspect "$network" >/dev/null 2>&1 ||
+    container network create "$@" "$network" >/dev/null 2>&1 ||
+    container network inspect "$network" >/dev/null 2>&1 || # created by another run meanwhile
+    { echo "Could not create the network $network: container network create $* $network" >&2; return 1; }
+  ensure_network_anchor default && ensure_network_anchor "$network" && check_network "$network"
+}
+
+# ensure_network_anchor <network>: starts the anchor of the network unless it
+# runs. Never removes it: another run may have just started it.
+ensure_network_anchor() {
+  local anchor=anchor-$1
+  container inspect "$anchor" 2>/dev/null | grep -q '"state" : "running"' && return 0
+  if container inspect "$anchor" >/dev/null 2>&1; then
+    container start "$anchor" >/dev/null 2>&1 || true
+  else
+    container run -d --name "$anchor" --network "$1" -m 128M --cpus 1 --progress none \
+      docker.io/library/alpine:3.22 sleep infinity >/dev/null 2>&1 || true
+  fi
+  container inspect "$anchor" 2>/dev/null | grep -q '"state" : "running"' ||
+    { echo "The anchor of the network $1 did not start: container logs $anchor" >&2; return 1; }
+}
+
+# check_network <network>: fails with a message when the network's gateway is
+# on no interface of the host, which is how apple/container#2051 shows.
+check_network() {
+  local gateway
+  gateway=$(container network inspect "$1" 2>/dev/null | sed -n 's/.*"ipv4Gateway" : "\([0-9.]*\)".*/\1/p' | head -1)
+  [[ -n "$gateway" ]] || return 0
+  for _ in 1 2 3 4 5; do
+    ifconfig | grep -q "inet $gateway " && return 0
+    sleep 1
+  done
+  echo "The container network $1 is broken: its gateway $gateway is on no host interface (apple/container#2051)." >&2
+  echo "Restart Apple container, then run this again: container system stop && container system start" >&2
+  return 1
+}

@@ -5,8 +5,10 @@
 # Emulator. In Docker, test/compose.yml (Compose project serverless-test),
 # with the networks serverless-test_default and serverless-test_internal. In
 # Apple container, which has no Compose, the same containers on the networks
-# serverless-test and serverless-test-internal (an internal network: no way out
-# to AWS); containers find each other there by address, not by name.
+# the tests of every Redmine Kit repository share, redmine-kit-test and
+# redmine-kit-test-internal (an internal network: no way out to AWS;
+# bin/lib/container.sh); containers find each other there by address, not by
+# name.
 compose=(docker compose -f test/compose.yml -p serverless-test)
 # The certificate that the emulator writes at each start, inside its container.
 emulator_ca=/home/emulator/.aws/emulator/9297/ca.pem
@@ -14,8 +16,8 @@ if [[ "$cli" == docker ]]; then
   default_network=serverless-test_default
   internal_network=serverless-test_internal
 else
-  default_network=serverless-test
-  internal_network=serverless-test-internal
+  default_network=$kit_test_network
+  internal_network=$kit_test_internal_network
 fi
 
 # The images of test/compose.yml, for Apple container.
@@ -35,9 +37,8 @@ services_up() {
   image=serverless-test-aws-emulator:$(shasum test/aws-emulator/Dockerfile | cut -c1-12)
   container image inspect "$image" >/dev/null 2>&1 ||
     image_build -- -t "$image" -f test/aws-emulator/Dockerfile test/aws-emulator
-  container network inspect "$default_network" >/dev/null 2>&1 || container network create "$default_network" >/dev/null
-  container network inspect "$internal_network" >/dev/null 2>&1 ||
-    container network create --internal "$internal_network" >/dev/null
+  ensure_shared_network "$default_network"
+  ensure_shared_network "$internal_network" --internal
   if ! container_running serverless-test-postgres; then
     container rm -f serverless-test-postgres >/dev/null 2>&1 || true
     container run -d --name serverless-test-postgres --network "$default_network" --network "$internal_network" \
@@ -66,7 +67,6 @@ services_down() {
     return
   fi
   container rm -f serverless-test-postgres serverless-test-aws-emulator >/dev/null 2>&1 || true
-  container network rm "$default_network" "$internal_network" >/dev/null 2>&1 || true
 }
 
 # The emulator's and PostgreSQL's containers.

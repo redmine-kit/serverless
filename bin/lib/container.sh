@@ -93,17 +93,30 @@ ensure_network_anchor() {
     { echo "The anchor of the network $1 did not start: container logs $anchor" >&2; return 1; }
 }
 
-# check_network <network>: fails with a message when the network's gateway is
-# on no interface of the host, which is how apple/container#2051 shows.
+# check_network <network>: fails with a message when the network is broken in
+# one of the two ways apple/container#2051 shows: its gateway is on no
+# interface of the host (no DNS, no way out), or the host no longer adds new
+# containers to its bridge (the running ones still work; a new one reaches
+# nothing). The second is found by a short-lived container that must reach the
+# network's anchor (a few seconds).
 check_network() {
-  local gateway
+  local gateway anchor_address broken=
   gateway=$(container network inspect "$1" 2>/dev/null | sed -n 's/.*"ipv4Gateway" : "\([0-9.]*\)".*/\1/p' | head -1)
-  [[ -n "$gateway" ]] || return 0
-  for _ in 1 2 3 4 5; do
-    ifconfig | grep -q "inet $gateway " && return 0
-    sleep 1
-  done
-  echo "The container network $1 is broken: its gateway $gateway is on no host interface (apple/container#2051)." >&2
+  if [[ -n "$gateway" ]]; then
+    broken="its gateway $gateway is on no host interface"
+    for _ in 1 2 3 4 5; do
+      if ifconfig | grep -q "inet $gateway "; then broken= && break; fi
+      sleep 1
+    done
+  fi
+  anchor_address=$(container inspect "anchor-$1" 2>/dev/null | sed -n 's/.*"ipv4Address" : "\([0-9.]*\)\/.*/\1/p' | head -1)
+  if [[ -z "$broken" && -n "$anchor_address" ]] &&
+    ! container run --rm --network "$1" -m 256M --progress none docker.io/library/alpine:3.22 \
+      sh -c "for i in 1 2 3 4 5; do ping -c 1 -W 1 $anchor_address >/dev/null && exit 0; sleep 1; done; exit 1" >/dev/null 2>&1; then
+    broken="a new container on it reaches nothing"
+  fi
+  [[ -n "$broken" ]] || return 0
+  echo "The container network $1 is broken: $broken (apple/container#2051)." >&2
   echo "Restart Apple container, then run this again: container system stop && container system start" >&2
   return 1
 }

@@ -150,6 +150,16 @@ Parameters:
       charges.aws.roleArns in redmine.json: the roles in other accounts that
       the task role may assume to read their costs (with each source's
       external ID in their trust policies).
+  PdfFunctionArn:
+    Type: String
+    Default: ""
+    AllowedPattern: '^(arn:aws(-[a-z]+)*:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]{1,64})?$'
+    Description: >-
+      pdf.functionArn in redmine.json, for an image that adds the plugin
+      redmine_kit_pdf (a derived image): the renderer's Lambda function
+      (redmine_kit_pdf's renderer/aws/redmine-pdf.yaml), which the web and
+      worker functions may invoke (docs/deploy-config.md). Empty: Redmine's
+      own PDFs.
   ReceiveMail:
     Type: String
     Default: "true"
@@ -191,6 +201,7 @@ Conditions:
     - !Condition ShowsCostExplorer
     - !Condition ReadsBillingViews
     - !Condition AssumesCostRoles
+  RendersPdf: !Not [!Equals [!Ref PdfFunctionArn, ""]]
   ReceivesMailInZone: !And [!Condition ReceivesMail, !Condition HasHostedZone]
   SendsReminders: !Equals [!Ref SendReminders, "true"]
   HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, ""]]
@@ -862,6 +873,8 @@ Resources:
           REDMINE_S3_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_S3_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_SES_MAIL_BUCKET: !Ref MailBucket
+          # redmine_kit_pdf's renderer (pdf.functionArn; empty: Redmine's own PDFs)
+          REDMINE_KIT_PDF_LAMBDA_FUNCTION: !Ref PdfFunctionArn
   # IAM authentication: only CloudFront, signing with origin access control,
   # can call it.
   WebUrl:
@@ -925,6 +938,8 @@ Resources:
           REDMINE_S3_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_S3_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
           REDMINE_SES_MAIL_BUCKET: !Ref MailBucket
+          # redmine_kit_pdf's renderer (pdf.functionArn; empty: Redmine's own PDFs)
+          REDMINE_KIT_PDF_LAMBDA_FUNCTION: !Ref PdfFunctionArn
   # One job per invocation: the gem's handler deletes the messages that
   # succeeded, and a failure makes SQS deliver the job again.
   WorkerJobs:
@@ -984,6 +999,23 @@ Resources:
           - Effect: Allow
             Action: sts:AssumeRole
             Resource: !Ref ChargesRoleArns
+
+  # Redmine Kit PDF's renderer (in a derived image; docs/iam.md): the web
+  # function makes a PDF in its request (Redmine's .pdf URLs, a report's
+  # PDF), the worker in a job (a report saved when approved). Only the
+  # renderer's function of redmine.json; the renderer is a stack of its own.
+  PdfRendererPolicy:
+    Type: AWS::IAM::Policy
+    Condition: RendersPdf
+    Properties:
+      PolicyName: pdf-renderer
+      Roles: [!Ref WebRole, !Ref WorkerRole]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource: !Ref PdfFunctionArn
 
   Task:
     Type: AWS::Lambda::Function

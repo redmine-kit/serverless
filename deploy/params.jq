@@ -62,6 +62,7 @@ def instance_params($image_uri; $certificate; $web_acl; $body_hash; $public_key)
     p("ChargesEnabled"; if .charges.enabled == true then "true" else "false" end),
     p("ChargesBillingViewArns"; (.charges.aws.billingViewArns // []) | join(",")),
     p("ChargesRoleArns"; (.charges.aws.roleArns // []) | join(",")),
+    p("PdfFunctionArn"; .pdf.functionArn // ""),
     p("ReceiveMail"; if .mail.receive == false then "false" else "true" end),
     p("SendReminders"; if .schedule.sendReminders == true then "true" else "false" end),
     p("ScheduleTimezone"; .schedule.timezone // "UTC"),

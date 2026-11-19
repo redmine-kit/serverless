@@ -85,6 +85,9 @@ check "values: Cost Explorer off by default, on in full.json" test \
 check "values: Redmine Kit Charges off by default, its AWS allowlist in full.json" test \
   "$(value "$minimal" ChargesEnabled)|$(value "$minimal" ChargesBillingViewArns)|$(value "$minimal" ChargesRoleArns)|$(value "$full" ChargesEnabled)|$(value "$full" ChargesBillingViewArns)|$(value "$full" ChargesRoleArns)" == \
   "false|||true|arn:aws:billing::111111111111:billingview/custom-1a2b3c4d|arn:aws:iam::222222222222:role/redmine-kit-cost-reader,arn:aws:iam::444444444444:role/team/cost-reader"
+check "values: no PDF renderer by default, the renderer's function in full.json" test \
+  "$(value "$minimal" PdfFunctionArn)|$(value "$full" PdfFunctionArn)" == \
+  "|arn:aws:lambda:ap-northeast-1:123456789012:function:redmine-pdf"
 check "values: the values from other stacks" test \
   "$(value "$full" ImageUri) $(value "$full" CertificateArn) $(value "$full" CloudFrontPublicKey)" == "img $arn key"
 edge=$(params instance_edge_params test/deploy/valid/full.json)

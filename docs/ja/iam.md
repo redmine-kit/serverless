@@ -133,6 +133,18 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 
 `billing:GetBillingViewData` は、請求ビューのデータに対するアクセス許可のみのアクションです。Cost Explorer の API に必要かは未確認なので、書いた請求ビューだけに許可します。アクセス許可の境界 `redmine-kit-boundary` は、`billing:GetBillingViewData` と `sts:AssumeRole` を `*` に許可します (境界だけでは何も許可しません。請求ビューとロールを指定するのは、上の `redmine-task` のポリシーだけです)。`redmine-web` と `redmine-worker` には、どちらも付けません。
 
+<a id="redmine-kit-pdf-only-with-pdffunctionarn"></a>
+
+## Redmine Kit PDF (`pdf.functionArn` のときだけ)
+
+プラグイン [Redmine Kit PDF](https://github.com/redmine-kit/redmine_kit_pdf) を追加したイメージでは、`redmine-web` がリクエストの中で (Redmine の `.pdf` の URL、レポートの PDF)、`redmine-worker` がジョブの中で、レンダラーの関数を呼び出して PDF を作ります。レンダラーは別のスタックです (プラグインの `renderer/aws/redmine-pdf.yaml`。VPC の外への経路がなく、ロールは自身のログへの書き込みだけ)。
+
+| ポリシー | アクション | リソース | 条件 |
+| --- | --- | --- | --- |
+| `pdf-renderer` (`redmine-web` と `redmine-worker`) | `lambda:InvokeFunction` | `pdf.functionArn` の ARN | `pdf.functionArn` があるとき |
+
+アクセス許可の境界 `redmine-kit-boundary` は、すでに `lambda:InvokeFunction` を許可しています。レンダラーを指定するのは、このポリシーだけです。`redmine-task` には付けません。
+
 <a id="resource-based-policies"></a>
 
 ## リソースベースのポリシー

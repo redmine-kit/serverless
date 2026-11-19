@@ -117,6 +117,16 @@ For an image that adds the plugin [Redmine Kit Charges](https://github.com/redmi
 
 `billing:GetBillingViewData` is a permission-only action for a billing view's data; whether Cost Explorer's API needs it is unverified, so it is allowed on the listed views only. The boundary `redmine-kit-boundary` allows `billing:GetBillingViewData` and `sts:AssumeRole` on `*` (the boundary never grants by itself: only `redmine-task`'s policies above name views and roles). `redmine-web` and `redmine-worker` get neither.
 
+## Redmine Kit PDF (only with `pdf.functionArn`)
+
+For an image that adds the plugin [Redmine Kit PDF](https://github.com/redmine-kit/redmine_kit_pdf), `redmine-web` makes a PDF in its request (Redmine's `.pdf` URLs, a report's PDF) and `redmine-worker` in a job, by invoking the renderer's function, a stack of its own (the plugin's `renderer/aws/redmine-pdf.yaml`: no route out of its VPC, a role that writes its own logs only).
+
+| Policy | Actions | Resources | When |
+| --- | --- | --- | --- |
+| `pdf-renderer` (on `redmine-web` and `redmine-worker`) | `lambda:InvokeFunction` | The ARN of `pdf.functionArn` | With `pdf.functionArn` |
+
+The boundary `redmine-kit-boundary` allows `lambda:InvokeFunction` already; only this policy names the renderer. `redmine-task` gets nothing.
+
 ## Resource-based policies
 
 | Resource | Allowed principal | Allowed actions | Condition |

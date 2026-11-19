@@ -26,5 +26,13 @@ case "${1:-}" in
     done
     ;;
 esac
+# The lockfile stage's one file, written to a directory of its own: Apple
+# container puts a local output under out.tar/<platform>/ of the destination,
+# Docker at its top.
+out=$(mktemp -d)
+trap 'rm -rf "$out"; find image/plugin-git -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +' EXIT
 image_build -- --platform linux/arm64 ${build_secrets[@]+"${build_secrets[@]}"} ${args[@]+"${args[@]}"} \
-  -f image/Dockerfile --target lockfile --output type=local,dest=image .
+  -f image/Dockerfile --target lockfile --output "type=local,dest=$out" .
+lock=$(find "$out" -name Gemfile.lock -type f | head -1)
+[[ -n "$lock" ]] || { echo "the build wrote no Gemfile.lock" >&2; exit 1; }
+cp "$lock" image/Gemfile.lock

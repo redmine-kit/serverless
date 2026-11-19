@@ -86,7 +86,7 @@ ensure_network_anchor() {
   if container inspect "$anchor" >/dev/null 2>&1; then
     container start "$anchor" >/dev/null 2>&1 || true
   else
-    container run -d --name "$anchor" --network "$1" -m 128M --cpus 1 --progress none \
+    container run -d --name "$anchor" --network "$1" -m 256M --cpus 1 --progress none \
       docker.io/library/alpine:3.22 sleep infinity >/dev/null 2>&1 || true
   fi
   container inspect "$anchor" 2>/dev/null | grep -q '"state" : "running"' ||

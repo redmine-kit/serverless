@@ -15,13 +15,14 @@ GIT
 
 GIT
   remote: https://github.com/redmine-kit/redmine_aws_s3.git
-  revision: 90052b8518827fdd71ed9a42744b636f84404453
+  revision: 0a994cbe91704c91f9cf6809a53002a4a24855e3
   branch: main
   specs:
     redmine_kit_aws_s3 (0.1.0)
       aws-sdk-cloudfront (~> 1.0)
       aws-sdk-s3 (~> 1.202)
       redmine_kit_aws (~> 0.1)
+      rubyzip (~> 3.4)
 
 GIT
   remote: https://github.com/redmine-kit/redmine_aws_ses.git

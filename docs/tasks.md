@@ -19,7 +19,10 @@ bin/rake redmine:attachments:prune
 bin/rake -T
 
 # re-import received email (the ID of an email still in S3)
-bin/rake redmine_kit_aws_ses:receive_mail MESSAGE_ID=<message ID>
+bin/rake redmine_kit:aws:ses:receive_mail MESSAGE_ID=<message ID>
+
+# delete received email's records older than 30 days (default 90; scheduled daily)
+bin/rake redmine_kit:aws:ses:prune DAYS=30
 
 # rails runner (one line of code)
 bin/rails runner 'puts User.count'
@@ -29,7 +32,7 @@ bin/rails runner 'puts User.count'
 
 - **Always runs against the deployed Redmine:** `bin/rake` and `bin/rails` in this repository do not run against a local Redmine. Locally, only tests are run, with `bin/test` ([testing.md](testing.md)).
 - **`bin/rails` only does `runner`:** `bin/rails` accepts only `runner`.
-- **Environment variables:** Pass them in the standard rake form (`REDMINE_LANG=ja`). Only fixed names (`REDMINE_LANG`, `MESSAGE_ID`, etc.) can be passed.
+- **Environment variables:** Pass them in the standard rake form (`REDMINE_LANG=ja`). Only fixed names (`REDMINE_LANG`, `MESSAGE_ID`, `DAYS`, etc.) can be passed.
 - **Show the target:** Before running, the target (AWS account, Region, function name) is shown. Tasks that change data (`db:migrate`, `runner`, etc.) are sent after confirmation.
 
 ## How one image runs everything
@@ -71,7 +74,7 @@ In `redmine-task`, the script instead registers as an extension that receives no
 | --- | --- | --- |
 | `bin/rake`, deployment | `{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}` | Run rake |
 | `bin/rails` | `{"command": "runner", "args": ["puts User.count"]}` | Run `rails runner` |
-| `bin/rake` | `{"command": "rake", "args": ["redmine_kit_aws_ses:receive_mail"], "env": {"MESSAGE_ID": "<message ID>"}}` | Import email from S3 ([mail.md](mail.md#receiving)) |
+| `bin/rake` | `{"command": "rake", "args": ["redmine_kit:aws:ses:receive_mail"], "env": {"MESSAGE_ID": "<message ID>"}}` | Import email from S3 ([mail.md](mail.md#receiving)) |
 | SES receipt rule | SES event (`Records[0].ses`) | Same as above. From the event: the message ID (`mail.messageId` → `MESSAGE_ID`), the recipients (`receipt.recipients` → `SES_RECIPIENTS`, comma-separated), the envelope sender (`mail.source` → `SES_MAIL_FROM`) and the verdicts (`receipt.spamVerdict.status`, `virusVerdict`, `dmarcVerdict`, `spfVerdict`, `dkimVerdict` → `SES_SPAM_VERDICT`, `SES_VIRUS_VERDICT`, `SES_DMARC_VERDICT`, `SES_SPF_VERDICT`, `SES_DKIM_VERDICT`; `receipt.dmarcPolicy` → `SES_DMARC_POLICY`). Values that are not well formed are left out. A command event cannot pass these variables ([mail.md](mail.md#spoofing-and-spam)) |
 | EventBridge Scheduler | `{"command": "rake", "args": ["redmine:attachments:prune"]}` | Scheduled tasks (below) |
 
@@ -106,9 +109,9 @@ EventBridge Scheduler invokes `redmine-task` with input in the form above.
 | --- | --- |
 | `redmine:attachments:prune` | Daily |
 | `redmine:send_reminders` (due date reminders) | If used, weekday mornings |
-| `redmine_kit_aws_costexplorer:refresh` (in an image that adds the plugin, a derived image: the account's costs from Cost Explorer, for the administration pages) | Daily, only with `costExplorer.enabled` ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
-| `redmine_kit_aws_sqs:prune_records[<days>]` and `redmine_kit_aws_ses:prune_records[<days>]` (delete the plugins' records older than the retention period, `retention.recordsDays`: failed jobs and received email; [security.md](security.md#retention-periods)) | Daily |
-| `redmine_kit_aws_ses:refresh` (reads the state of SES and the domain's MX record that the email tabs show; the pages do not call SES, and their "Refresh" link reads it at once) | Hourly |
+| `redmine_kit:aws:costexplorer:refresh` (in an image that adds the plugin, a derived image: the account's costs from Cost Explorer, for the administration pages) | Daily, only with `costExplorer.enabled` ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
+| `redmine_kit:aws:sqs:prune` and `redmine_kit:aws:ses:prune` with `DAYS` in `env` (delete the plugins' records older than the retention period, `retention.recordsDays`: failed jobs and received email; [security.md](security.md#retention-periods)) | Daily |
+| `redmine_kit:aws:ses:refresh` (reads the state of SES and the domain's MX record that the email tabs show; the pages do not call SES, and their "Refresh" link reads it at once) | Hourly |
 
 ## Stopping unused functions
 

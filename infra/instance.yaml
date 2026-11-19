@@ -768,7 +768,7 @@ Resources:
                 Action: s3:PutObject
                 Resource: !Sub ${MailBucket.Arn}/processed/*
               # Re-importing email that was already imported
-              # (redmine_kit_aws_ses:receive_mail with MESSAGE_ID).
+              # (redmine_kit:aws:ses:receive_mail with MESSAGE_ID).
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub ${MailBucket.Arn}/processed/*
@@ -777,7 +777,7 @@ Resources:
                 Action: sqs:SendMessage
                 Resource: !GetAtt TaskFailureQueue.Arn
               # The scheduled refresh of the SES state for the email tabs
-              # (redmine_kit_aws_ses:refresh).
+              # (redmine_kit:aws:ses:refresh).
               - Effect: Allow
                 Action: ses:GetEmailIdentity
                 Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${Domain}
@@ -1385,7 +1385,7 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: '{"command": "rake", "args": ["redmine_kit_aws_costexplorer:refresh"]}'
+        Input: '{"command": "rake", "args": ["redmine_kit:aws:costexplorer:refresh"]}'
   SendRemindersSchedule:
     Type: AWS::Scheduler::Schedule
     Condition: SendsReminders
@@ -1412,14 +1412,15 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: '{"command": "rake", "args": ["redmine_kit_aws_ses:refresh"]}'
+        Input: '{"command": "rake", "args": ["redmine_kit:aws:ses:refresh"]}'
   # The plugins' records older than retention.recordsDays, daily
   # (docs/security.md#retention-periods): received email (redmine_kit_aws_ses)
-  # and failed jobs (redmine_kit_aws_sqs).
-  SesPruneRecordsSchedule:
+  # and failed jobs (redmine_kit_aws_sqs). DAYS, as Redmine's
+  # redmine:users:prune takes it.
+  SesPruneSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Name: !Sub ${InstanceName}-ses-prune-records
+      Name: !Sub ${InstanceName}-ses-prune
       ScheduleExpression: cron(45 3 * * ? *)
       ScheduleExpressionTimezone: !Ref ScheduleTimezone
       FlexibleTimeWindow:
@@ -1427,11 +1428,11 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: !Sub '{"command": "rake", "args": ["redmine_kit_aws_ses:prune_records[${RecordsDays}]"]}'
-  SqsPruneRecordsSchedule:
+        Input: !Sub '{"command": "rake", "args": ["redmine_kit:aws:ses:prune"], "env": {"DAYS": "${RecordsDays}"}}'
+  SqsPruneSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Name: !Sub ${InstanceName}-sqs-prune-records
+      Name: !Sub ${InstanceName}-sqs-prune
       ScheduleExpression: cron(50 3 * * ? *)
       ScheduleExpressionTimezone: !Ref ScheduleTimezone
       FlexibleTimeWindow:
@@ -1439,7 +1440,7 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: !Sub '{"command": "rake", "args": ["redmine_kit_aws_sqs:prune_records[${RecordsDays}]"]}'
+        Input: !Sub '{"command": "rake", "args": ["redmine_kit:aws:sqs:prune"], "env": {"DAYS": "${RecordsDays}"}}'
 
   # Alarms (docs/security.md): jobs that used up their tries, failed tasks,
   # and errors of the functions.

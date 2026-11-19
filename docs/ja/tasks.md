@@ -21,7 +21,10 @@ bin/rake redmine:attachments:prune
 bin/rake -T
 
 # 受信したメールを取り込み直す(S3 に残っているメールの ID)
-bin/rake redmine_kit_aws_ses:receive_mail MESSAGE_ID=<メッセージ ID>
+bin/rake redmine_kit:aws:ses:receive_mail MESSAGE_ID=<メッセージ ID>
+
+# 30 日より古い受信したメールの記録を削除する (デフォルトは 90 日。毎日スケジュールで実行する)
+bin/rake redmine_kit:aws:ses:prune DAYS=30
 
 # rails runner(1 行のコード)
 bin/rails runner 'puts User.count'
@@ -31,7 +34,7 @@ bin/rails runner 'puts User.count'
 
 - **常にデプロイした Redmine が対象:** このリポジトリの `bin/rake` と `bin/rails` は、ローカルの Redmine では動きません。ローカルで使うのはテストだけで、テストは `bin/test` で実行します ([testing.md](testing.md))。
 - **`bin/rails` は `runner` だけ:** `bin/rails` が受け付けるのは `runner` だけです。
-- **環境変数:** rake の標準の書き方 (`REDMINE_LANG=ja`) で渡します。渡せるのは、決められた名前 (`REDMINE_LANG`、`MESSAGE_ID` など) だけです。
+- **環境変数:** rake の標準の書き方 (`REDMINE_LANG=ja`) で渡します。渡せるのは、決められた名前 (`REDMINE_LANG`、`MESSAGE_ID`、`DAYS` など) だけです。
 - **送信先の表示:** 実行の前に、送信先 (AWS アカウント、リージョン、関数名) を表示します。データを変更するタスク (`db:migrate`、`runner` など) は、確認してから送信します。
 
 <a id="how-one-image-runs-everything"></a>
@@ -77,7 +80,7 @@ Lambda は、`/opt/extensions` にあるファイルをすべて拡張機能と�
 | --- | --- | --- |
 | `bin/rake`、デプロイ | `{"command": "rake", "args": ["redmine:load_default_data"], "env": {"REDMINE_LANG": "ja"}}` | rake を実行する |
 | `bin/rails` | `{"command": "runner", "args": ["puts User.count"]}` | `rails runner` を実行する |
-| `bin/rake` | `{"command": "rake", "args": ["redmine_kit_aws_ses:receive_mail"], "env": {"MESSAGE_ID": "<メッセージ ID>"}}` | S3 のメールを取り込む ([mail.md](mail.md#receiving)) |
+| `bin/rake` | `{"command": "rake", "args": ["redmine_kit:aws:ses:receive_mail"], "env": {"MESSAGE_ID": "<メッセージ ID>"}}` | S3 のメールを取り込む ([mail.md](mail.md#receiving)) |
 | SES の受信ルール | SES イベント (`Records[0].ses`) | 同上。イベントから、メッセージ ID (`mail.messageId` → `MESSAGE_ID`)、宛先 (`receipt.recipients` → `SES_RECIPIENTS`。カンマ区切り)、エンベロープの送信者 (`mail.source` → `SES_MAIL_FROM`)、判定 (`receipt.spamVerdict.status`、`virusVerdict`、`dmarcVerdict`、`spfVerdict`、`dkimVerdict` → `SES_SPAM_VERDICT`、`SES_VIRUS_VERDICT`、`SES_DMARC_VERDICT`、`SES_SPF_VERDICT`、`SES_DKIM_VERDICT`。`receipt.dmarcPolicy` → `SES_DMARC_POLICY`) を取得する。形式が正しくない値は設定しない。コマンドのイベントでは、これらの変数を渡せない ([mail.md](mail.md#spoofing-and-spam)) |
 | EventBridge Scheduler | `{"command": "rake", "args": ["redmine:attachments:prune"]}` | 定期タスク (下記) |
 
@@ -120,9 +123,9 @@ EventBridge Scheduler から、上の形式の入力で `redmine-task` を呼び
 | --- | --- |
 | `redmine:attachments:prune` | 毎日 |
 | `redmine:send_reminders` (期日の通知) | 使う場合は、平日の朝 |
-| `redmine_kit_aws_costexplorer:refresh` (プラグインを追加したイメージ、つまり派生イメージで。管理画面のために、Cost Explorer からアカウントの費用を取得する) | 毎日。`costExplorer.enabled` のときだけ ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
-| `redmine_kit_aws_sqs:prune_records[<日数>]` と `redmine_kit_aws_ses:prune_records[<日数>]` (プラグインの記録のうち、保持期間 `retention.recordsDays` より古いものを削除する。失敗したジョブと受信したメール。[security.md](security.md#retention-periods)) | 毎日 |
-| `redmine_kit_aws_ses:refresh` (メールのタブに表示する SES の状態とドメインの MX レコードを読み込む。画面は SES を呼び出さず、「最新の情報に更新」のリンクですぐに読み込める) | 1 時間ごと |
+| `redmine_kit:aws:costexplorer:refresh` (プラグインを追加したイメージ、つまり派生イメージで。管理画面のために、Cost Explorer からアカウントの費用を取得する) | 毎日。`costExplorer.enabled` のときだけ ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
+| `redmine_kit:aws:sqs:prune` と `redmine_kit:aws:ses:prune`。`env` の `DAYS` で日数を渡す (プラグインの記録のうち、保持期間 `retention.recordsDays` より古いものを削除する。失敗したジョブと受信したメール。[security.md](security.md#retention-periods)) | 毎日 |
+| `redmine_kit:aws:ses:refresh` (メールのタブに表示する SES の状態とドメインの MX レコードを読み込む。画面は SES を呼び出さず、「最新の情報に更新」のリンクですぐに読み込める) | 1 時間ごと |
 
 <a id="stopping-unused-functions"></a>
 

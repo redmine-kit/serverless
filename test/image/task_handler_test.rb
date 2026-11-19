@@ -13,13 +13,19 @@ class TaskHandlerTest < Minitest::Test
     assert_equal ['rake', ['redmine:load_default_data'], { 'REDMINE_LANG' => 'ja' }], [command, args, env]
   end
 
+  # The plugins' prune tasks, from the daily schedules (infra/instance.yaml).
+  def test_rake_with_days
+    event = { 'command' => 'rake', 'args' => ['redmine_kit:aws:ses:prune'], 'env' => { 'DAYS' => '90' } }
+    assert_equal ['rake', ['redmine_kit:aws:ses:prune'], { 'DAYS' => '90' }], TaskHandler.parse(event)
+  end
+
   def test_runner_without_args_or_env
     assert_equal ['runner', [], {}], TaskHandler.parse('command' => 'runner')
   end
 
   def test_ses_event_imports_the_message
     event = { 'Records' => [{ 'ses' => { 'mail' => { 'messageId' => 'abc123' } } }] }
-    assert_equal ['rake', ['redmine_kit_aws_ses:receive_mail'], { 'MESSAGE_ID' => 'abc123' }],
+    assert_equal ['rake', ['redmine_kit:aws:ses:receive_mail'], { 'MESSAGE_ID' => 'abc123' }],
                  TaskHandler.parse(event)
   end
 
@@ -51,7 +57,7 @@ class TaskHandlerTest < Minitest::Test
 
   def test_command_events_cannot_pass_verdicts
     assert_raises(ArgumentError) do
-      TaskHandler.parse('command' => 'rake', 'args' => ['redmine_kit_aws_ses:receive_mail'],
+      TaskHandler.parse('command' => 'rake', 'args' => ['redmine_kit:aws:ses:receive_mail'],
                         'env' => { 'MESSAGE_ID' => 'abc', 'SES_DMARC_VERDICT' => 'PASS' })
     end
   end

@@ -106,10 +106,10 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 | --- | --- | --- |
 | `s3:GetObject`<br>`s3:DeleteObject` | メール用バケットの `inbound/*` | 受信したメールの取り込み ([mail.md](mail.md#importing)) |
 | `s3:PutObject` | メール用バケットの `processed/*` | 取り込んだメールの移動 |
-| `s3:GetObject` | メール用バケットの `processed/*` | 取り込み済みのメールの再取り込み (`bin/rake redmine_kit_aws_ses:receive_mail MESSAGE_ID=…`。[mail.md](mail.md#receipt-rules)) |
+| `s3:GetObject` | メール用バケットの `processed/*` | 取り込み済みのメールの再取り込み (`bin/rake redmine_kit:aws:ses:receive_mail MESSAGE_ID=…`。[mail.md](mail.md#receipt-rules)) |
 | `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | 添付ファイル用バケット (`redmine-web` と同じ範囲) | 未添付の添付ファイルの削除 (`redmine:attachments:prune`)、メールの添付ファイルの保存 |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | 送信元ドメインの SES ID | rake タスクのメール (期日通知など) |
-| `ses:GetEmailIdentity` | 送信元ドメインの SES ID | メールのタブに表示する SES の状態の、1 時間ごとの更新 (`redmine_kit_aws_ses:refresh`、[tasks.md](tasks.md#scheduled-runs)) |
+| `ses:GetEmailIdentity` | 送信元ドメインの SES ID | メールのタブに表示する SES の状態の、1 時間ごとの更新 (`redmine_kit:aws:ses:refresh`、[tasks.md](tasks.md#scheduled-runs)) |
 | `ses:GetAccount`<br>`ses:ListSuppressedDestinations` | `*` (対象を絞り込めない) | 同上 |
 | `sqs:SendMessage` | ジョブキュー | rake の中で投入されるジョブ |
 | `sqs:SendMessage` | 失敗時の送信先キュー (`redmine-task-failures`) | SES からの非同期呼び出しが失敗したときの送信先。Lambda の送信先へは、実行ロールの権限で送信する |

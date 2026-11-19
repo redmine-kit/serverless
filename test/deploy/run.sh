@@ -6,6 +6,7 @@
 #   - the cache behaviors of the distribution (behaviors.py)
 #   - the environment of the functions (functions.py)
 #   - the mail bucket permissions of the roles that import email (roles.py)
+#   - the events of the scheduled tasks (schedules.py)
 #   - deploy.sh against fake aws, crane and curl (test/deploy/fake), which
 #     record every call: the order of the steps, --dry-run, --code-only,
 #     failures, and that no secret reaches a command line or the output
@@ -105,6 +106,11 @@ echo "== Roles"
 roles_problems=$(python3.13 test/deploy/roles.py infra/instance.yaml 2>&1)
 check "the task and the worker have exactly the mail bucket access they use" test -z "$roles_problems"
 [[ -z "$roles_problems" ]] || echo "$roles_problems"
+
+echo "== Schedules"
+schedules_problems=$(python3.13 test/deploy/schedules.py infra/instance.yaml image/handler.rb 2>&1)
+check "the scheduled tasks get events the handler accepts, with DAYS for the prune tasks" test -z "$schedules_problems"
+[[ -z "$schedules_problems" ]] || echo "$schedules_problems"
 
 echo "== Settings code"
 # shellcheck source=deploy/lib.sh

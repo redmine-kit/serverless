@@ -94,10 +94,10 @@ Browsers do not use this role. Uploads and downloads go through CloudFront with 
 | --- | --- | --- |
 | `s3:GetObject`<br>`s3:DeleteObject` | `inbound/*` in the mail bucket | Importing received email ([mail.md](mail.md#importing)) |
 | `s3:PutObject` | `processed/*` in the mail bucket | Moving imported email |
-| `s3:GetObject` | `processed/*` in the mail bucket | Re-importing email that was already imported (`bin/rake redmine_kit_aws_ses:receive_mail MESSAGE_ID=…`, [mail.md](mail.md#receipt-rules)) |
+| `s3:GetObject` | `processed/*` in the mail bucket | Re-importing email that was already imported (`bin/rake redmine_kit:aws:ses:receive_mail MESSAGE_ID=…`, [mail.md](mail.md#receipt-rules)) |
 | `s3:GetObject`<br>`s3:PutObject`<br>`s3:DeleteObject`<br>`s3:ListBucket` | The attachments bucket (the same scope as `redmine-web`) | Deleting unattached attachments (`redmine:attachments:prune`), storing attachments from email |
 | `ses:SendEmail`<br>`ses:SendRawEmail` | The SES identity of the sender domain | Email from rake tasks (due date reminders, etc.) |
-| `ses:GetEmailIdentity` | The SES identity of the sender domain | The hourly refresh of the state of SES that the email tabs show (`redmine_kit_aws_ses:refresh`, [tasks.md](tasks.md#scheduled-runs)) |
+| `ses:GetEmailIdentity` | The SES identity of the sender domain | The hourly refresh of the state of SES that the email tabs show (`redmine_kit:aws:ses:refresh`, [tasks.md](tasks.md#scheduled-runs)) |
 | `ses:GetAccount`<br>`ses:ListSuppressedDestinations` | `*` (cannot be scoped) | Same as above |
 | `sqs:SendMessage` | The job queue | Jobs enqueued within rake |
 | `sqs:SendMessage` | The failure destination queue (`redmine-task-failures`) | The destination for failed asynchronous invocations from SES. Lambda sends to destinations with the execution role's permissions |

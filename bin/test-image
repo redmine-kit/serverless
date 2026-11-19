@@ -252,6 +252,14 @@ plugins_loaded() {
     tail -n 1 | grep -qx all
 }
 check "the plugins are loaded (base, Lambda, SQS, SES, S3, SSM)" plugins_loaded
+# The plugins' daily prune tasks, with the events of their schedules
+# (infra/instance.yaml; test/deploy/schedules.py checks those).
+prunes() { # <task>
+  task "{\"command\":\"rake\",\"args\":[\"$1\"],\"env\":{\"DAYS\":\"90\"}}" |
+    grep -q '^deleted [0-9]* record(s) older than 90 days$'
+}
+check "rake redmine_kit:aws:ses:prune DAYS=90" prunes redmine_kit:aws:ses:prune
+check "rake redmine_kit:aws:sqs:prune DAYS=90" prunes redmine_kit:aws:sqs:prune
 runner_says_none() { # <Ruby expression that lists what is missing>
   local event output
   event=$(jq -nc --arg code "puts(($1).join(%q(,)).presence || %q(none))" '{command: "runner", args: [$code]}')

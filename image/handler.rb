@@ -10,7 +10,7 @@ module TaskHandler
     'rake' => %w[bundle exec rake],
     'runner' => %w[bundle exec rails runner]
   }.freeze
-  ALLOWED_ENV = %w[REDMINE_LANG MESSAGE_ID].freeze
+  ALLOWED_ENV = %w[REDMINE_LANG MESSAGE_ID DAYS].freeze
   OUTPUT_LIMIT = 256 * 1024
   # Set by the runtime for its own gems; the child uses Redmine's bundle.
   RUNTIME_ENV = %w[RUBYLIB GEM_HOME GEM_PATH].freeze
@@ -56,7 +56,7 @@ module TaskHandler
     message_id = ses.dig('mail', 'messageId')
     raise ArgumentError, 'SES event without messageId' unless message_id.is_a?(String) && !message_id.empty?
 
-    ['rake', ['redmine_kit_aws_ses:receive_mail'], { 'MESSAGE_ID' => message_id }.merge(ses_receipt(ses))]
+    ['rake', ['redmine_kit:aws:ses:receive_mail'], { 'MESSAGE_ID' => message_id }.merge(ses_receipt(ses))]
   end
 
   # The envelope sender (mail.source) lets the plugin match a registered

@@ -1,6 +1,6 @@
 """Checks the mail bucket permissions of the roles in infra/instance.yaml that
 import email: redmine-task (received email and re-imports with
-redmine_kit_aws_ses:receive_mail MESSAGE_ID=…) and redmine-worker ("Fetch again"
+redmine_kit:aws:ses:receive_mail MESSAGE_ID=…) and redmine-worker ("Fetch again"
 on the "Email receiving" tab). They read both inbound/ and processed/, where
 redmine_kit_aws_ses looks for a message, write processed/ and delete in inbound/
 only (MailBucket#move_to_processed), and nothing more. Prints each problem; prints nothing when

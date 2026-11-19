@@ -20,6 +20,13 @@
     "pluginSettings": { "redmine_kit_aws_s3": { "download_url_expiry": "600" } }
   },
   "costExplorer": { "enabled": true, "allocationTag": "redmine-kit:instance" },
+  "charges": {
+    "enabled": true,
+    "aws": {
+      "billingViewArns": ["arn:aws:billing::111111111111:billingview/custom-1a2b3c4d"],
+      "roleArns": ["arn:aws:iam::222222222222:role/redmine-kit-cost-reader", "arn:aws:iam::444444444444:role/team/cost-reader"]
+    }
+  },
   "schedule": { "timezone": "Asia/Tokyo", "sendReminders": true },
   "logs": { "retentionDays": 365 },
   "retention": { "recordsDays": 60, "mailDays": 14, "noncurrentVersionDays": 60, "backupDays": 14 },

@@ -120,6 +120,19 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 
 プラグイン [Redmine Kit AWS Cost Explorer](https://redmine-kit.github.io/redmine_aws_costexplorer/ja/) を追加したイメージ (派生イメージ。Serverless のイメージには含まれていません) では、このプラグインがアカウントの費用を読み取ります。ポリシー `costexplorer` で、`redmine-task` (毎日の更新。プラグインが呼ぶのはこれだけ) に、`*` に対する `ce:GetCostAndUsage` と `ce:GetCostForecast` を許可します。2 つのアクションは、請求ビューをリソースとします (サービス認可リファレンス、2026-11-10 に確認)。プラグインはプライマリ請求ビューを使います。その ARN にポリシーを絞り込めるかは未確認です。`redmine-web` と `redmine-worker` は Cost Explorer を呼びません。アクセス許可の境界 `redmine-kit-boundary` も、この 2 つのアクションを許可します。
 
+<a id="redmine-kit-charges-only-with-chargesenabled"></a>
+
+## Redmine Kit Charges (`charges.enabled` のときだけ)
+
+プラグイン [Redmine Kit Charges](https://github.com/redmine-kit/redmine_kit_charges) と、その AWS プロバイダーである Redmine Kit AWS Cost Explorer を追加したイメージでは、`redmine-task` が 1 日 1 回 (`redmine_kit:charges:refresh`)、プロジェクトの AWS の料金を読みます。読んでよいものは `redmine.json` に書きます。Redmine のシステム管理者は、これが許すソースしか追加できません ([プラグインの iam.md](https://redmine-kit.github.io/redmine_aws_costexplorer/ja/iam.html#project-charges-redmine-kit-charges))。
+
+| `redmine-task` のポリシー | アクション | リソース | いつ |
+| --- | --- | --- | --- |
+| `charges-billing-views` | `ce:GetCostAndUsage`、`ce:GetCostForecast`、`billing:GetBillingViewData` | `charges.aws.billingViewArns` の ARN | 請求ビューがあるとき。組織の管理アカウントが AWS RAM でこのアカウントに共有したカスタム請求ビュー (推奨) |
+| `charges-roles` | `sts:AssumeRole` | `charges.aws.roleArns` の ARN | ロールがあるとき。別のアカウントの読み取り専用のロールで、それぞれソースの外部 ID 付きで `redmine-task` のロールを信頼する |
+
+`billing:GetBillingViewData` は、請求ビューのデータに対するアクセス許可のみのアクションです。Cost Explorer の API に必要かは未確認なので、書いた請求ビューだけに許可します。アクセス許可の境界 `redmine-kit-boundary` は、`billing:GetBillingViewData` と `sts:AssumeRole` を `*` に許可します (境界だけでは何も許可しません。請求ビューとロールを指定するのは、上の `redmine-task` のポリシーだけです)。`redmine-web` と `redmine-worker` には、どちらも付けません。
+
 <a id="resource-based-policies"></a>
 
 ## リソースベースのポリシー
@@ -207,7 +220,7 @@ bin/deploy --account
 
 | リソース | 内容 |
 | --- | --- |
-| `redmine-kit-boundary` (カスタマー管理ポリシー) | スタックが作成するすべてのロールのアクセス許可の境界。このページのロールの操作だけを許可する。ログの書き込み、SSM パラメーターの読み取り、`kms:Decrypt`、VPC 内の Lambda のネットワークインターフェイスと NAT インスタンスの操作、S3 のオブジェクト、SQS、SES、`lambda:InvokeFunction`、GuardDuty Malware Protection の EventBridge ルールとバケットの通知、`AmazonSSMManagedInstanceCore` の操作。IAM の操作は何も許可しない |
+| `redmine-kit-boundary` (カスタマー管理ポリシー) | スタックが作成するすべてのロールのアクセス許可の境界。このページのロールの操作だけを許可する。ログの書き込み、SSM パラメーターの読み取り、`kms:Decrypt`、VPC 内の Lambda のネットワークインターフェイスと NAT インスタンスの操作、S3 のオブジェクト、SQS、SES、`lambda:InvokeFunction`、Cost Explorer の読み取り、請求ビューのデータと `sts:AssumeRole` (Redmine Kit Charges のソースのため。請求ビューとロールは各ロールのポリシーが指定する)、GuardDuty Malware Protection の EventBridge ルールとバケットの通知、`AmazonSSMManagedInstanceCore` の操作。IAM の操作は何も許可しない |
 | `redmine-kit-cfn-exec` | CloudFormation (`cloudformation.amazonaws.com`。`aws:SourceAccount` はこのアカウント)。スタックの各サービスの操作と、パス `/redmine-kit/` の下だけの IAM の操作。ロールの作成と、インラインポリシーの追加やポリシーのアタッチは、アクセス許可の境界を設定する場合だけ (`iam:PermissionsBoundary`)。`/redmine/` の下のロール、インスタンスプロファイル、ポリシーの管理。`/redmine/` の下のロールを Lambda、Lambda@Edge、EventBridge Scheduler、EC2、GuardDuty Malware Protection に渡す `iam:PassRole`。`iam:CreateServiceLinkedRole` と `lambda:EnableReplication*`。`iam:DeleteRolePermissionsBoundary` は拒否する。アカウント単位のロールとアクセス許可の境界は `/redmine/` の外にあるので、変更できない |
 | `redmine-kit-infra-deploy` | IAM Identity Center の許可セット (`account.ssoPermissionSet`。デフォルトは `AdministratorAccess`。その `AWSReservedSSO_…` ロールの `aws:PrincipalArn` で絞り込む) のユーザーと、`account.githubRepository` があれば、Environment `account.githubInfraEnvironment` (デフォルトは `infrastructure`) の GitHub Actions。権限は上の「インフラデプロイ用ロール」のとおり。セッションは最大 2 時間 |
 | `redmine-kit-github-deploy` | `account.githubRepository` があるときだけ。Environment `account.githubCodeEnvironment` (デフォルトは `production`) の GitHub Actions。audience は `sts.amazonaws.com`。カスタマー管理ポリシー `redmine-kit-code-deploy` |

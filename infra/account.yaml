@@ -120,9 +120,14 @@ Resources:
               - sqs:*
               - ses:*
               - lambda:InvokeFunction
-              # redmine_kit_aws_costexplorer
+              # redmine_kit_aws_costexplorer, and Redmine Kit Charges' AWS
+              # sources: a shared billing view's data (a permission-only
+              # action) and other accounts' roles. The task role's own
+              # policies name the views and roles (infra/instance.yaml).
               - ce:GetCostAndUsage
               - ce:GetCostForecast
+              - billing:GetBillingViewData
+              - sts:AssumeRole
             Resource: "*"
           # The role of GuardDuty Malware Protection for S3: the EventBridge
           # rule it manages and the bucket's notifications.

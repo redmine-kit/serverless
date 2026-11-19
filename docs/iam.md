@@ -106,6 +106,17 @@ Browsers do not use this role. Uploads and downloads go through CloudFront with 
 
 For an image that adds the plugin [Redmine Kit AWS Cost Explorer](https://redmine-kit.github.io/redmine_aws_costexplorer/) (a derived image; Serverless's image does not include it), the plugin reads the account's costs. The policy `costexplorer` gives `redmine-task` (the daily refresh, the plugin's only call) `ce:GetCostAndUsage` and `ce:GetCostForecast` on `*`. The two actions take a billing view as their resource (the AWS service reference, checked 2026-11-10) and the plugin uses the primary billing view; whether the policy can be narrowed to its ARN is unverified. `redmine-web` and `redmine-worker` do not call Cost Explorer. The boundary `redmine-kit-boundary` allows these two actions.
 
+## Redmine Kit Charges (only with `charges.enabled`)
+
+For an image that adds the plugin [Redmine Kit Charges](https://github.com/redmine-kit/redmine_kit_charges) with Redmine Kit AWS Cost Explorer (its AWS provider), `redmine-task` reads the projects' AWS charges once a day (`redmine_kit:charges:refresh`). `redmine.json` lists what it may read; Redmine's system administrators can add only sources that these allow ([the plugin's iam.md](https://redmine-kit.github.io/redmine_aws_costexplorer/iam.html#project-charges-redmine-kit-charges)):
+
+| Policy of `redmine-task` | Actions | Resource | When |
+| --- | --- | --- | --- |
+| `charges-billing-views` | `ce:GetCostAndUsage`, `ce:GetCostForecast`, `billing:GetBillingViewData` | The ARNs of `charges.aws.billingViewArns` | With billing views: custom billing views that an organization's management account shares with this account through AWS RAM (recommended) |
+| `charges-roles` | `sts:AssumeRole` | The ARNs of `charges.aws.roleArns` | With roles: read-only roles in other accounts, each trusting `redmine-task`'s role with a source's external ID |
+
+`billing:GetBillingViewData` is a permission-only action for a billing view's data; whether Cost Explorer's API needs it is unverified, so it is allowed on the listed views only. The boundary `redmine-kit-boundary` allows `billing:GetBillingViewData` and `sts:AssumeRole` on `*` (the boundary never grants by itself: only `redmine-task`'s policies above name views and roles). `redmine-web` and `redmine-worker` get neither.
+
 ## Resource-based policies
 
 | Resource | Allowed principal | Allowed actions | Condition |
@@ -181,7 +192,7 @@ bin/deploy --account
 
 | Resource | Contents |
 | --- | --- |
-| `redmine-kit-boundary` (managed policy) | The permissions boundary of every role the stacks create. Allows only the actions of the roles on this page: writing logs, reading SSM parameters and `kms:Decrypt`, the network interfaces of Lambda in the VPC and the NAT instance's actions, objects in S3, SQS, SES, `lambda:InvokeFunction`, the EventBridge rule and bucket notifications of GuardDuty Malware Protection, and the actions of `AmazonSSMManagedInstanceCore`. Nothing in IAM |
+| `redmine-kit-boundary` (managed policy) | The permissions boundary of every role the stacks create. Allows only the actions of the roles on this page: writing logs, reading SSM parameters and `kms:Decrypt`, the network interfaces of Lambda in the VPC and the NAT instance's actions, objects in S3, SQS, SES, `lambda:InvokeFunction`, Cost Explorer's reads, a billing view's data and `sts:AssumeRole` (for Redmine Kit Charges' sources; the roles' own policies name the views and roles), the EventBridge rule and bucket notifications of GuardDuty Malware Protection, and the actions of `AmazonSSMManagedInstanceCore`. Nothing in IAM |
 | `redmine-kit-cfn-exec` | CloudFormation (`cloudformation.amazonaws.com`, `aws:SourceAccount` this account). The services of the stacks, and IAM only under the path `/redmine-kit/`: creating roles and putting or attaching their policies only with the boundary (`iam:PermissionsBoundary`), managing roles, instance profiles and policies under `/redmine/`, `iam:PassRole` for roles under `/redmine/` to Lambda, Lambda@Edge, EventBridge Scheduler, EC2 and GuardDuty Malware Protection, `iam:CreateServiceLinkedRole` and `lambda:EnableReplication*`. `iam:DeleteRolePermissionsBoundary` is denied. The account roles and the boundary are outside `/redmine/`, so it cannot change them |
 | `redmine-kit-infra-deploy` | The users of an IAM Identity Center permission set (`account.ssoPermissionSet`, default `AdministratorAccess`; `aws:PrincipalArn` of its `AWSReservedSSO_…` roles), and with `account.githubRepository`, GitHub Actions in the Environment `account.githubInfraEnvironment` (default `infrastructure`). Permissions in "Role for deploying infrastructure" above. Sessions up to 2 hours |
 | `redmine-kit-github-deploy` | Only with `account.githubRepository`: GitHub Actions in the Environment `account.githubCodeEnvironment` (default `production`), with the audience `sts.amazonaws.com`. The managed policy `redmine-kit-code-deploy` |

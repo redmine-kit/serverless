@@ -171,6 +171,34 @@
         "allocationTag": { "type": "string", "maxLength": 128, "default": "" }
       }
     },
+    "charges": {
+      "description": "For an image that adds the plugin redmine_kit_charges (a derived image): the daily fetch of the projects' charges, and the AWS billing views and roles its sources may read (the task role's allowlist; docs/deploy-config.md). Off by default.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "aws": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "billingViewArns": {
+              "type": "array",
+              "maxItems": 20,
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^arn:aws(-[a-z]+)*:billing::[0-9]{12}:billingview/[-A-Za-z0-9/:_+=.@]{1,128}$" },
+              "default": []
+            },
+            "roleArns": {
+              "type": "array",
+              "maxItems": 20,
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^arn:aws(-[a-z]+)*:iam::[0-9]{12}:role/[\\x21-\\x2B\\x2D-\\x7E]{1,576}$" },
+              "default": []
+            }
+          }
+        }
+      }
+    },
     "schedule": {
       "type": "object",
       "additionalProperties": false,

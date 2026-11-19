@@ -128,6 +128,28 @@ Parameters:
     Type: String
     Default: ""
     Description: costExplorer.allocationTag in redmine.json, a cost allocation tag such as redmine-kit:instance.
+  ChargesEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      charges.enabled in redmine.json, for an image that adds the plugin
+      redmine_kit_charges (a derived image): the daily fetch of the projects'
+      charges (docs/deploy-config.md). Off by default.
+  ChargesBillingViewArns:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: >-
+      charges.aws.billingViewArns in redmine.json: the custom billing views
+      shared with this account that the task role may read (the allowlist of
+      Redmine Kit Charges' AWS sources).
+  ChargesRoleArns:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: >-
+      charges.aws.roleArns in redmine.json: the roles in other accounts that
+      the task role may assume to read their costs (with each source's
+      external ID in their trust policies).
   ReceiveMail:
     Type: String
     Default: "true"
@@ -156,6 +178,19 @@ Conditions:
   ReceivesMail: !Equals [!Ref ReceiveMail, "true"]
   ScansMalware: !Equals [!Ref MalwareScan, "true"]
   ShowsCostExplorer: !Equals [!Ref CostExplorerEnabled, "true"]
+  RunsCharges: !Equals [!Ref ChargesEnabled, "true"]
+  ReadsBillingViews: !And
+    - !Condition RunsCharges
+    - !Not [!Equals [!Join ["", !Ref ChargesBillingViewArns], ""]]
+  AssumesCostRoles: !And
+    - !Condition RunsCharges
+    - !Not [!Equals [!Join ["", !Ref ChargesRoleArns], ""]]
+  # redmine_kit_aws_costexplorer makes requests only with
+  # REDMINE_COSTEXPLORER_ENABLED: its tab, or Redmine Kit Charges' AWS sources.
+  CallsCostExplorer: !Or
+    - !Condition ShowsCostExplorer
+    - !Condition ReadsBillingViews
+    - !Condition AssumesCostRoles
   ReceivesMailInZone: !And [!Condition ReceivesMail, !Condition HasHostedZone]
   SendsReminders: !Equals [!Ref SendReminders, "true"]
   HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, ""]]
@@ -917,6 +952,39 @@ Resources:
             Action: [ce:GetCostAndUsage, ce:GetCostForecast]
             Resource: "*"
 
+  # Redmine Kit Charges' AWS sources (in a derived image; docs/iam.md): only
+  # the daily refresh in the task reads them. The ARNs of redmine.json are the
+  # allowlist: Redmine's administrators can add only sources these allow.
+  # billing:GetBillingViewData is a permission-only action for a billing
+  # view's data; whether Cost Explorer needs it is unverified, so it is
+  # allowed on the views only.
+  ChargesBillingViewPolicy:
+    Type: AWS::IAM::Policy
+    Condition: ReadsBillingViews
+    Properties:
+      PolicyName: charges-billing-views
+      Roles: [!Ref TaskRole]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: [ce:GetCostAndUsage, ce:GetCostForecast, billing:GetBillingViewData]
+            Resource: !Ref ChargesBillingViewArns
+  # The roles of other accounts, each trusting the task role with a source's
+  # external ID.
+  ChargesRolePolicy:
+    Type: AWS::IAM::Policy
+    Condition: AssumesCostRoles
+    Properties:
+      PolicyName: charges-roles
+      Roles: [!Ref TaskRole]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Resource: !Ref ChargesRoleArns
+
   Task:
     Type: AWS::Lambda::Function
     DependsOn: DatabaseHost
@@ -954,7 +1022,7 @@ Resources:
           REDMINE_S3_BUCKET: !Ref AttachmentsBucket
           REDMINE_S3_REGION: !Ref AWS::Region
           REDMINE_S3_MALWARE_SCAN: !Ref MalwareScan
-          REDMINE_COSTEXPLORER_ENABLED: !Ref CostExplorerEnabled
+          REDMINE_COSTEXPLORER_ENABLED: !If [CallsCostExplorer, "true", "false"]
           REDMINE_COSTEXPLORER_TAG_KEY: !Ref CostExplorerTagKey
           REDMINE_S3_CLOUDFRONT_DOMAIN: !Ref Domain
           REDMINE_S3_CLOUDFRONT_KEY_PAIR_ID: !Ref CloudFrontKey
@@ -1402,6 +1470,35 @@ Resources:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: !Sub '{"command": "rake", "args": ["redmine_kit:aws:costexplorer:prune"], "env": {"DAYS": "${RecordsDays}"}}'
+  # The projects' charges, daily (redmine_kit_charges; with AWS sources, about
+  # 3 Cost Explorer requests a source, USD 0.01 each), after the tab's refresh.
+  ChargesRefreshSchedule:
+    Type: AWS::Scheduler::Schedule
+    Condition: RunsCharges
+    Properties:
+      Name: !Sub ${InstanceName}-charges-refresh
+      ScheduleExpression: cron(30 4 * * ? *)
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt Task.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: '{"command": "rake", "args": ["redmine_kit:charges:refresh"]}'
+  # The charges older than the plugin's default (760 days), weekly.
+  ChargesPruneSchedule:
+    Type: AWS::Scheduler::Schedule
+    Condition: RunsCharges
+    Properties:
+      Name: !Sub ${InstanceName}-charges-prune
+      ScheduleExpression: cron(45 4 ? * SUN *)
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt Task.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: '{"command": "rake", "args": ["redmine_kit:charges:prune"]}'
   SendRemindersSchedule:
     Type: AWS::Scheduler::Schedule
     Condition: SendsReminders

@@ -125,6 +125,8 @@ EventBridge Scheduler から、上の形式の入力で `redmine-task` を呼び
 | `redmine:send_reminders` (期日の通知) | 使う場合は、平日の朝 |
 | `redmine_kit:aws:costexplorer:refresh` (プラグインを追加したイメージ、つまり派生イメージで。管理画面のために、Cost Explorer からアカウントの費用を取得する) | 毎日。`costExplorer.enabled` のときだけ ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
 | `redmine_kit:aws:costexplorer:prune`。`env` の `DAYS` で日数を渡す (「Cost Explorer」のタブのスナップショットのうち、`retention.recordsDays` より古いものを削除する。最後に成功したものは残す。AWS へのリクエストはない) | 毎日。`costExplorer.enabled` のときだけ |
+| `redmine_kit:charges:refresh` (プラグイン `redmine_kit_charges` を追加したイメージ、つまり派生イメージで。プロジェクトの料金をソースから取得する) | 毎日。`charges.enabled` のときだけ ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
+| `redmine_kit:charges:prune` (プラグインのデフォルトの 760 日より古い料金を削除する。手入力の料金は残る) | 毎週。`charges.enabled` のときだけ |
 | `redmine_kit:aws:sqs:prune` と `redmine_kit:aws:ses:prune`。`env` の `DAYS` で日数を渡す (プラグインの記録のうち、保持期間 `retention.recordsDays` より古いものを削除する。失敗したジョブと受信したメール。[security.md](security.md#retention-periods)) | 毎日 |
 | `redmine_kit:aws:ses:refresh` (メールのタブに表示する SES の状態とドメインの MX レコードを読み込む。画面は SES を呼び出さず、「最新の情報に更新」のリンクですぐに読み込める) | 1 時間ごと |
 

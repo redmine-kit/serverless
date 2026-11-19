@@ -151,6 +151,7 @@ WAF は、リクエストがオリジンに到達する前に評価されます�
 ## AWS アカウントと権限
 
 - **権限:** ロールと権限の詳細は [iam.md](iam.md) にあります。関数ごとのロール、アクセス許可の境界、インフラの変更の承認、アクセスキーを作成しないことが要点です。
+- **ほかのアカウントのコスト (Redmine Kit Charges):** デフォルトでは無効です。`charges.aws.billingViewArns` か `charges.aws.roleArns` を書くと、`redmine-task` は、書いた請求ビューを読み、書いたロールを引き受けることだけができます。アクセス許可の境界は `billing:GetBillingViewData` と `sts:AssumeRole` を許可するようになりましたが、使うのはこれらのポリシーだけです。別のアカウントのロールは、ソースの外部 ID があるときだけ `redmine-task` のロールを信頼するので、別の Redmine サーバーが同じアカウントを読むことはできません。残るリスク: `redmine-task` を操作できる人 (コードや rake タスク) は、書いたアカウントのコストを読めます。読めるのはコストだけで、読み取り専用です ([iam.md](iam.md#redmine-kit-charges-only-with-chargesenabled))。
 - **アカウントの保護:** root ユーザーには MFA を設定し、通常は使いません。人は IAM Identity Center (SSO) で、MFA を使ってサインインします。
 - **S3:** アカウントとバケットの両方で、パブリックアクセスブロックを有効にします。バケットポリシーで、TLS を使わないリクエストを拒否します ([iam.md](iam.md#resource-based-policies))。
 - **監視:** CloudTrail (管理イベント) をアカウントで有効にし、IAM Access Analyzer で外部からアクセスできるリソースがないかを確認します。GuardDuty は、アカウントで有効にすることを推奨します (費用は、構築時に確認する)。

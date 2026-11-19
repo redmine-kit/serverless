@@ -1386,6 +1386,22 @@ Resources:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: '{"command": "rake", "args": ["redmine_kit:aws:costexplorer:refresh"]}'
+  # The tab's snapshots older than retention.recordsDays, daily
+  # (redmine_kit_aws_costexplorer keeps the latest successful one; no
+  # request to AWS). DAYS, as Redmine's redmine:users:prune takes it.
+  CostExplorerPruneSchedule:
+    Type: AWS::Scheduler::Schedule
+    Condition: ShowsCostExplorer
+    Properties:
+      Name: !Sub ${InstanceName}-costexplorer-prune
+      ScheduleExpression: cron(55 3 * * ? *)
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt Task.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: !Sub '{"command": "rake", "args": ["redmine_kit:aws:costexplorer:prune"], "env": {"DAYS": "${RecordsDays}"}}'
   SendRemindersSchedule:
     Type: AWS::Scheduler::Schedule
     Condition: SendsReminders

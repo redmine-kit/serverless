@@ -3,7 +3,7 @@ infra/instance.yaml (docs/tasks.md#scheduled-runs): each Input is a command
 event that the handler accepts (image/handler.rb: rake or runner, env names
 in ALLOWED_ENV), rake tasks take their parameters as upper-case environment
 variables, never rake's bracket arguments (AGENTS.md of the organization,
-"Rake tasks"), and the plugins' prune tasks get DAYS from the RecordsDays
+"Rake tasks"), and the plugins' prune tasks (SES, SQS, Cost Explorer) get DAYS from the RecordsDays
 parameter (retention.recordsDays). Prints each problem; prints nothing when
 the template matches. Run by test/deploy/run.sh with python3.13 of the tools
 image, whose ruamel.yaml reads the CloudFormation tags."""
@@ -17,7 +17,7 @@ template = YAML(typ='rt').load(open(sys.argv[1]))
 handler = open(sys.argv[2]).read()
 allowed_env = set(re.search(r'ALLOWED_ENV = %w\[([^\]]*)\]', handler).group(1).split())
 SAMPLE = '90'
-PRUNE = {'redmine_kit:aws:ses:prune', 'redmine_kit:aws:sqs:prune'}
+PRUNE = {'redmine_kit:aws:ses:prune', 'redmine_kit:aws:sqs:prune', 'redmine_kit:aws:costexplorer:prune'}
 problems = []
 pruned = set()
 

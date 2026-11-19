@@ -182,6 +182,7 @@ WAF は、リクエストがオリジンに到達する前に評価されます�
 | CloudTrail (管理イベント) | 1 年 (案) | 証跡を保存する S3 バケットのライフサイクル。アカウントの規定があれば、それに従う。CloudTrail のイベント履歴 (90 日) は、AWS が決めている | アカウントの基盤で決める (この設計の対象外) |
 | 受信したメールの記録 (`aws_ses_received_mails`) | 90 日 | 毎日の定期 rake で削除する ([tasks.md](tasks.md#scheduled-runs)) | `retention.recordsDays` |
 | 失敗したジョブの記録 (`aws_sqs_job_failures`) | 90 日 | 同上 | `retention.recordsDays` |
+| Cost Explorer のスナップショット (`aws_costexplorer_snapshots`。redmine_kit_aws_costexplorer を追加したイメージ) | 90 日。最後に成功したものは残す | 同上 | `retention.recordsDays` |
 | 取り込んだメール (`processed/`) | 30 日 | S3 ライフサイクル | `retention.mailDays` |
 | 取り込まなかったメール (`inbound/` に残ったもの。破棄したもの、失敗したもの) | 30 日 | S3 ライフサイクル。取り込みのやり直しは、この期間内に行う | `retention.mailDays` |
 | SQS のデッドレターキュー | 14 日 | SQS のメッセージ保持期間 (SQS の上限) | — |

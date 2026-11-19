@@ -156,6 +156,7 @@ How long logs, records, temporary files and backups are kept. All periods are de
 | CloudTrail (management events) | 1 year (proposal) | Lifecycle of the S3 bucket that holds the trail. If the account has rules, follow them. CloudTrail event history (90 days) is set by AWS | Decided in the account baseline (outside this design) |
 | Records of received email (`aws_ses_received_mails`) | 90 days | Deleted by the daily scheduled rake task ([tasks.md](tasks.md#scheduled-runs)) | `retention.recordsDays` |
 | Records of failed jobs (`aws_sqs_job_failures`) | 90 days | Same as above | `retention.recordsDays` |
+| Cost Explorer snapshots (`aws_costexplorer_snapshots`, in an image with redmine_kit_aws_costexplorer) | 90 days; the latest successful one is kept | Same as above | `retention.recordsDays` |
 | Imported email (`processed/`) | 30 days | S3 lifecycle | `retention.mailDays` |
 | Email not imported (left in `inbound/`: dropped or failed) | 30 days | S3 lifecycle. Re-import within this period | `retention.mailDays` |
 | SQS dead-letter queue | 14 days | SQS message retention (the SQS maximum) | — |

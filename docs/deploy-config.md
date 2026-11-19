@@ -87,7 +87,7 @@ Each instance's Lambda functions and RDS instance go into the shared private sub
 | `schedule.timezone` | | `UTC` | The time zone of the scheduled rake ([tasks.md](tasks.md#scheduled-runs)) |
 | `schedule.sendReminders` | | `false` | Whether to send the reminder mails (`redmine:send_reminders`) on weekday mornings |
 | `logs.retentionDays` | | 90 | CloudWatch Logs retention in days (including Lambda@Edge log groups) |
-| `retention.recordsDays` | | 90 | Days to keep the plugins' records (received email, failed jobs), passed to their daily prune tasks ([tasks.md](tasks.md#scheduled-runs)) |
+| `retention.recordsDays` | | 90 | Days to keep the plugins' records (received email, failed jobs, and the Cost Explorer tab's snapshots in an image with that plugin), passed to their daily prune tasks ([tasks.md](tasks.md#scheduled-runs)) |
 | `retention.mailDays` | | 30 | Days to keep email in the mail bucket (`processed/` and `inbound/`) |
 | `retention.noncurrentVersionDays` | | 30 | Days to keep old versions of attachments |
 | `retention.backupDays` | | 7 | Days to keep RDS automated backups (up to 35). Backups up to the provisioned storage are free ([rds.md](rds.md#settings)) |

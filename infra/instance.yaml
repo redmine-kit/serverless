@@ -128,26 +128,26 @@ Parameters:
     Type: String
     Default: ""
     Description: costExplorer.allocationTag in redmine.json, a cost allocation tag such as redmine-kit:instance.
-  ChargesEnabled:
+  BillingEnabled:
     Type: String
     Default: "false"
     AllowedValues: ["true", "false"]
     Description: >-
-      charges.enabled in redmine.json, for an image that adds the plugin
-      redmine_kit_charges (a derived image): the daily fetch of the projects'
+      billing.enabled in redmine.json, for an image that adds the plugin
+      redmine_kit_billing (a derived image): the daily fetch of the projects'
       charges (docs/deploy-config.md). Off by default.
-  ChargesBillingViewArns:
+  BillingViewArns:
     Type: CommaDelimitedList
     Default: ""
     Description: >-
-      charges.aws.billingViewArns in redmine.json: the custom billing views
+      billing.aws.billingViewArns in redmine.json: the custom billing views
       shared with this account that the task role may read (the allowlist of
-      Redmine Kit Charges' AWS sources).
-  ChargesRoleArns:
+      Redmine Kit Billing's AWS sources).
+  BillingRoleArns:
     Type: CommaDelimitedList
     Default: ""
     Description: >-
-      charges.aws.roleArns in redmine.json: the roles in other accounts that
+      billing.aws.roleArns in redmine.json: the roles in other accounts that
       the task role may assume to read their costs (with each source's
       external ID in their trust policies).
   PdfFunctionArn:
@@ -188,15 +188,15 @@ Conditions:
   ReceivesMail: !Equals [!Ref ReceiveMail, "true"]
   ScansMalware: !Equals [!Ref MalwareScan, "true"]
   ShowsCostExplorer: !Equals [!Ref CostExplorerEnabled, "true"]
-  RunsCharges: !Equals [!Ref ChargesEnabled, "true"]
+  RunsBilling: !Equals [!Ref BillingEnabled, "true"]
   ReadsBillingViews: !And
-    - !Condition RunsCharges
-    - !Not [!Equals [!Join ["", !Ref ChargesBillingViewArns], ""]]
+    - !Condition RunsBilling
+    - !Not [!Equals [!Join ["", !Ref BillingViewArns], ""]]
   AssumesCostRoles: !And
-    - !Condition RunsCharges
-    - !Not [!Equals [!Join ["", !Ref ChargesRoleArns], ""]]
+    - !Condition RunsBilling
+    - !Not [!Equals [!Join ["", !Ref BillingRoleArns], ""]]
   # redmine_kit_aws_costexplorer makes requests only with
-  # REDMINE_COSTEXPLORER_ENABLED: its tab, or Redmine Kit Charges' AWS sources.
+  # REDMINE_COSTEXPLORER_ENABLED: its tab, or Redmine Kit Billing's AWS sources.
   CallsCostExplorer: !Or
     - !Condition ShowsCostExplorer
     - !Condition ReadsBillingViews
@@ -967,38 +967,38 @@ Resources:
             Action: [ce:GetCostAndUsage, ce:GetCostForecast]
             Resource: "*"
 
-  # Redmine Kit Charges' AWS sources (in a derived image; docs/iam.md): only
+  # Redmine Kit Billing's AWS sources (in a derived image; docs/iam.md): only
   # the daily refresh in the task reads them. The ARNs of redmine.json are the
   # allowlist: Redmine's administrators can add only sources these allow.
   # billing:GetBillingViewData is a permission-only action for a billing
   # view's data; whether Cost Explorer needs it is unverified, so it is
   # allowed on the views only.
-  ChargesBillingViewPolicy:
+  BillingViewPolicy:
     Type: AWS::IAM::Policy
     Condition: ReadsBillingViews
     Properties:
-      PolicyName: charges-billing-views
+      PolicyName: billing-views
       Roles: [!Ref TaskRole]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Action: [ce:GetCostAndUsage, ce:GetCostForecast, billing:GetBillingViewData]
-            Resource: !Ref ChargesBillingViewArns
+            Resource: !Ref BillingViewArns
   # The roles of other accounts, each trusting the task role with a source's
   # external ID.
-  ChargesRolePolicy:
+  BillingRolePolicy:
     Type: AWS::IAM::Policy
     Condition: AssumesCostRoles
     Properties:
-      PolicyName: charges-roles
+      PolicyName: billing-roles
       Roles: [!Ref TaskRole]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Action: sts:AssumeRole
-            Resource: !Ref ChargesRoleArns
+            Resource: !Ref BillingRoleArns
 
   # Redmine Kit PDF's renderer (in a derived image; docs/iam.md): the web
   # function makes a PDF in its request (Redmine's .pdf URLs, a report's
@@ -1502,13 +1502,13 @@ Resources:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: !Sub '{"command": "rake", "args": ["redmine_kit:aws:costexplorer:prune"], "env": {"DAYS": "${RecordsDays}"}}'
-  # The projects' charges, daily (redmine_kit_charges; with AWS sources, about
+  # The projects' charges, daily (redmine_kit_billing; with AWS sources, about
   # 3 Cost Explorer requests a source, USD 0.01 each), after the tab's refresh.
-  ChargesRefreshSchedule:
+  BillingRefreshSchedule:
     Type: AWS::Scheduler::Schedule
-    Condition: RunsCharges
+    Condition: RunsBilling
     Properties:
-      Name: !Sub ${InstanceName}-charges-refresh
+      Name: !Sub ${InstanceName}-billing-refresh
       ScheduleExpression: cron(30 4 * * ? *)
       ScheduleExpressionTimezone: !Ref ScheduleTimezone
       FlexibleTimeWindow:
@@ -1516,13 +1516,13 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: '{"command": "rake", "args": ["redmine_kit:charges:refresh"]}'
+        Input: '{"command": "rake", "args": ["redmine_kit:billing:refresh"]}'
   # The charges older than the plugin's default (760 days), weekly.
-  ChargesPruneSchedule:
+  BillingPruneSchedule:
     Type: AWS::Scheduler::Schedule
-    Condition: RunsCharges
+    Condition: RunsBilling
     Properties:
-      Name: !Sub ${InstanceName}-charges-prune
+      Name: !Sub ${InstanceName}-billing-prune
       ScheduleExpression: cron(45 4 ? * SUN *)
       ScheduleExpressionTimezone: !Ref ScheduleTimezone
       FlexibleTimeWindow:
@@ -1530,7 +1530,7 @@ Resources:
       Target:
         Arn: !GetAtt Task.Arn
         RoleArn: !GetAtt SchedulerRole.Arn
-        Input: '{"command": "rake", "args": ["redmine_kit:charges:prune"]}'
+        Input: '{"command": "rake", "args": ["redmine_kit:billing:prune"]}'
   SendRemindersSchedule:
     Type: AWS::Scheduler::Schedule
     Condition: SendsReminders

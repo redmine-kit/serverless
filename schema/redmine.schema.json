@@ -171,8 +171,8 @@
         "allocationTag": { "type": "string", "maxLength": 128, "default": "" }
       }
     },
-    "charges": {
-      "description": "For an image that adds the plugin redmine_kit_charges (a derived image): the daily fetch of the projects' charges, and the AWS billing views and roles its sources may read (the task role's allowlist; docs/deploy-config.md). Off by default.",
+    "billing": {
+      "description": "For an image that adds the plugin redmine_kit_billing (a derived image): the daily fetch of the projects' charges, and the AWS billing views and roles its sources may read (the task role's allowlist; docs/deploy-config.md). Off by default.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

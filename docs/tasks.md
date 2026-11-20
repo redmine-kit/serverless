@@ -111,8 +111,8 @@ EventBridge Scheduler invokes `redmine-task` with input in the form above.
 | `redmine:send_reminders` (due date reminders) | If used, weekday mornings |
 | `redmine_kit:aws:costexplorer:refresh` (in an image that adds the plugin, a derived image: the account's costs from Cost Explorer, for the administration pages) | Daily, only with `costExplorer.enabled` ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
 | `redmine_kit:aws:costexplorer:prune` with `DAYS` in `env` (deletes the Cost Explorer tab's snapshots older than `retention.recordsDays`, keeping the latest successful one; no request to AWS) | Daily, only with `costExplorer.enabled` |
-| `redmine_kit:charges:refresh` (in an image that adds the plugin `redmine_kit_charges`, a derived image: the projects' charges from their sources) | Daily, only with `charges.enabled` ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
-| `redmine_kit:charges:prune` (deletes the charges older than the plugin's default, 760 days; charges entered by hand stay) | Weekly, only with `charges.enabled` |
+| `redmine_kit:billing:refresh` (in an image that adds the plugin `redmine_kit_billing`, a derived image: the projects' charges from their sources) | Daily, only with `billing.enabled` ([deploy-config.md](deploy-config.md#fields-of-redminejson)) |
+| `redmine_kit:billing:prune` (deletes the charges older than the plugin's default, 760 days; charges entered by hand stay) | Weekly, only with `billing.enabled` |
 | `redmine_kit:aws:sqs:prune` and `redmine_kit:aws:ses:prune` with `DAYS` in `env` (delete the plugins' records older than the retention period, `retention.recordsDays`: failed jobs and received email; [security.md](security.md#retention-periods)) | Daily |
 | `redmine_kit:aws:ses:refresh` (reads the state of SES and the domain's MX record that the email tabs show; the pages do not call SES, and their "Refresh" link reads it at once) | Hourly |
 

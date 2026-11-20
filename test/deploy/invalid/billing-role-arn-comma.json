@@ -1,0 +1,1 @@
+{"region": "ap-northeast-1", "deployRoleArn": "arn:aws:iam::111122223333:role/r", "domain": "redmine.example.com", "database": {"majorVersion": "17"}, "dns": {"mode": "external"}, "billing": {"enabled": true, "aws": {"roleArns": ["arn:aws:iam::222222222222:role/a,arn:aws:iam::333333333333:role/b"]}}}

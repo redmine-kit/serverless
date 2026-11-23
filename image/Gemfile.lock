@@ -1,13 +1,13 @@
 GIT
   remote: https://github.com/redmine-kit/redmine_aws.git
-  revision: 1e514a094d1727b411a466ba5e7669f33922646e
+  revision: 81b1c4df5b0a02ff06f54da82709daa395468fe9
   branch: main
   specs:
     redmine_kit_aws (0.1.0)
 
 GIT
   remote: https://github.com/redmine-kit/redmine_aws_lambda.git
-  revision: b74c3d09d20c894e29a6ebf221c863c590d1f551
+  revision: 36136020a7ca473cbe383fbaeba801236d35db83
   branch: main
   specs:
     redmine_kit_aws_lambda (0.1.0)
@@ -15,7 +15,7 @@ GIT
 
 GIT
   remote: https://github.com/redmine-kit/redmine_aws_s3.git
-  revision: 0a994cbe91704c91f9cf6809a53002a4a24855e3
+  revision: fd82d5f39a4d39baaf904699f53014a1dfabe33b
   branch: main
   specs:
     redmine_kit_aws_s3 (0.1.0)
@@ -26,7 +26,7 @@ GIT
 
 GIT
   remote: https://github.com/redmine-kit/redmine_aws_ses.git
-  revision: 50228c71061b977b710877ea356436d985313e8c
+  revision: 79146b53a4b0d645de44153060de3da5f4b5f1d4
   branch: main
   specs:
     redmine_kit_aws_ses (0.1.0)
@@ -37,7 +37,7 @@ GIT
 
 GIT
   remote: https://github.com/redmine-kit/redmine_aws_sqs.git
-  revision: 021fb9a101a6d9900ac12e96b046b7f578315799
+  revision: d3986cbfc4f99fc4fdf690f49ad3a36350e3dca8
   branch: main
   specs:
     redmine_kit_aws_sqs (0.1.0)
@@ -47,7 +47,7 @@ GIT
 
 GIT
   remote: https://github.com/redmine-kit/redmine_aws_ssm.git
-  revision: 799ff839bbfb632f3ad12538ddc65909b59948e7
+  revision: 18e4005cd1b65d5148ed4a746ec055d43f242c8d
   branch: main
   specs:
     redmine_kit_aws_ssm (0.1.0)
@@ -150,11 +150,11 @@ GEM
       aws-sdk-sqs (~> 1, >= 1.56.0)
       concurrent-ruby (~> 1)
     aws-eventstream (1.4.1)
-    aws-partitions (1.1303.0)
-    aws-sdk-cloudfront (1.164.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-partitions (1.1305.0)
+    aws-sdk-cloudfront (1.167.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-core (3.265.0)
+    aws-sdk-core (3.268.0)
       aws-eventstream (~> 1, >= 1.4.1)
       aws-partitions (~> 1, >= 1.992.0)
       aws-sigv4 (~> 1.9)
@@ -163,24 +163,24 @@ GEM
       jmespath (~> 1, >= 1.6.1)
       logger
       rexml (~> 3.4, >= 3.4.2)
-    aws-sdk-kms (1.140.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-sdk-kms (1.143.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-s3 (1.239.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-sdk-s3 (1.242.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sdk-kms (~> 1)
       aws-sigv4 (~> 1.5)
-    aws-sdk-ses (1.111.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-sdk-ses (1.114.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-sesv2 (1.119.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-sdk-sesv2 (1.122.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-sqs (1.126.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-sdk-sqs (1.129.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-ssm (1.230.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-sdk-ssm (1.234.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sigv4 (~> 1.5)
     aws-sigv4 (1.12.1)
       aws-eventstream (~> 1, >= 1.0.2)
@@ -322,13 +322,13 @@ GEM
     pp (0.6.4)
       prettyprint
     prettyprint (0.2.1)
-    prism (1.9.0)
+    prism (2.1.0-aarch64-linux-gnu)
     propshaft (1.3.2)
       actionpack (>= 7.0.0)
       activesupport (>= 7.0.0)
       rack
     public_suffix (7.0.5)
-    puma (8.0.2)
+    puma (8.1.1)
       nio4r (~> 2.0)
     racc (1.8.1)
     rack (3.2.8)
@@ -417,9 +417,9 @@ GEM
       rubocop-ast (>= 1.49.0, < 2.0)
       ruby-progressbar (~> 1.7)
       unicode-display_width (>= 2.4.0, < 4.0)
-    rubocop-ast (1.50.0)
+    rubocop-ast (1.51.0)
       parser (>= 3.3.7.2)
-      prism (~> 1.7)
+      prism (>= 1.7)
     rubocop-performance (1.26.1)
       lint_roller (~> 1.1)
       rubocop (>= 1.75.0, < 2.0)
@@ -567,15 +567,15 @@ CHECKSUMS
   aws-actionmailer-ses (1.2.0) sha256=e01ccfcc5bf1449abb91bb8b15e7945e97310144c7f67fee8d9b76de2e89107f
   aws-activejob-sqs (1.2.0) sha256=f3cbe400da6cef875db0a19c8b4d366cf71ddbe89c6326f1544b1643fce43245
   aws-eventstream (1.4.1) sha256=ceb6a99c61df4bb00344e54aed0351574beca24f87a0d1487d1d2ed80929ce96
-  aws-partitions (1.1303.0) sha256=4debb9488e514ab87ee68cf55184cb8db9bd0256668883c3fe6e8bb76f32929c
-  aws-sdk-cloudfront (1.164.0) sha256=dbb1a2c75ba1b91a55a485d90cf0d34233a074d6119d7b6f7b23b7f44bde60be
-  aws-sdk-core (3.265.0) sha256=6e2910a8d9d4ff155351e5bed6b19f97edf7d01fcd7bf5bc524bd36695fdbc1a
-  aws-sdk-kms (1.140.0) sha256=1ba7cf795e5680fe5041a10d636aca01f1d2b6fa18e7b5d60ec6197319bce1c9
-  aws-sdk-s3 (1.239.0) sha256=f6c1a952066e0103863b25a35ba391b3a8c08443a604c777e549eaa553621ad0
-  aws-sdk-ses (1.111.0) sha256=119b21f166f0ab55d861f40d94f082e15d83a247ded1ef3f45a2d5c76e733e3c
-  aws-sdk-sesv2 (1.119.0) sha256=6c6240f8a17b0e710eed82e62e7a966346b50e115652b3cc7db4b350ede4a3c0
-  aws-sdk-sqs (1.126.0) sha256=637d50d8fa609a5b9efdf0a06667bec8a2e77813aec52fac6abf378bbda2b1d5
-  aws-sdk-ssm (1.230.0) sha256=5168e09cc85adc1afe0cc1fe6b57ca5670bef7bc34645de5c50a7ba7cfcc33bc
+  aws-partitions (1.1305.0) sha256=dbcf06fd557d111f8bba82180b8f32317f756516c40f3df72bdf94851ffbfa96
+  aws-sdk-cloudfront (1.167.0) sha256=d071b53b7867912c185e71f6e03b2aa86e78b249e12377c3de8739076549d3f8
+  aws-sdk-core (3.268.0) sha256=471950504724daa017711705647245ed2dcb44afc658dda88ca38176fe0f4612
+  aws-sdk-kms (1.143.0) sha256=0f1286c8abf2b91817acffc0cd58580f7de703706c2b55e5be1cfc5cc7740dac
+  aws-sdk-s3 (1.242.0) sha256=f0fd5ca4a41e26b84026021d19ff0c7a3ecae66536f5b38cc71b4562b75a5bba
+  aws-sdk-ses (1.114.0) sha256=3ebbbc549a6be7217c01711eb6ed931c8048a02aa926fa155d8cecc4f76e8059
+  aws-sdk-sesv2 (1.122.0) sha256=0a9c6d1dea8ea4a6b010e1a79f6446cb47d2a76f5dbeca6f111d89c062133fd1
+  aws-sdk-sqs (1.129.0) sha256=d47595b110e01a30dde9fd30ecd598769895ccf74c1b3004b5ae991a262019dd
+  aws-sdk-ssm (1.234.0) sha256=81bf35ff3faf5113f4ae42e30ac71cd726ae73ece640f92de624a37a69065e02
   aws-sigv4 (1.12.1) sha256=6973ff95cb0fd0dc58ba26e90e9510a2219525d07620c8babeb70ef831826c00
   base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
   bcrypt (3.1.22) sha256=1f0072e88c2d705d94aff7f2c5cb02eb3f1ec4b8368671e19112527489f29032
@@ -642,10 +642,10 @@ CHECKSUMS
   pg (1.6.3-aarch64-linux) sha256=0698ad563e02383c27510b76bf7d4cd2de19cd1d16a5013f375dd473e4be72ea
   pp (0.6.4) sha256=dfcb0fce700c41456265922884f9fe195d7fbb0674a3578e6c0f69588e82b570
   prettyprint (0.2.1) sha256=d555d57ea6d7cf001d4774b693546a6bd88bec1e778ddffb5c60b68ceec4b7d4
-  prism (1.9.0) sha256=7b530c6a9f92c24300014919c9dcbc055bf4cdf51ec30aed099b06cd6674ef85
+  prism (2.1.0-aarch64-linux-gnu) sha256=808dddc72def68e1a0463689414c97e0ba211938eddbab05387a4844aa2b3ec2
   propshaft (1.3.2) sha256=1d56a3e56a92c21bfc29caf07406b5386b00d4c47ddf357cf989a5a234b1389e
   public_suffix (7.0.5) sha256=1a8bb08f1bbea19228d3bed6e5ed908d1cb4f7c2726d18bd9cadf60bc676f623
-  puma (8.0.2) sha256=c8ed871dfbbe66448ea9ffd46692342d9804d4071522b52b5331b7b6e7b686fb
+  puma (8.1.1) sha256=24800758cf064ecc19d056301b6946f628d77ea14653d485fa17ff6a6331555c
   racc (1.8.1) sha256=4a7f6929691dbec8b5209a0b373bc2614882b55fc5d2e447a21aaa691303d62f
   rack (3.2.8) sha256=1fecc85e463ebc7a2a945fff829ffcd549babeb1556384796fad946c28dc4ec7
   rack-session (2.1.2) sha256=595434f8c0c3473ae7d7ac56ecda6cc6dfd9d37c0b2b5255330aa1576967ffe8
@@ -680,7 +680,7 @@ CHECKSUMS
   rqrcode (3.2.0) sha256=64c1494ca6bb67d731330f38b50e3fd09eeab4f5dcd04b608e21218d1d0b9542
   rqrcode_core (2.1.0) sha256=f303b85df89c1b8fc5ee8dc19808c9dc4330e6329b660d99d4a8cbb36ca13051
   rubocop (1.88.2) sha256=8def251c90cd955feb4daa3edc0ab56893250c4ce90ef81e6c80c03f9a939bbf
-  rubocop-ast (1.50.0) sha256=b9ca88300da0803ee222ad20cdb30494c0a784eed06fdc35d254b06d662788db
+  rubocop-ast (1.51.0) sha256=0ec311e36b191b3872d909078a35274e962ae97dbce64be6812d145ca59acfcb
   rubocop-performance (1.26.1) sha256=cd19b936ff196df85829d264b522fd4f98b6c89ad271fa52744a8c11b8f71834
   rubocop-rails (2.34.3) sha256=10d37989024865ecda8199f311f3faca990143fbac967de943f88aca11eb9ad2
   ruby-progressbar (1.13.0) sha256=80fc9c47a9b640d6834e0dc7b3c94c9df37f08cb072b7761e4a71e22cff29b33

@@ -127,6 +127,16 @@ For an image that adds the plugin [Redmine Kit PDF](https://github.com/redmine-k
 
 The boundary `redmine-kit-boundary` allows `lambda:InvokeFunction` already; only this policy names the renderer. `redmine-task` gets nothing.
 
+## Redmine Kit AI (only with `ai.bedrock.models`)
+
+For an image that adds the plugin Redmine Kit AI, `redmine-web` asks Claude in Amazon Bedrock (`bedrock-mantle`) in its request (a summary, a draft, the AI assistant), signed with its execution role. `bedrock-mantle:CreateInference` takes a project as its resource, not a model (the AWS service reference, checked 2026-11-25), so the policy names this account's projects in the region and limits the models with the condition key `bedrock-mantle:Model`.
+
+| Policy | Actions | Resources | When |
+| --- | --- | --- | --- |
+| `bedrock-inference` (on `redmine-web`) | `bedrock-mantle:CreateInference`, with `bedrock-mantle:Model` equal to one of `ai.bedrock.models` | `arn:aws:bedrock-mantle:<region>:<account>:project/*` | With `ai.bedrock.models` |
+
+`bedrock-mantle:CallWithBearerToken` (a Bedrock API key) is not given: the role signs with SigV4. The boundary `redmine-kit-boundary` allows `bedrock-mantle:CreateInference` on `*`; only this policy names projects and models. `redmine-worker` and `redmine-task` get nothing. Whether bedrock-mantle's global routing needs another region's projects is unverified ([To verify](#to-verify)).
+
 ## Resource-based policies
 
 | Resource | Allowed principal | Allowed actions | Condition |
@@ -202,7 +212,7 @@ bin/deploy --account
 
 | Resource | Contents |
 | --- | --- |
-| `redmine-kit-boundary` (managed policy) | The permissions boundary of every role the stacks create. Allows only the actions of the roles on this page: writing logs, reading SSM parameters and `kms:Decrypt`, the network interfaces of Lambda in the VPC and the NAT instance's actions, objects in S3, SQS, SES, `lambda:InvokeFunction`, Cost Explorer's reads, a billing view's data and `sts:AssumeRole` (for Redmine Kit Billing's sources; the roles' own policies name the views and roles), the EventBridge rule and bucket notifications of GuardDuty Malware Protection, and the actions of `AmazonSSMManagedInstanceCore`. Nothing in IAM |
+| `redmine-kit-boundary` (managed policy) | The permissions boundary of every role the stacks create. Allows only the actions of the roles on this page: writing logs, reading SSM parameters and `kms:Decrypt`, the network interfaces of Lambda in the VPC and the NAT instance's actions, objects in S3, SQS, SES, `lambda:InvokeFunction`, Cost Explorer's reads, a billing view's data and `sts:AssumeRole` (for Redmine Kit Billing's sources; the roles' own policies name the views and roles), `bedrock-mantle:CreateInference` (for Redmine Kit AI; the web role's own policy names the projects and models), the EventBridge rule and bucket notifications of GuardDuty Malware Protection, and the actions of `AmazonSSMManagedInstanceCore`. Nothing in IAM |
 | `redmine-kit-cfn-exec` | CloudFormation (`cloudformation.amazonaws.com`, `aws:SourceAccount` this account). The services of the stacks, and IAM only under the path `/redmine-kit/`: creating roles and putting or attaching their policies only with the boundary (`iam:PermissionsBoundary`), managing roles, instance profiles and policies under `/redmine/`, `iam:PassRole` for roles under `/redmine/` to Lambda, Lambda@Edge, EventBridge Scheduler, EC2 and GuardDuty Malware Protection, `iam:CreateServiceLinkedRole` and `lambda:EnableReplication*`. `iam:DeleteRolePermissionsBoundary` is denied. The account roles and the boundary are outside `/redmine/`, so it cannot change them |
 | `redmine-kit-infra-deploy` | The users of an IAM Identity Center permission set (`account.ssoPermissionSet`, default `AdministratorAccess`; `aws:PrincipalArn` of its `AWSReservedSSO_…` roles), and with `account.githubRepository`, GitHub Actions in the Environment `account.githubInfraEnvironment` (default `infrastructure`). Permissions in "Role for deploying infrastructure" above. Sessions up to 2 hours |
 | `redmine-kit-github-deploy` | Only with `account.githubRepository`: GitHub Actions in the Environment `account.githubCodeEnvironment` (default `production`), with the audience `sts.amazonaws.com`. The managed policy `redmine-kit-code-deploy` |
@@ -261,4 +271,5 @@ If it finds a function URL, S3 bucket, SQS queue, SSM parameter or RDS snapshot,
 - Whether the Lambda actions of `redmine-kit-code-deploy` (`UpdateFunctionCode`, `InvokeFunction`, `GetFunction`) can be scoped by the tag `aws:ResourceTag/redmine-kit:instance`
 - Whether putting a SecureString with the `aws/ssm` key needs `kms:Encrypt` in the caller's policy
 - Whether Lambda@Edge replication works with an execution role that has a path and a permissions boundary
+- Whether bedrock-mantle's global routing (cross-region inference) needs another region's projects in `bedrock-inference`'s resource, and whether an interface VPC endpoint serves `bedrock-mantle` (without one, `redmine-web` reaches it through the NAT instance)
 - The ARN format for permissions on SES identities (`ses:SendEmail`, `ses:GetEmailIdentity`), and the permissions needed when using a configuration set

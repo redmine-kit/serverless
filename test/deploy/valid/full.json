@@ -28,6 +28,7 @@
     }
   },
   "pdf": { "functionArn": "arn:aws:lambda:ap-northeast-1:123456789012:function:redmine-pdf" },
+  "ai": { "bedrock": { "models": ["anthropic.claude-sonnet-5-5", "anthropic.claude-haiku-5-5"] } },
   "schedule": { "timezone": "Asia/Tokyo", "sendReminders": true },
   "logs": { "retentionDays": 365 },
   "retention": { "recordsDays": 60, "mailDays": 14, "noncurrentVersionDays": 60, "backupDays": 14 },

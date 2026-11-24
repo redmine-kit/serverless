@@ -145,6 +145,18 @@ SecureString パラメーターは、SSM のデフォルトのキー (`aws/ssm`)
 
 アクセス許可の境界 `redmine-kit-boundary` は、すでに `lambda:InvokeFunction` を許可しています。レンダラーを指定するのは、このポリシーだけです。`redmine-task` には付けません。
 
+<a id="redmine-kit-ai-only-with-aibedrockmodels"></a>
+
+## Redmine Kit AI (`ai.bedrock.models` のときだけ)
+
+プラグイン Redmine Kit AI を追加したイメージでは、`redmine-web` がリクエストの中で (要約、下書き、AI アシスタント)、実行ロールの署名で Claude in Amazon Bedrock (`bedrock-mantle`) に問い合わせます。`bedrock-mantle:CreateInference` のリソースはモデルではなくプロジェクトです (AWS のサービス認可リファレンス、2026-11-25 確認)。そのため、ポリシーはこのアカウントのリージョンのプロジェクトを指定し、モデルは条件キー `bedrock-mantle:Model` で絞ります。
+
+| ポリシー | アクション | リソース | 条件 |
+| --- | --- | --- | --- |
+| `bedrock-inference` (`redmine-web`) | `bedrock-mantle:CreateInference` (`bedrock-mantle:Model` が `ai.bedrock.models` のどれか) | `arn:aws:bedrock-mantle:<region>:<account>:project/*` | `ai.bedrock.models` があるとき |
+
+`bedrock-mantle:CallWithBearerToken` (Bedrock の API キー) は付けません。ロールは SigV4 で署名するためです。アクセス許可の境界 `redmine-kit-boundary` は `bedrock-mantle:CreateInference` を `*` に許可します。プロジェクトとモデルを指定するのは、このポリシーだけです。`redmine-worker` と `redmine-task` には付けません。bedrock-mantle のグローバルのルーティングで別のリージョンのプロジェクトが要るかは未確認です ([未確認の事項](#to-verify))。
+
 <a id="resource-based-policies"></a>
 
 ## リソースベースのポリシー
@@ -232,7 +244,7 @@ bin/deploy --account
 
 | リソース | 内容 |
 | --- | --- |
-| `redmine-kit-boundary` (カスタマー管理ポリシー) | スタックが作成するすべてのロールのアクセス許可の境界。このページのロールの操作だけを許可する。ログの書き込み、SSM パラメーターの読み取り、`kms:Decrypt`、VPC 内の Lambda のネットワークインターフェイスと NAT インスタンスの操作、S3 のオブジェクト、SQS、SES、`lambda:InvokeFunction`、Cost Explorer の読み取り、請求ビューのデータと `sts:AssumeRole` (Redmine Kit Billing のソースのため。請求ビューとロールは各ロールのポリシーが指定する)、GuardDuty Malware Protection の EventBridge ルールとバケットの通知、`AmazonSSMManagedInstanceCore` の操作。IAM の操作は何も許可しない |
+| `redmine-kit-boundary` (カスタマー管理ポリシー) | スタックが作成するすべてのロールのアクセス許可の境界。このページのロールの操作だけを許可する。ログの書き込み、SSM パラメーターの読み取り、`kms:Decrypt`、VPC 内の Lambda のネットワークインターフェイスと NAT インスタンスの操作、S3 のオブジェクト、SQS、SES、`lambda:InvokeFunction`、Cost Explorer の読み取り、請求ビューのデータと `sts:AssumeRole` (Redmine Kit Billing のソースのため。請求ビューとロールは各ロールのポリシーが指定する)、`bedrock-mantle:CreateInference` (Redmine Kit AI のため。プロジェクトとモデルは web のロールのポリシーが指定する)、GuardDuty Malware Protection の EventBridge ルールとバケットの通知、`AmazonSSMManagedInstanceCore` の操作。IAM の操作は何も許可しない |
 | `redmine-kit-cfn-exec` | CloudFormation (`cloudformation.amazonaws.com`。`aws:SourceAccount` はこのアカウント)。スタックの各サービスの操作と、パス `/redmine-kit/` の下だけの IAM の操作。ロールの作成と、インラインポリシーの追加やポリシーのアタッチは、アクセス許可の境界を設定する場合だけ (`iam:PermissionsBoundary`)。`/redmine/` の下のロール、インスタンスプロファイル、ポリシーの管理。`/redmine/` の下のロールを Lambda、Lambda@Edge、EventBridge Scheduler、EC2、GuardDuty Malware Protection に渡す `iam:PassRole`。`iam:CreateServiceLinkedRole` と `lambda:EnableReplication*`。`iam:DeleteRolePermissionsBoundary` は拒否する。アカウント単位のロールとアクセス許可の境界は `/redmine/` の外にあるので、変更できない |
 | `redmine-kit-infra-deploy` | IAM Identity Center の許可セット (`account.ssoPermissionSet`。デフォルトは `AdministratorAccess`。その `AWSReservedSSO_…` ロールの `aws:PrincipalArn` で絞り込む) のユーザーと、`account.githubRepository` があれば、Environment `account.githubInfraEnvironment` (デフォルトは `infrastructure`) の GitHub Actions。権限は上の「インフラデプロイ用ロール」のとおり。セッションは最大 2 時間 |
 | `redmine-kit-github-deploy` | `account.githubRepository` があるときだけ。Environment `account.githubCodeEnvironment` (デフォルトは `production`) の GitHub Actions。audience は `sts.amazonaws.com`。カスタマー管理ポリシー `redmine-kit-code-deploy` |
@@ -301,4 +313,5 @@ Session Manager で接続する人には、`ssm:StartSession` を、このイン
 - `redmine-kit-code-deploy` の Lambda のアクション (`UpdateFunctionCode`、`InvokeFunction`、`GetFunction`) を、タグ `aws:ResourceTag/redmine-kit:instance` で絞り込めるか
 - `aws/ssm` キーで SecureString を書き込むのに、呼び出し側のポリシーに `kms:Encrypt` が必要か
 - パスとアクセス許可の境界を持つ実行ロールで、Lambda@Edge のレプリケーションが動作するか
+- bedrock-mantle のグローバルのルーティング (クロスリージョン推論) で、`bedrock-inference` のリソースに別のリージョンのプロジェクトが要るか。`bedrock-mantle` のインターフェイス VPC エンドポイントがあるか (ない場合、`redmine-web` は NAT インスタンス経由で到達する)
 - SES ID に対する権限 (`ses:SendEmail`、`ses:GetEmailIdentity`) の ARN の形式と、設定セットを使う場合に必要な権限

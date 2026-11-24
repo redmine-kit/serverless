@@ -63,6 +63,7 @@ def instance_params($image_uri; $certificate; $web_acl; $body_hash; $public_key)
     p("BillingViewArns"; (.billing.aws.billingViewArns // []) | join(",")),
     p("BillingRoleArns"; (.billing.aws.roleArns // []) | join(",")),
     p("PdfFunctionArn"; .pdf.functionArn // ""),
+    p("BedrockModels"; (.ai.bedrock.models // []) | join(",")),
     p("ReceiveMail"; if .mail.receive == false then "false" else "true" end),
     p("SendReminders"; if .schedule.sendReminders == true then "true" else "false" end),
     p("ScheduleTimezone"; .schedule.timezone // "UTC"),

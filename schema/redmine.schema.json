@@ -199,6 +199,27 @@
         }
       }
     },
+    "ai": {
+      "description": "For an image that adds the plugin redmine_kit_ai (a derived image): what redmine-web may ask of Amazon Bedrock.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bedrock": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "models": {
+              "description": "The bedrock-mantle model IDs redmine-web may infer with (Claude in Amazon Bedrock: bedrock-mantle:CreateInference on this account's projects in the region, limited by the condition key bedrock-mantle:Model). Empty: no Bedrock permission.",
+              "type": "array",
+              "maxItems": 20,
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+              "default": []
+            }
+          }
+        }
+      }
+    },
     "pdf": {
       "description": "For an image that adds the plugin redmine_kit_pdf (a derived image): the renderer's Lambda function (redmine_kit_pdf's renderer/aws/redmine-pdf.yaml), which redmine-web and redmine-worker may invoke and the plugin uses. Empty: Redmine's own PDFs.",
       "type": "object",

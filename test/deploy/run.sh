@@ -88,6 +88,9 @@ check "values: Redmine Kit Billing off by default, its AWS allowlist in full.jso
 check "values: no PDF renderer by default, the renderer's function in full.json" test \
   "$(value "$minimal" PdfFunctionArn)|$(value "$full" PdfFunctionArn)" == \
   "|arn:aws:lambda:ap-northeast-1:123456789012:function:redmine-pdf"
+check "values: no Bedrock by default, the models in full.json" test \
+  "$(value "$minimal" BedrockModels)|$(value "$full" BedrockModels)" == \
+  "|anthropic.claude-sonnet-5-5,anthropic.claude-haiku-5-5"
 check "values: the values from other stacks" test \
   "$(value "$full" ImageUri) $(value "$full" CertificateArn) $(value "$full" CloudFrontPublicKey)" == "img $arn key"
 edge=$(params instance_edge_params test/deploy/valid/full.json)

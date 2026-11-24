@@ -8,7 +8,7 @@ AI 機能 (メールで受信したチケットの振り分け、長いチケッ
 
 ## 方針
 
-- **AI 機能は分離する:** AI サービスの呼び出し、プロンプト、費用、AI 機能の画面は、別のプロジェクトに置きます。このプロジェクトのイメージ、プラグイン、IAM には含めません。
+- **AI 機能は分離する:** AI サービスの呼び出し、プロンプト、費用、AI 機能の画面は、別のプロジェクト (派生イメージに入れるプラグイン Redmine Kit AI) に置きます。このプロジェクトのイメージ、プラグインには含めません。ここに置くのは、`redmine-web` が Amazon Bedrock に問い合わせる権限だけで、`redmine.json` の `ai.bedrock.models` で付けます ([iam.md](iam.md#redmine-kit-ai-only-with-aibedrockmodels))。
 - **公開されたインターフェイスだけで連携する:** AI 側は、Redmine の REST API と、Redmine 標準の webhook (下記) だけを使います。データベースや S3 には直接アクセスしません。Redmine の権限が、AI 側にもそのまま適用されるようにするためです。
 - **独自の仕組みを追加しない:** どのインターフェイスも、Redmine 7.0 の標準機能 (REST API、OAuth、webhook) です。このプロジェクトが追加するのは、大きな添付ファイルを API で送る仕組み (署名付き URL で CloudFront を通した S3 へのアップロード) だけです。
 
@@ -75,7 +75,7 @@ webhook は、`redmine-worker` から AI 側の URL に送ります。`redmine-w
 
 次のことは、AI のプロジェクトで決めます。このプロジェクトの資料には、Redmine のインターフェイスとの関係だけを書きます。
 
-- 使う AI サービス (Claude API、Claude Platform on AWS、Amazon Bedrock など) と、モデル
+- 使う AI サービス (Claude API、Claude Platform on AWS、Amazon Bedrock など) と、モデル。Amazon Bedrock を実行ロールで使うときは、このプロジェクトが `ai.bedrock.models` のモデルへの権限を `redmine-web` に付ける
 - プロンプト、費用、処理速度
 - MCP サーバー (Redmine の REST API を、MCP のツールとして提供するもの) と、その配置場所
 - AI 機能の画面と設定

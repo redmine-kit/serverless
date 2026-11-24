@@ -160,6 +160,14 @@ Parameters:
       (redmine_kit_pdf's renderer/aws/redmine-pdf.yaml), which the web and
       worker functions may invoke (docs/deploy-config.md). Empty: Redmine's
       own PDFs.
+  BedrockModels:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: >-
+      ai.bedrock.models in redmine.json, for an image that adds the plugin
+      redmine_kit_ai (a derived image): the bedrock-mantle model IDs the web
+      function may infer with (docs/deploy-config.md). Empty: no Bedrock
+      permission.
   ReceiveMail:
     Type: String
     Default: "true"
@@ -202,6 +210,7 @@ Conditions:
     - !Condition ReadsBillingViews
     - !Condition AssumesCostRoles
   RendersPdf: !Not [!Equals [!Ref PdfFunctionArn, ""]]
+  UsesBedrock: !Not [!Equals [!Join ["", !Ref BedrockModels], ""]]
   ReceivesMailInZone: !And [!Condition ReceivesMail, !Condition HasHostedZone]
   SendsReminders: !Equals [!Ref SendReminders, "true"]
   HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, ""]]
@@ -1016,6 +1025,27 @@ Resources:
           - Effect: Allow
             Action: lambda:InvokeFunction
             Resource: !Ref PdfFunctionArn
+
+  # Redmine Kit AI with Amazon Bedrock (in a derived image; docs/iam.md):
+  # the web function asks Claude in Amazon Bedrock (bedrock-mantle) in its
+  # request, signed with its execution role. The action's resource is a
+  # project, not a model, so it is this account's projects in the region,
+  # and the condition key limits it to the models of redmine.json.
+  BedrockInferencePolicy:
+    Type: AWS::IAM::Policy
+    Condition: UsesBedrock
+    Properties:
+      PolicyName: bedrock-inference
+      Roles: [!Ref WebRole]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: bedrock-mantle:CreateInference
+            Resource: !Sub arn:${AWS::Partition}:bedrock-mantle:${AWS::Region}:${AWS::AccountId}:project/*
+            Condition:
+              StringEquals:
+                bedrock-mantle:Model: !Ref BedrockModels
 
   Task:
     Type: AWS::Lambda::Function

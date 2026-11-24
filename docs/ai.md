@@ -6,7 +6,7 @@ The specifications on this page were checked against the Redmine 7.0.3 source as
 
 ## Approach
 
-- **AI features are separate:** Calls to AI services, prompts, cost, and the screens of AI features live in a separate project. They are not part of this project's image, plugin or IAM.
+- **AI features are separate:** Calls to AI services, prompts, cost, and the screens of AI features live in a separate project (the plugin Redmine Kit AI, in a derived image). They are not part of this project's image or plugin. The only part here is the permission of `redmine-web` to ask Amazon Bedrock, given with `ai.bedrock.models` in `redmine.json` ([iam.md](iam.md#redmine-kit-ai-only-with-aibedrockmodels)).
 - **Connect only through public interfaces:** The AI side uses only the Redmine REST API and Redmine's standard webhooks (below). It does not touch the database or S3 directly. This keeps Redmine's permissions in effect for the AI side too.
 - **No custom mechanisms:** Every interface is a standard Redmine 7.0 feature (REST API, OAuth, webhooks). The only thing this project adds is a way to send large attachments through the API (uploading through CloudFront to S3 with a signed URL).
 
@@ -65,7 +65,7 @@ Private, loopback and link-local addresses go in `webhook_blocklist` (the values
 
 The following are decided in the AI project. This project's documentation covers only how they relate to the Redmine interfaces.
 
-- The AI service to use (the Claude API, Claude Platform on AWS, Amazon Bedrock, etc.) and the model
+- The AI service to use (the Claude API, Claude Platform on AWS, Amazon Bedrock, etc.) and the model; with Amazon Bedrock and the execution role, this project gives `redmine-web` the permission for the models of `ai.bedrock.models`
 - Prompts, cost, and processing speed
 - The MCP server (which turns the Redmine REST API into MCP tools) and where it runs
 - The screens and settings of the AI features
